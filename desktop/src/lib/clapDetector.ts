@@ -104,18 +104,38 @@ export class ClapDetector {
     const dataArray = new Uint8Array(this.analyser.fftSize);
     this.analyser.getByteTimeDomainData(dataArray);
 
-    // Compute peak amplitude normalized [0.0, 1.0]
+    // Compute peak amplitude, RMS energy, and Zero Crossing Rate
     let maxVal = 0;
+    let sumSq = 0;
+    let zeroCrossings = 0;
+    let prevSign = 0;
+
     for (let i = 0; i < dataArray.length; i++) {
-      const normalized = Math.abs(dataArray[i] - 128) / 128;
-      if (normalized > maxVal) {
-        maxVal = normalized;
+      const val = (dataArray[i] - 128) / 128;
+      const absVal = Math.abs(val);
+      if (absVal > maxVal) {
+        maxVal = absVal;
       }
+      sumSq += val * val;
+
+      const sign = val > 0 ? 1 : val < 0 ? -1 : 0;
+      if (i > 0 && sign !== 0 && sign !== prevSign) {
+        zeroCrossings++;
+      }
+      if (sign !== 0) prevSign = sign;
     }
+
+    const rms = Math.sqrt(sumSq / dataArray.length);
+    const crestFactor = rms > 0.001 ? maxVal / rms : 0;
+
+    // Transient impulse filter:
+    // Real hand claps have high peak-to-RMS crest factor (> 4.0) and high zero-crossings (> 20).
+    // Spoken voice syllables have lower crest factor (< 3.5) due to vowel RMS sustain.
+    const isTransientClap = maxVal > this.threshold && crestFactor >= 4.0 && zeroCrossings >= 18;
 
     const now = Date.now();
 
-    if (maxVal > this.threshold) {
+    if (isTransientClap) {
       if (!this.isPeakHolding) {
         this.isPeakHolding = true;
         const delta = now - this.lastClapTime;
@@ -134,7 +154,7 @@ export class ClapDetector {
           }
         }
       }
-    } else if (maxVal < this.threshold * 0.5) {
+    } else if (maxVal < this.threshold * 0.4) {
       // Peak released
       this.isPeakHolding = false;
     }

@@ -31,6 +31,11 @@ import {
   setVoiceMuted,
 } from "./lib/voice";
 import { ClapDetector, getClapEnabled, setClapEnabled } from "./lib/clapDetector";
+import {
+  VoiceCommandListener,
+  getVoiceCmdEnabled,
+  setVoiceCmdEnabled,
+} from "./lib/voiceCommands";
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [], tags: [] };
 
@@ -44,6 +49,7 @@ export default function App() {
   // Voice & Acoustic Settings
   const [voiceMuted, setVoiceMutedState] = useState<boolean>(getVoiceMuted);
   const [clapEnabled, setClapEnabledState] = useState<boolean>(getClapEnabled);
+  const [voiceCmdEnabled, setVoiceCmdEnabledState] = useState<boolean>(getVoiceCmdEnabled);
 
   // Layout & Panes
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
@@ -166,6 +172,63 @@ export default function App() {
       detector.stop();
     };
   }, [clapEnabled, showToast]);
+
+  // Hands-free Voice Command Engine effect
+  useEffect(() => {
+    if (!voiceCmdEnabled) return;
+
+    const listener = new VoiceCommandListener({
+      onOpenCopilot: () => {
+        setWorkbenchOpen(true);
+        setWorkbenchTab("copilot");
+        void playVoice("nav_copilot_open.mp3");
+        showToast("🗣️ Voice Command: Opening Copilot");
+      },
+      onOpenSearch: () => {
+        setQuickSwitcherOpen(true);
+        void playVoice("nav_quick_switcher.mp3");
+        showToast("🗣️ Voice Command: Opening Search");
+      },
+      onOpenGrounding: () => {
+        setGroundingOpen(true);
+        void playVoice("nav_assembler_open.mp3");
+        showToast("🗣️ Voice Command: Opening Grounding Assembler");
+      },
+      onOpenNotes: () => {
+        setNotesDrawerOpen((prev) => !prev);
+        void playVoice("nav_notes_drawer.mp3");
+        showToast("🗣️ Voice Command: Toggling Notes Explorer");
+      },
+      onNewNote: () => {
+        setNewNoteModalOpen(true);
+        showToast("🗣️ Voice Command: Creating New Note");
+      },
+      onJournal: () => {
+        setJournalOpen(true);
+        showToast("🗣️ Voice Command: Quick Journal Capture");
+      },
+      onZenMode: () => {
+        setZenMode((prev) => !prev);
+        void playVoice("nav_zen_on.mp3");
+        showToast("🗣️ Voice Command: Toggling Zen Mode");
+      },
+      onClose: () => {
+        setJournalOpen(false);
+        setAiSettingsOpen(false);
+        setQuickSwitcherOpen(false);
+        setGroundingOpen(false);
+        setNewNoteModalOpen(false);
+        setZenMode(false);
+        showToast("🗣️ Voice Command: Closing active views");
+      },
+    });
+
+    listener.start();
+
+    return () => {
+      listener.stop();
+    };
+  }, [voiceCmdEnabled, showToast]);
 
   const handleOpenInEditor = useCallback(
     async (id: string) => {
@@ -389,6 +452,19 @@ export default function App() {
             >
               <span className={`live-dot ${!clapEnabled ? "muted" : ""}`} />
               <span>{clapEnabled ? "👏 CLAP: ON" : "👏 CLAP: OFF"}</span>
+            </div>
+            <div
+              className={`badge-pill ai-nav-pill voice-nav-pill ${!voiceCmdEnabled ? "muted" : ""}`}
+              onClick={() => {
+                const next = !voiceCmdEnabled;
+                setVoiceCmdEnabledState(next);
+                setVoiceCmdEnabled(next);
+                showToast(next ? "Voice Commands Disabled" : "Voice Commands Active (Hands-Free)");
+              }}
+              title="Toggle Hands-Free Voice Commands (Say 'Open Copilot', 'Search', 'Zen Mode', etc.)"
+            >
+              <span className={`live-dot ${!voiceCmdEnabled ? "muted" : ""}`} />
+              <span>{voiceCmdEnabled ? "🗣️ VOICE CMD: ON" : "🗣️ VOICE CMD: OFF"}</span>
             </div>
           </div>
 

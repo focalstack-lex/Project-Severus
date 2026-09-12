@@ -34,6 +34,18 @@ export async function preloadVoice(soundName: string): Promise<string | null> {
 }
 
 let activeAudio: HTMLAudioElement | null = null;
+let isSpeakingVoice = false;
+let speakingTimeout: number | null = null;
+let lastPlaybackEndTime = 0;
+
+export function isVoiceSpeaking(): boolean {
+  return isSpeakingVoice;
+}
+
+export function getTimeSinceVoicePlayback(): number {
+  if (isSpeakingVoice) return 0;
+  return Date.now() - lastPlaybackEndTime;
+}
 
 export async function playVoice(soundName: string): Promise<void> {
   if (getVoiceMuted()) return;
@@ -50,10 +62,32 @@ export async function playVoice(soundName: string): Promise<void> {
       activeAudio.currentTime = 0;
     }
 
+    if (speakingTimeout !== null) {
+      clearTimeout(speakingTimeout);
+      speakingTimeout = null;
+    }
+
+    isSpeakingVoice = true;
     const audio = new Audio(dataUrl);
     activeAudio = audio;
+
+    const resetSpeaking = () => {
+      lastPlaybackEndTime = Date.now();
+      if (speakingTimeout !== null) clearTimeout(speakingTimeout);
+      speakingTimeout = window.setTimeout(() => {
+        isSpeakingVoice = false;
+        lastPlaybackEndTime = Date.now();
+      }, 1200);
+    };
+
+    audio.onended = resetSpeaking;
+    audio.onpause = resetSpeaking;
+    audio.onerror = resetSpeaking;
+
     await audio.play();
   } catch (err) {
+    isSpeakingVoice = false;
+    lastPlaybackEndTime = Date.now();
     console.warn(`[VoiceManager] Failed playing voice '${soundName}':`, err);
   }
 }
