@@ -95,6 +95,15 @@ pub fn run() {
             get_workspace_context
         ])
         .setup(|app| {
+            if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!("../icons/128x128.png")) {
+                for window in app.webview_windows().values() {
+                    let _ = window.set_icon(icon.clone());
+                }
+            } else if let Some(icon) = app.default_window_icon() {
+                for window in app.webview_windows().values() {
+                    let _ = window.set_icon(icon.clone());
+                }
+            }
             let notes_dir = app.state::<Paths>().notes_dir();
             watcher::start(app.handle().clone(), notes_dir);
             Ok(())

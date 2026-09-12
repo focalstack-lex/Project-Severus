@@ -291,7 +291,7 @@ export default function App() {
           <div className="brand-wrap">
             <img src="/logo.png" alt="Severus" className="topbar-logo-img" />
             <div className="brand">
-              LEX MATONDO <span className="dim">// SEVERUS</span>
+              LEX MATONDO <span className="dim">// SEVERUS.AI</span>
             </div>
             <div className="badge-pill live">
               <span className="live-dot" />
