@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import type { NoteContent } from "../types";
+import type { NoteContent, NoteMeta } from "../types";
 import MarkdownPreview from "./MarkdownPreview";
 
 interface Props {
   note: NoteContent | null;
+  notesList?: NoteMeta[];
+  onSelectNote?: (id: string) => void;
+  onNewNote?: () => void;
+  onOpenJournal?: () => void;
+  onOpenGrounding?: () => void;
   onSave: (id: string, content: string) => Promise<void>;
   onOpenLink: (name: string) => void;
   onToggleTag: (tag: string) => void;
@@ -13,6 +18,11 @@ interface Props {
 
 export default function NoteEditor({
   note,
+  notesList,
+  onSelectNote,
+  onNewNote,
+  onOpenJournal,
+  onOpenGrounding,
   onSave,
   onOpenLink,
   onToggleTag,
@@ -116,10 +126,90 @@ export default function NoteEditor({
       {banner && <div className="editor-banner">{banner}</div>}
       {error && <div className="editor-banner error">{error}</div>}
       {!note ? (
-        <div className="editor-empty">
-          <div className="empty-icon">⬡</div>
-          <div>CLICK A NODE IN THE 3D GRAPH TO OPEN</div>
-          <span className="hint">PRESS CTRL+J TO QUICK-CAPTURE TO JOURNAL STREAM</span>
+        <div className="vault-dashboard">
+          <div className="vault-dash-hero">
+            <div className="vault-dash-icon">⬡</div>
+            <div className="vault-dash-header">
+              <span className="vault-dash-sub">02 // KNOWLEDGE ENGINE</span>
+              <h2 className="vault-dash-title">VAULT COMMAND CENTER</h2>
+              <p className="vault-dash-desc">
+                Select any node from the 3D topology graph, or access quick actions and indexed notes below.
+              </p>
+            </div>
+          </div>
+
+          <div className="vault-dash-actions">
+            {onNewNote && (
+              <button
+                type="button"
+                className="vault-action-btn accent"
+                onClick={onNewNote}
+                title="Create a new note in second-brain"
+              >
+                <span>+</span> NEW NOTE
+              </button>
+            )}
+            {onOpenGrounding && (
+              <button
+                type="button"
+                className="vault-action-btn"
+                onClick={onOpenGrounding}
+                title="Assemble grounding context (Ctrl+Shift+G)"
+              >
+                <span>⚡</span> GROUNDING
+              </button>
+            )}
+            {onOpenJournal && (
+              <button
+                type="button"
+                className="vault-action-btn"
+                onClick={onOpenJournal}
+                title="Capture quick journal entry (Ctrl+J)"
+              >
+                <span>✎</span> JOURNAL
+              </button>
+            )}
+          </div>
+
+          {notesList && notesList.length > 0 && (
+            <div className="vault-recent-section">
+              <div className="vault-section-title">
+                <span>INDEXED NOTES</span>
+                <span className="vault-count-pill">{notesList.length} NOTES</span>
+              </div>
+              <div className="vault-notes-grid">
+                {notesList.map((n) => (
+                  <div
+                    key={n.id}
+                    className="vault-note-card"
+                    onClick={() => onSelectNote?.(n.id)}
+                  >
+                    <div className="vault-note-card-title">{n.title}</div>
+                    <div className="vault-note-card-tags">
+                      {n.tags.map((t) => (
+                        <span key={t} className="vault-mini-tag">
+                          #{t}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="vault-note-jump">OPEN ↗</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="vault-shortcuts-card">
+            <div className="vault-shortcut-item">
+              <kbd>Ctrl+K</kbd> <span>Search & Commands</span>
+            </div>
+            <div className="vault-shortcut-item">
+              <kbd>Ctrl+Shift+G</kbd> <span>Grounding Context</span>
+            </div>
+            <div className="vault-shortcut-item">
+              <kbd>Ctrl+J</kbd> <span>Journal Stream</span>
+            </div>
+          </div>
         </div>
       ) : preview ? (
         <MarkdownPreview content={draft} onOpenLink={onOpenLink} onToggleTag={onToggleTag} />

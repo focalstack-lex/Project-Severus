@@ -9,6 +9,7 @@ import JournalCapture from "./components/JournalCapture";
 import AISettingsModal from "./components/AISettingsModal";
 import QuickSwitcherModal from "./components/QuickSwitcherModal";
 import ContextAssemblerModal from "./components/ContextAssemblerModal";
+import NewNoteModal from "./components/NewNoteModal";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import {
   appendJournal,
@@ -43,6 +44,7 @@ export default function App() {
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [groundingOpen, setGroundingOpen] = useState(false);
+  const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
 
   // AI Brain Config
   const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
@@ -163,20 +165,24 @@ export default function App() {
     [showToast],
   );
 
-  const handleNewNote = useCallback(async () => {
-    const rawName = window.prompt("Enter new note name:");
-    if (!rawName || !rawName.trim()) return;
-    const trimmed = rawName.trim().replace(/\.md$/, "");
-    try {
-      await saveNote(trimmed, `# ${trimmed}\n\n`);
-      await loadNotesList();
-      await loadGraph();
-      await openNote(trimmed);
-      showToast(`Created note "${trimmed}"`);
-    } catch (err) {
-      showToast(`Could not create note: ${String(err)}`);
-    }
-  }, [loadNotesList, loadGraph, openNote, showToast]);
+  const handleCreateNote = useCallback(
+    async (trimmed: string, initialContent?: string) => {
+      try {
+        await saveNote(trimmed, initialContent ?? `# ${trimmed}\n\n#note\n\n`);
+        await loadNotesList();
+        await loadGraph();
+        await openNote(trimmed);
+        showToast(`Created note "${trimmed}.md"`);
+      } catch (err) {
+        showToast(`Could not create note: ${String(err)}`);
+      }
+    },
+    [loadNotesList, loadGraph, openNote, showToast],
+  );
+
+  const handleNewNote = useCallback(() => {
+    setNewNoteModalOpen(true);
+  }, []);
 
   const handleOpenLink = useCallback(
     async (name: string) => {
@@ -322,7 +328,7 @@ export default function App() {
           {/* Right Actions */}
           <div className="topbar-actions">
             <button
-              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "copilot" ? "accent" : ""}`}
+              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "copilot" ? "active" : ""}`}
               onClick={() => {
                 if (workbenchOpen && workbenchTab === "copilot") {
                   setWorkbenchOpen(false);
@@ -336,7 +342,7 @@ export default function App() {
               ✦ COPILOT
             </button>
             <button
-              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "note" ? "accent" : ""}`}
+              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "note" ? "active" : ""}`}
               onClick={() => {
                 if (workbenchOpen && workbenchTab === "note") {
                   setWorkbenchOpen(false);
@@ -416,6 +422,7 @@ export default function App() {
             colors={colors}
             active={activeTags}
             onToggle={toggleTag}
+            onReset={() => setActiveTags(new Set(graph.tags))}
           />
         </div>
 
@@ -427,10 +434,14 @@ export default function App() {
             onSelectTab={setWorkbenchTab}
             onClose={() => setWorkbenchOpen(false)}
             note={note}
+            notesList={notesList}
             onSaveNote={handleSave}
             onOpenLink={(name) => void handleOpenLink(name)}
             onToggleTag={toggleTag}
             onOpenInEditor={handleOpenInEditor}
+            onNewNote={handleNewNote}
+            onOpenJournal={() => setJournalOpen(true)}
+            onOpenGrounding={() => setGroundingOpen(true)}
             aiConfig={aiConfig}
             onOpenAISettings={() => setAiSettingsOpen(true)}
             onSaveAsNote={async (title, content) => {
@@ -503,6 +514,13 @@ export default function App() {
         }}
         onOpenGrounding={() => setGroundingOpen(true)}
         onClose={() => setQuickSwitcherOpen(false)}
+      />
+
+      <NewNoteModal
+        open={newNoteModalOpen}
+        existingNotes={notesList}
+        onClose={() => setNewNoteModalOpen(false)}
+        onCreate={handleCreateNote}
       />
 
       <ContextAssemblerModal

@@ -161,9 +161,66 @@ export default function GraphView({
     );
   });
 
+  const [hudOpen, setHudOpen] = useState(false);
+
+  const handleResetCamera = () => {
+    if (fgRef.current) {
+      fgRef.current.zoomToFit(600, 120);
+    }
+  };
+
   return (
     <div className="graph-pane-inner">
       <div ref={containerRef} className="graph-container" />
+
+      {/* Floating 3D Topology HUD / Legend */}
+      <div className={`graph-hud ${hudOpen ? "open" : "collapsed"}`}>
+        <div className="graph-hud-bar">
+          <button
+            type="button"
+            className="graph-hud-btn"
+            onClick={() => setHudOpen((prev) => !prev)}
+            title="Toggle 3D Topology HUD & Legend"
+          >
+            <span className="hud-icon">{hudOpen ? "✕" : "ⓘ"}</span>
+            <span>{hudOpen ? "CLOSE TOPOLOGY" : "3D TOPOLOGY"}</span>
+          </button>
+          <button
+            type="button"
+            className="graph-hud-btn icon-only"
+            onClick={handleResetCamera}
+            title="Re-center 3D Graph Camera"
+          >
+            <span>⟲</span>
+          </button>
+        </div>
+
+        {hudOpen && (
+          <div className="graph-hud-card">
+            <div className="hud-header">KNOWLEDGE TOPOLOGY</div>
+            <div className="hud-items">
+              <div className="hud-item">
+                <span className="hud-dot" style={{ background: "#4f8ef7", boxShadow: "0 0 8px #4f8ef7" }} />
+                <span className="hud-label">Vault Knowledge Note</span>
+              </div>
+              <div className="hud-item">
+                <span className="hud-dot" style={{ background: "#f7c94f", boxShadow: "0 0 8px #f7c94f" }} />
+                <span className="hud-label">PageRank Central Hub</span>
+              </div>
+              <div className="hud-item">
+                <span className="hud-dot" style={{ background: "#f75f8e", boxShadow: "0 0 8px #f75f8e" }} />
+                <span className="hud-label">Recent Skill / Protocol</span>
+              </div>
+            </div>
+            <div className="hud-sep" />
+            <div className="hud-meta">
+              <div><strong>Size:</strong> PageRank Importance</div>
+              <div><strong>Glow:</strong> 45-day Freshness Decay</div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {nodes.length === 0 && !failed && (
         <div className="graph-overlay">
           No notes yet.

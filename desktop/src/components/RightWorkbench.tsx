@@ -1,5 +1,5 @@
 import type { AIConfig } from "../lib/ai";
-import type { NoteContent } from "../types";
+import type { NoteContent, NoteMeta } from "../types";
 import NoteEditor from "./NoteEditor";
 import AICopilot from "./AICopilot";
 
@@ -10,10 +10,14 @@ interface Props {
   onClose: () => void;
   // NoteEditor props
   note: NoteContent | null;
+  notesList?: NoteMeta[];
   onSaveNote: (id: string, content: string) => Promise<void>;
   onOpenLink: (name: string) => void;
   onToggleTag: (tag: string) => void;
   onOpenInEditor?: (id: string) => Promise<void>;
+  onNewNote?: () => void;
+  onOpenJournal?: () => void;
+  onOpenGrounding?: () => void;
   // AICopilot props
   aiConfig: AIConfig;
   onOpenAISettings: () => void;
@@ -28,10 +32,14 @@ export default function RightWorkbench({
   onSelectTab,
   onClose,
   note,
+  notesList,
   onSaveNote,
   onOpenLink,
   onToggleTag,
   onOpenInEditor,
+  onNewNote,
+  onOpenJournal,
+  onOpenGrounding,
   aiConfig,
   onOpenAISettings,
   onSaveAsNote,
@@ -75,6 +83,11 @@ export default function RightWorkbench({
         {activeTab === "note" ? (
           <NoteEditor
             note={note}
+            notesList={notesList}
+            onSelectNote={onOpenNote}
+            onNewNote={onNewNote}
+            onOpenJournal={onOpenJournal}
+            onOpenGrounding={onOpenGrounding}
             onSave={onSaveNote}
             onOpenLink={onOpenLink}
             onToggleTag={onToggleTag}
