@@ -44,3 +44,12 @@ export interface GitStatusData {
   untracked_count: number;
   files: GitFileEntry[];
 }
+
+export interface WorkspaceContext {
+  workspace_name: string;
+  workspace_path: string;
+  git_branch: string;
+  ide_environments: string[];
+  today_journal: string | null;
+  vault_notes: string[];
+}

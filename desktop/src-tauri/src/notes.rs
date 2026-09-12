@@ -215,6 +215,61 @@ pub fn open_in_editor(paths: &Paths, id: &str) -> Result<(), String> {
     }
 }
 
+#[derive(Serialize, Clone, Debug)]
+pub struct WorkspaceContext {
+    pub workspace_name: String,
+    pub workspace_path: String,
+    pub git_branch: String,
+    pub ide_environments: Vec<String>,
+    pub today_journal: Option<String>,
+    pub vault_notes: Vec<String>,
+}
+
+pub fn get_workspace_context(paths: &Paths) -> WorkspaceContext {
+    let workspace_name = paths
+        .root
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Severus".to_string());
+    let workspace_path = paths.root.to_string_lossy().to_string();
+
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let journal_file = paths.journal_dir().join(format!("{date}.md"));
+    let today_journal = fs::read_to_string(&journal_file).ok();
+
+    let git_status = get_git_status(paths).ok();
+    let git_branch = git_status.map(|g| g.branch).unwrap_or_else(|| "main".to_string());
+
+    let mut ide_environments = Vec::new();
+    let home = std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string());
+    let home_path = PathBuf::from(home);
+
+    if home_path.join(".gemini").join("antigravity-ide").exists() || paths.root.join(".gemini").exists() {
+        ide_environments.push("Google Antigravity IDE".to_string());
+    }
+    if home_path.join(".zcode").exists() || paths.root.join(".zcode").exists() {
+        ide_environments.push("ZCode".to_string());
+    }
+    if paths.root.join(".vscode").exists() || home_path.join(".vscode").exists() {
+        ide_environments.push("VS Code".to_string());
+    }
+    if ide_environments.is_empty() {
+        ide_environments.push("Antigravity & ZCode".to_string());
+    }
+
+    let notes = list_notes(paths);
+    let vault_notes = notes.into_iter().map(|n| n.title).collect();
+
+    WorkspaceContext {
+        workspace_name,
+        workspace_path,
+        git_branch,
+        ide_environments,
+        today_journal,
+        vault_notes,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,5 +331,17 @@ mod tests {
         assert_eq!(status.files[0].path, "src/lib.rs");
         assert_eq!(status.files[1].status, "??");
         assert_eq!(status.files[1].path, "notes/New.md");
+    }
+
+    #[test]
+    fn loads_workspace_context() {
+        let (paths, base) = test_paths("ctx");
+        append_journal(&paths, "started task A").unwrap();
+        save_note(&paths, "Note Alpha", "# Note Alpha\nBody").unwrap();
+        let ctx = get_workspace_context(&paths);
+        assert!(ctx.today_journal.is_some());
+        assert!(ctx.today_journal.unwrap().contains("started task A"));
+        assert!(ctx.vault_notes.contains(&"Note Alpha".to_string()));
+        let _ = fs::remove_dir_all(&base);
     }
 }

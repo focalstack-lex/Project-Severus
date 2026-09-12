@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { GitStatusData, GraphData, NoteContent, NoteMeta } from "../types";
+import type { GitStatusData, GraphData, NoteContent, NoteMeta, WorkspaceContext } from "../types";
 
 export function getGraphData(): Promise<GraphData> {
   return invoke<GraphData>("get_graph_data");
@@ -28,6 +28,10 @@ export function openInEditor(id: string): Promise<void> {
 
 export function getGitStatus(): Promise<GitStatusData> {
   return invoke<GitStatusData>("get_git_status");
+}
+
+export function getWorkspaceContext(): Promise<WorkspaceContext> {
+  return invoke<WorkspaceContext>("get_workspace_context");
 }
 
 /** Resolves with an unlisten function once the event subscription is registered. */

@@ -71,6 +71,11 @@ fn get_git_status(paths: State<Paths>) -> Result<notes::GitStatusData, String> {
     notes::get_git_status(&paths)
 }
 
+#[tauri::command]
+fn get_workspace_context(paths: State<Paths>) -> notes::WorkspaceContext {
+    notes::get_workspace_context(&paths)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -86,7 +91,8 @@ pub fn run() {
             save_note,
             append_journal,
             open_in_editor,
-            get_git_status
+            get_git_status,
+            get_workspace_context
         ])
         .setup(|app| {
             let notes_dir = app.state::<Paths>().notes_dir();

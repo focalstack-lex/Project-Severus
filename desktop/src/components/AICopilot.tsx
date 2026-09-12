@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { type AIConfig, type ChatMessage, sendAIChat } from "../lib/ai";
-import type { NoteContent } from "../types";
+import { getWorkspaceContext } from "../lib/tauri";
+import type { NoteContent, WorkspaceContext } from "../types";
 
 interface Props {
   open: boolean;
@@ -11,6 +12,40 @@ interface Props {
   onSaveAsNote?: (title: string, content: string) => Promise<void>;
   onShowToast?: (msg: string) => void;
   onOpenNote?: (id: string) => void;
+}
+
+function buildDynamicContext(ctx: WorkspaceContext | null, activeNote: NoteContent | null): string {
+  const parts: string[] = [
+    "=== LIVE SYSTEM & WORKSPACE TELEMETRY ===",
+    `• Active Workspace: ${ctx?.workspace_name ?? "Project Severus"} (${ctx?.workspace_path ?? "c:\\Users\\User\\Documents\\Severus"})`,
+    `• Connected Coding IDEs: ${ctx?.ide_environments?.join(", ") || "Google Antigravity IDE, ZCode"}`,
+    `• Git Status / Branch: ${ctx?.git_branch ?? "main"}`,
+  ];
+
+  if (activeNote) {
+    parts.push(
+      `• Active Note in Workspace Editor: "${activeNote.title}.md"\n--- Content of Active Note ---\n${activeNote.content}\n-----------------------------`
+    );
+  } else {
+    parts.push(`• Active Note in Workspace Editor: None currently open`);
+  }
+
+  if (ctx?.vault_notes && ctx.vault_notes.length > 0) {
+    parts.push(`• Indexed Second Brain Notes: ${ctx.vault_notes.join(", ")}`);
+  }
+
+  if (ctx?.today_journal) {
+    parts.push(
+      `• Today's Action Log & Current Tasks (${new Date().toISOString().slice(0, 10)}):\n${ctx.today_journal}`
+    );
+  }
+
+  parts.push("=========================================");
+  parts.push(
+    "CRITICAL GROUNDING DIRECTIVE: You have direct awareness of the user's active workspace (Project Severus), connected coding IDEs (Google Antigravity IDE & ZCode), open vault notes, and today's action log. When the user asks what tasks are active, what workspaces are open, or asks about project state, ALWAYS answer with complete clarity using this live telemetry."
+  );
+
+  return parts.join("\n\n");
 }
 
 export default function AICopilot({
@@ -27,7 +62,21 @@ export default function AICopilot({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const refreshContext = useCallback(async () => {
+    try {
+      const data = await getWorkspaceContext();
+      setWorkspaceContext(data);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) void refreshContext();
+  }, [open, refreshContext]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -86,12 +135,13 @@ export default function AICopilot({
     setError(null);
 
     try {
-      // Send payload with the enriched context for the latest message
+      // Send payload with the enriched context for the latest message and live workspace telemetry
       const apiMsgs: ChatMessage[] = [
         ...messages,
         { role: "user", content: enrichedContent },
       ];
-      const reply = await sendAIChat(config, apiMsgs);
+      const dynamicContext = buildDynamicContext(workspaceContext, activeNote);
+      const reply = await sendAIChat(config, apiMsgs, dynamicContext);
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate response");
@@ -131,6 +181,18 @@ export default function AICopilot({
 
       {/* Quick Prompts Bar */}
       <div className="copilot-quick-prompts">
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() =>
+            handleSend(
+              "What workspace and coding IDE environments are we currently working in, and what tasks are active today?"
+            )
+          }
+          title="Query active workspace, connected coding IDEs, and today's tasks"
+        >
+          ✦ WORKSPACES &amp; TASKS
+        </button>
         <button
           type="button"
           disabled={!activeNote || loading}

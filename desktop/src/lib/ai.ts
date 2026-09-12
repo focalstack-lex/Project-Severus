@@ -135,6 +135,7 @@ export async function testAIConnection(config: AIConfig): Promise<{ ok: boolean;
 export async function sendAIChat(
   config: AIConfig,
   messages: ChatMessage[],
+  dynamicContext?: string,
 ): Promise<string> {
   const base = cleanBaseUrl(config.baseUrl);
   const endpoint = `${base}/chat/completions`;
@@ -150,9 +151,15 @@ export async function sendAIChat(
     }
   }
 
-  const systemMsg: ChatMessage[] = config.systemPrompt
-    ? [{ role: "system", content: config.systemPrompt }]
-    : [];
+  const basePrompt =
+    config.systemPrompt?.trim() ||
+    "You are Severus AI, an active engineering copilot and cognitive mentor embedded in Project Severus Second Brain.";
+
+  const fullSystemContent = dynamicContext
+    ? `${basePrompt}\n\n${dynamicContext}`
+    : basePrompt;
+
+  const systemMsg: ChatMessage[] = [{ role: "system", content: fullSystemContent }];
 
   const payload = {
     model: config.model.trim(),
