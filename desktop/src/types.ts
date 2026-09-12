@@ -31,3 +31,16 @@ export interface NoteContent {
   title: string;
   content: string;
 }
+
+export interface GitFileEntry {
+  status: string;
+  path: string;
+}
+
+export interface GitStatusData {
+  branch: string;
+  is_clean: boolean;
+  modified_count: number;
+  untracked_count: number;
+  files: GitFileEntry[];
+}

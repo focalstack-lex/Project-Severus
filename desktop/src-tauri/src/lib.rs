@@ -61,6 +61,16 @@ fn append_journal(paths: State<Paths>, text: String) -> Result<String, String> {
     notes::append_journal(&paths, &text)
 }
 
+#[tauri::command]
+fn open_in_editor(paths: State<Paths>, id: String) -> Result<(), String> {
+    notes::open_in_editor(&paths, &id)
+}
+
+#[tauri::command]
+fn get_git_status(paths: State<Paths>) -> Result<notes::GitStatusData, String> {
+    notes::get_git_status(&paths)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -74,7 +84,9 @@ pub fn run() {
             list_notes,
             read_note,
             save_note,
-            append_journal
+            append_journal,
+            open_in_editor,
+            get_git_status
         ])
         .setup(|app| {
             let notes_dir = app.state::<Paths>().notes_dir();

@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { GraphData, NoteContent, NoteMeta } from "../types";
+import type { GitStatusData, GraphData, NoteContent, NoteMeta } from "../types";
 
 export function getGraphData(): Promise<GraphData> {
   return invoke<GraphData>("get_graph_data");
@@ -20,6 +20,14 @@ export function saveNote(id: string, content: string): Promise<void> {
 
 export function appendJournal(text: string): Promise<string> {
   return invoke<string>("append_journal", { text });
+}
+
+export function openInEditor(id: string): Promise<void> {
+  return invoke<void>("open_in_editor", { id });
+}
+
+export function getGitStatus(): Promise<GitStatusData> {
+  return invoke<GitStatusData>("get_git_status");
 }
 
 /** Resolves with an unlisten function once the event subscription is registered. */

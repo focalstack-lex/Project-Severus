@@ -8,17 +8,20 @@ import RightWorkbench from "./components/RightWorkbench";
 import JournalCapture from "./components/JournalCapture";
 import AISettingsModal from "./components/AISettingsModal";
 import QuickSwitcherModal from "./components/QuickSwitcherModal";
+import ContextAssemblerModal from "./components/ContextAssemblerModal";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import {
   appendJournal,
+  getGitStatus,
   getGraphData,
   listNotes,
   onNotesChanged,
+  openInEditor,
   readNote,
   saveNote,
 } from "./lib/tauri";
 import { fade, freshnessOpacity, tagColors } from "./lib/colors";
-import type { GraphData, NoteContent, NoteMeta } from "./types";
+import type { GitStatusData, GraphData, NoteContent, NoteMeta } from "./types";
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [], tags: [] };
 
@@ -39,9 +42,13 @@ export default function App() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [groundingOpen, setGroundingOpen] = useState(false);
 
   // AI Brain Config
   const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
+
+  // Git Telemetry
+  const [gitStatus, setGitStatus] = useState<GitStatusData | null>(null);
 
   // Notifications & State
   const [toast, setToast] = useState<string | null>(null);
@@ -54,6 +61,15 @@ export default function App() {
       () => setToast((current) => (current === message ? null : current)),
       2600,
     );
+  }, []);
+
+  const refreshGitStatus = useCallback(async () => {
+    try {
+      const status = await getGitStatus();
+      setGitStatus(status);
+    } catch {
+      // Git may be uninitialized or outside PATH; fail silently
+    }
   }, []);
 
   const loadGraph = useCallback(async () => {
@@ -94,11 +110,13 @@ export default function App() {
   useEffect(() => {
     void loadGraph();
     void loadNotesList();
+    void refreshGitStatus();
     let unlisten: (() => void) | null = null;
     let cancelled = false;
     void onNotesChanged(() => {
       void loadGraph();
       void loadNotesList();
+      void refreshGitStatus();
       setRefreshTick((tick) => tick + 1);
     }).then((fn) => {
       if (cancelled) fn();
@@ -108,7 +126,19 @@ export default function App() {
       cancelled = true;
       unlisten?.();
     };
-  }, [loadGraph, loadNotesList]);
+  }, [loadGraph, loadNotesList, refreshGitStatus]);
+
+  const handleOpenInEditor = useCallback(
+    async (id: string) => {
+      try {
+        await openInEditor(id);
+        showToast(`Opening "${id}.md" in editor…`);
+      } catch (err) {
+        showToast(`Could not open editor: ${String(err)}`);
+      }
+    },
+    [showToast],
+  );
 
   const openNote = useCallback(
     async (id: string) => {
@@ -212,6 +242,11 @@ export default function App() {
         event.preventDefault();
         setWorkbenchOpen(true);
         setWorkbenchTab("copilot");
+      }
+      // Toggle Grounding Assembler (Ctrl+Shift+G)
+      else if (mod && event.shiftKey && event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        setGroundingOpen((prev) => !prev);
       }
       // Toggle Notes Drawer (Ctrl+B)
       else if (mod && event.key.toLowerCase() === "b") {
@@ -329,6 +364,7 @@ export default function App() {
             onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
             onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
             onOpenJournal={() => setJournalOpen(true)}
+            onOpenGrounding={() => setGroundingOpen(true)}
             workbenchOpen={workbenchOpen}
             activeTab={workbenchTab}
             onSelectTab={(tab) => {
@@ -339,6 +375,7 @@ export default function App() {
             onOpenAISettings={() => setAiSettingsOpen(true)}
             zenMode={zenMode}
             onToggleZenMode={() => setZenMode((prev) => !prev)}
+            gitStatus={gitStatus}
           />
         )}
 
@@ -392,8 +429,16 @@ export default function App() {
             onSaveNote={handleSave}
             onOpenLink={(name) => void handleOpenLink(name)}
             onToggleTag={toggleTag}
+            onOpenInEditor={handleOpenInEditor}
             aiConfig={aiConfig}
             onOpenAISettings={() => setAiSettingsOpen(true)}
+            onSaveAsNote={async (title, content) => {
+              await saveNote(title, content);
+              await loadNotesList();
+              await loadGraph();
+            }}
+            onShowToast={showToast}
+            onOpenNote={(id) => void openNote(id)}
           />
         )}
       </main>
@@ -417,6 +462,14 @@ export default function App() {
           </div>
           <div className="status-bar-right">
             <div className="status-item">
+              <span>GIT:</span>{" "}
+              <span className="highlight">
+                {gitStatus
+                  ? `${gitStatus.branch} (${gitStatus.is_clean ? "clean" : `${gitStatus.modified_count} mod`})`
+                  : "READY"}
+              </span>
+            </div>
+            <div className="status-item">
               <span>AI MODEL:</span> <span className="highlight">{aiConfig.model}</span>
             </div>
             <div className="status-item">
@@ -424,6 +477,9 @@ export default function App() {
               <span className="highlight">
                 {graph.nodes.length} NODES · {graph.links.length} LINKS
               </span>
+            </div>
+            <div className="status-item">
+              <kbd className="status-kbd">CTRL+SHIFT+G</kbd> <span>GROUNDING</span>
             </div>
             <div className="status-item">
               <kbd className="status-kbd">CTRL+K</kbd> <span>COMMANDS</span>
@@ -444,7 +500,16 @@ export default function App() {
           setWorkbenchOpen(true);
           setWorkbenchTab("copilot");
         }}
+        onOpenGrounding={() => setGroundingOpen(true)}
         onClose={() => setQuickSwitcherOpen(false)}
+      />
+
+      <ContextAssemblerModal
+        open={groundingOpen}
+        notes={notesList}
+        activeNote={note}
+        onClose={() => setGroundingOpen(false)}
+        onShowToast={showToast}
       />
 
       <JournalCapture

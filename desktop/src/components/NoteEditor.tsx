@@ -8,9 +8,17 @@ interface Props {
   onOpenLink: (name: string) => void;
   onToggleTag: (tag: string) => void;
   onClose: () => void;
+  onOpenInEditor?: (id: string) => Promise<void>;
 }
 
-export default function NoteEditor({ note, onSave, onOpenLink, onToggleTag, onClose }: Props) {
+export default function NoteEditor({
+  note,
+  onSave,
+  onOpenLink,
+  onToggleTag,
+  onClose,
+  onOpenInEditor,
+}: Props) {
   const [draft, setDraft] = useState("");
   const [preview, setPreview] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -73,6 +81,15 @@ export default function NoteEditor({ note, onSave, onOpenLink, onToggleTag, onCl
         <div className="editor-actions">
           {note && (
             <>
+              {onOpenInEditor && (
+                <button
+                  type="button"
+                  onClick={() => void onOpenInEditor(note.id)}
+                  title="Open this note in VS Code / IDE"
+                >
+                  VS CODE ↗
+                </button>
+              )}
               <button onClick={() => setPreview(!preview)} title="Toggle markdown preview">
                 {preview ? "EDIT" : "PREVIEW"}
               </button>

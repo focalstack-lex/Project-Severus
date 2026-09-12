@@ -1643,3 +1643,528 @@ button.close-btn:hover {
   color: var(--error);
   background: rgba(244, 63, 94, 0.1);
 }
+
+/* ---------------------------------------------------------------------------
+   AGENT GROUNDING ASSEMBLER MODAL (05 / GROUNDING ENGINE)
+--------------------------------------------------------------------------- */
+.overlay.grounding-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 100;
+}
+
+.grounding-modal {
+  width: 980px;
+  max-width: 95vw;
+  height: 84vh;
+  max-height: 840px;
+  background: #080808;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  animation: groundingPop 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes groundingPop {
+  from { opacity: 0; transform: scale(0.97) translateY(-6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.grounding-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #000000;
+  border-bottom: 1px solid var(--border);
+}
+
+.grounding-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.grounding-section-num {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.grounding-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+}
+
+.grounding-header-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+  color: #ffffff;
+  letter-spacing: 0.06em;
+}
+
+.word-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.grounding-header-badges .close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 120ms ease;
+}
+
+.grounding-header-badges .close-btn:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.grounding-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 18px;
+  padding: 16px 20px;
+  min-height: 0;
+  overflow: hidden;
+  background: #080808;
+  box-sizing: border-box;
+}
+
+.grounding-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.grounding-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.grounding-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.preset-pill-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.preset-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  background: #000000;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: center;
+  transition: all 140ms ease;
+  user-select: none;
+}
+
+.preset-pill:hover {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  background: #111111;
+}
+
+.preset-pill.active {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+  font-weight: 700;
+}
+
+.task-input {
+  width: 100%;
+  background: #000000;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 8px 10px;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.task-input:focus {
+  border-color: #ffffff;
+}
+
+.grounding-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.toggle-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.toggle-check:hover {
+  color: var(--text-primary);
+}
+
+.toggle-check input[type="checkbox"] {
+  accent-color: #ffffff;
+  cursor: pointer;
+}
+
+.notes-selector-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+}
+
+.notes-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.notes-selector-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.notes-selector-actions button {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.notes-selector-actions button:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.filter-notes-input {
+  width: 100%;
+  background: #000000;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 6px 10px;
+  outline: none;
+  margin: 4px 0 6px 0;
+  box-sizing: border-box;
+}
+
+.filter-notes-input:focus {
+  border-color: rgba(255, 255, 255, 0.6);
+}
+
+.notes-checklist {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 200px;
+  background: #000000;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+.note-check-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  transition: background 120ms ease;
+}
+
+.note-check-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.note-check-item.checked {
+  color: #ffffff;
+}
+
+.note-check-item input[type="checkbox"] {
+  accent-color: #ffffff;
+}
+
+.note-check-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-check-tag {
+  font-size: 9.5px;
+  color: var(--text-dim);
+}
+
+.grounding-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preview-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.preview-loading {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  color: var(--warning);
+}
+
+.compiled-textarea {
+  flex: 1;
+  width: 100%;
+  background: #000000;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: #e5e5e5;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.65;
+  padding: 14px 16px;
+  resize: none;
+  outline: none;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.compiled-textarea:focus {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.grounding-footer {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: #000000;
+  box-sizing: border-box;
+}
+
+.grounding-footer .modal-hint {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.grounding-footer .footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grounding-footer .btn-secondary {
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.grounding-footer .btn-secondary:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.grounding-footer .copy-btn {
+  padding: 6px 16px;
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #ffffff;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.grounding-footer .copy-btn:hover {
+  background: #d4d4d4;
+  border-color: #d4d4d4;
+}
+
+.grounding-footer .copy-btn.copied {
+  background: #10b981;
+  color: #000000;
+  border-color: #10b981;
+}
+
+/* ---------------------------------------------------------------------------
+   AI COPILOT MSG ACTIONS & SYNTHESIS
+--------------------------------------------------------------------------- */
+.copilot-msg-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.msg-synth-btn {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.msg-synth-btn:hover {
+  background: #ffffff;
+  color: #000000;
+}
+
+.msg-copy-btn {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.msg-copy-btn:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ---------------------------------------------------------------------------
+   GIT TELEMETRY STATUS PILL IN RAIL
+--------------------------------------------------------------------------- */
+.git-pill-item {
+  position: relative;
+  cursor: default;
+}
+
+.git-status-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.git-status-dot.clean {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.git-status-dot.dirty {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
