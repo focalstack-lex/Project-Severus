@@ -19,6 +19,7 @@ import {
   onNotesChanged,
   openInEditor,
   readNote,
+  restoreWindow,
   saveNote,
 } from "./lib/tauri";
 import { fade, freshnessOpacity, tagColors } from "./lib/colors";
@@ -161,8 +162,10 @@ export default function App() {
 
     const detector = new ClapDetector({
       onDoubleClap: () => {
+        // Unminimize & restore native window to full focus
+        void restoreWindow().catch(() => {});
         void playTimeGreeting();
-        showToast("👏 Double-clap detected — Greetings, Sir!");
+        showToast("👏 Double-clap detected — Welcome back, Sir!");
       },
     });
 

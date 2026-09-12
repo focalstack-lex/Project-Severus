@@ -38,6 +38,10 @@ export function getVoiceAudio(name: string): Promise<string> {
   return invoke<string>("get_voice_audio", { name });
 }
 
+export function restoreWindow(): Promise<void> {
+  return invoke<void>("restore_window");
+}
+
 /** Resolves with an unlisten function once the event subscription is registered. */
 export function onNotesChanged(handler: () => void): Promise<() => void> {
   return listen("notes-changed", () => handler());

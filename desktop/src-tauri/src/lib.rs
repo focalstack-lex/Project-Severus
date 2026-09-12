@@ -96,6 +96,14 @@ fn get_voice_audio(paths: State<Paths>, name: String) -> Result<String, String> 
     Ok(format!("data:audio/mp3;base64,{}", b64))
 }
 
+#[tauri::command]
+fn restore_window(window: tauri::Window) -> Result<(), String> {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    Ok(())
+}
+
 fn base64_encode(data: &[u8]) -> String {
     const ENGINE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut buf = String::with_capacity((data.len() + 2) / 3 * 4);
@@ -138,7 +146,8 @@ pub fn run() {
             open_in_editor,
             get_git_status,
             get_workspace_context,
-            get_voice_audio
+            get_voice_audio,
+            restore_window
         ])
         .setup(|app| {
             if let Some(icon) = app.default_window_icon() {
