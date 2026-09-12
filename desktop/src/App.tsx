@@ -228,10 +228,15 @@ export default function App() {
         event.preventDefault();
         void handleNewNote();
       }
+      // Exit Zen Mode (Escape)
+      else if (event.key === "Escape" && zenMode) {
+        event.preventDefault();
+        setZenMode(false);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleNewNote]);
+  }, [handleNewNote, zenMode]);
 
   const colors = useMemo(() => tagColors(graph.tags), [graph.tags]);
   const visNodes = useMemo<VisNode[]>(
@@ -351,10 +356,21 @@ export default function App() {
 
         {/* Center Stage: 3D Knowledge Graph */}
         <div className="graph-pane">
+          {zenMode && (
+            <button
+              type="button"
+              className="zen-exit-btn"
+              onClick={() => setZenMode(false)}
+              title="Exit Zen Fullscreen (Esc)"
+            >
+              ✕ EXIT ZEN (ESC)
+            </button>
+          )}
           <GraphView
             nodes={visNodes}
             links={graph.links}
             activeTags={activeTags}
+            selectedId={selectedId}
             onSelectNote={(id) => void openNote(id)}
           />
           <TagBar

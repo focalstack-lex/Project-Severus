@@ -245,7 +245,8 @@ button.close-btn:hover {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 5px 14px;
-  min-width: 280px;
+  min-width: 220px;
+  max-width: 360px;
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -268,6 +269,9 @@ button.close-btn:hover {
   flex: 1;
   text-align: left;
   letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .search-kbd {
@@ -635,6 +639,33 @@ button.close-btn:hover {
   background: transparent;
 }
 
+/* Floating Zen Exit Button */
+.zen-exit-btn {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 25;
+  background: rgba(10, 10, 10, 0.85);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 5px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+  transition: all 180ms ease;
+}
+
+.zen-exit-btn:hover {
+  background: #ffffff;
+  color: #000000;
+  border-color: #ffffff;
+}
+
 /* 4. UNIFIED RIGHT WORKBENCH */
 .right-workbench {
   width: 520px;
@@ -725,7 +756,7 @@ button.close-btn:hover {
   overflow: hidden;
 }
 
-/* Note Editor overrides inside Workbench */
+/* Note Editor inside Workbench */
 .editor-pane {
   flex: 1;
   width: 100%;
@@ -733,6 +764,7 @@ button.close-btn:hover {
   background: var(--bg-surface);
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .editor-header {
@@ -800,6 +832,8 @@ button.close-btn:hover {
   font-size: 13px;
   line-height: 1.65;
   padding: 16px 18px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .editor-empty {
@@ -835,6 +869,7 @@ button.close-btn:hover {
   font-size: 13.5px;
   line-height: 1.65;
   color: #dedede;
+  min-height: 0;
 }
 
 .md-preview h1 {
@@ -938,6 +973,7 @@ button.close-btn:hover {
   background: var(--bg-surface);
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .copilot-header {
@@ -1008,6 +1044,7 @@ button.close-btn:hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
 }
 
 .copilot-empty {

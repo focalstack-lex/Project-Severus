@@ -17,22 +17,28 @@ interface Props {
   nodes: VisNode[];
   links: GraphLink[];
   activeTags: Set<string>;
+  selectedId?: string | null;
   onSelectNote: (id: string) => void;
 }
 
-// The 3d-force-graph instance type is generic over three.js Object3D subclasses, but we
-// feed plain data objects (the library supports this at runtime), so the ref stays loose.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type GraphInstance = any;
 
-export default function GraphView({ nodes, links, activeTags, onSelectNote }: Props) {
+export default function GraphView({
+  nodes,
+  links,
+  activeTags,
+  selectedId,
+  onSelectNote,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<GraphInstance>(null);
   const [failed, setFailed] = useState(false);
 
-  // mirrors of the latest props, read inside stable accessor closures
   const activeRef = useRef(activeTags);
   activeRef.current = activeTags;
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
   const tagsByIdRef = useRef<Map<string, string[]>>(new Map());
   const selectRef = useRef(onSelectNote);
   selectRef.current = onSelectNote;
@@ -59,28 +65,42 @@ export default function GraphView({ nodes, links, activeTags, onSelectNote }: Pr
     const container = containerRef.current;
     if (!container) return;
     let instance: GraphInstance = null;
+    let ro: ResizeObserver | null = null;
+
     try {
       const fg = new ForceGraph3D(container);
-      fg.backgroundColor("#050505")
+      fg.backgroundColor("#040404")
         .showNavInfo(false)
         .nodeRelSize(2)
         .nodeLabel((node: unknown) => {
           const n = node as VisNode;
           const tagList = n.tags && n.tags.length > 0 ? `#${n.tags.join(" #")}` : "no tags";
-          return `<div class="node-label"><strong>${n.title ?? ""}</strong><span style="color:#8e8e8e;font-size:10px;margin-left:4px;">${n.importance}% · ${tagList}</span></div>`;
+          return `<div class="node-label"><strong>${n.title ?? ""}</strong><span style="color:#888888;font-size:10px;margin-left:4px;">${n.importance}% · ${tagList}</span></div>`;
         })
         .onNodeClick((node: unknown) => {
           const id = (node as VisNode).id;
           if (typeof id === "string") selectRef.current(id);
         })
         .linkOpacity(0.35);
+
       const charge = (fg as unknown as { d3Force?: (key: string) => unknown }).d3Force?.(
         "charge",
       ) as { strength?: (value: number) => unknown } | undefined;
       charge?.strength?.(-400);
+
       fg.onEngineStop(() => fg.zoomToFit(600, 120));
       instance = fg;
       fgRef.current = fg;
+
+      // Handle dynamic sidebar opening/closing and window resize seamlessly
+      ro = new ResizeObserver(() => {
+        if (container.clientWidth > 0 && container.clientHeight > 0) {
+          fg.width(container.clientWidth);
+          fg.height(container.clientHeight);
+        }
+      });
+      ro.observe(container);
+
       const canvas = container.querySelector("canvas");
       const onLost = (event: Event) => {
         event.preventDefault();
@@ -90,7 +110,9 @@ export default function GraphView({ nodes, links, activeTags, onSelectNote }: Pr
     } catch {
       setFailed(true);
     }
+
     return () => {
+      ro?.disconnect();
       try {
         instance?._destructor?.();
       } catch {
@@ -111,15 +133,29 @@ export default function GraphView({ nodes, links, activeTags, onSelectNote }: Pr
     });
   }, [nodes, links]);
 
-  // re-assign accessors so the engine re-evaluates visibility/fade for the new tag set
+  // re-assign accessors so the engine re-evaluates visibility/fade/selection
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.nodeColor((node: VisNode) => (nodeVisible(node.id) ? node.color : "rgba(0,0,0,0)"));
-    fg.nodeVal((node: VisNode) => (nodeVisible(node.id) ? node.size : 0.001));
+
+    fg.nodeColor((node: VisNode) => {
+      if (!nodeVisible(node.id)) return "rgba(0,0,0,0)";
+      if (selectedRef.current && node.id.toLowerCase() === selectedRef.current.toLowerCase()) {
+        return "#ffffff"; // highlight active note in bright white
+      }
+      return node.color;
+    });
+
+    fg.nodeVal((node: VisNode) => {
+      if (!nodeVisible(node.id)) return 0.001;
+      const isSel = selectedRef.current && node.id.toLowerCase() === selectedRef.current.toLowerCase();
+      return isSel ? node.size * 1.35 : node.size;
+    });
+
     fg.linkColor((link: { source: unknown; target: unknown }) =>
       linkVisible(link) ? "rgba(255, 255, 255, 0.12)" : "rgba(0,0,0,0)",
     );
+
     fg.linkWidth((link: { source: unknown; target: unknown; weight?: number }) =>
       linkVisible(link) ? 0.3 + (link.weight ?? 0.3) : 0,
     );
