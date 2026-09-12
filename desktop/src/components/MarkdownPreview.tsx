@@ -4,8 +4,9 @@ import { useMemo } from "react";
 
 interface Props {
   content: string;
-  onOpenLink: (name: string) => void;
-  onToggleTag: (tag: string) => void;
+  onOpenLink?: (name: string) => void;
+  onToggleTag?: (tag: string) => void;
+  className?: string;
 }
 
 function escapeHtmlAttr(value: string): string {
@@ -26,24 +27,24 @@ function renderMarkdown(content: string): string {
     (_match, pre: string, tag: string) =>
       `${pre}<span class="md-tag" data-tag="${tag}">#${tag}</span>`,
   );
-  const html = marked.parse(withTags, { async: false }) as string;
+  const html = marked.parse(withTags, { async: false, gfm: true }) as string;
   return DOMPurify.sanitize(html);
 }
 
-export default function MarkdownPreview({ content, onOpenLink, onToggleTag }: Props) {
+export default function MarkdownPreview({ content, onOpenLink, onToggleTag, className }: Props) {
   const html = useMemo(() => renderMarkdown(content), [content]);
   return (
     <div
-      className="md-preview"
+      className={className ? `md-preview ${className}` : "md-preview"}
       onClick={(event) => {
         const target = event.target as HTMLElement;
         const link = target.closest(".wikilink");
         if (link) {
-          onOpenLink(link.getAttribute("data-note") ?? "");
+          onOpenLink?.(link.getAttribute("data-note") ?? "");
           return;
         }
         const tag = target.closest(".md-tag");
-        if (tag) onToggleTag(tag.getAttribute("data-tag") ?? "");
+        if (tag) onToggleTag?.(tag.getAttribute("data-tag") ?? "");
       }}
       dangerouslySetInnerHTML={{ __html: html }}
     />

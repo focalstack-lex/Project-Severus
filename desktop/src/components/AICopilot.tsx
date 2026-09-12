@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { type AIConfig, type ChatMessage, sendAIChat } from "../lib/ai";
 import { getWorkspaceContext } from "../lib/tauri";
 import type { NoteContent, WorkspaceContext } from "../types";
+import MarkdownPreview from "./MarkdownPreview";
 
 interface Props {
   open: boolean;
@@ -42,7 +43,15 @@ function buildDynamicContext(ctx: WorkspaceContext | null, activeNote: NoteConte
 
   parts.push("=========================================");
   parts.push(
-    "CRITICAL GROUNDING DIRECTIVE: You have direct awareness of the user's active workspace (Project Severus), connected coding IDEs (Google Antigravity IDE & ZCode), open vault notes, and today's action log. When the user asks what tasks are active, what workspaces are open, or asks about project state, ALWAYS answer with complete clarity using this live telemetry."
+    `=== CRITICAL RESPONSE ORGANIZATION & FORMATTING DIRECTIVE ===
+You are an executive engineering assistant and cognitive mentor in Lex Matondo's Second Brain.
+Every response MUST be cleanly organized, scannable, and structured according to these rules:
+1. EXECUTIVE HIERARCHY: Structure replies with clear, logical Markdown headings (e.g. ### 1. Status Overview, ### 2. Active Tasks & Workspaces, ### 3. Next Actions). Never output an unstructured wall of text.
+2. USE MARKDOWN TABLES: Whenever listing tasks, comparing items, presenting telemetry, or showing multi-attribute information, ALWAYS format them as a GitHub-flavored Markdown table with columns (e.g. | # | Feature / Task | Target / IDE | Status |).
+3. BULLETS & EMPHASIS: Use concise bullet points with **bold** lead-ins for key insights and telemetry details.
+4. CODE & PATH BLOCKS: Always format file names, directory paths, CLI commands, or code snippets in inline code (\`path/file.ts\`) or fenced code blocks with language identifiers (\`\`\`bash, \`\`\`tsx).
+5. KNOWLEDGE GRAPH INTEGRATION: When referencing concepts that should exist or link in the Second Brain, use [[wiki-link]] syntax (e.g., [[Ascension_Guide]], [[system-architecture]]) and inline #tags (e.g. #severus #workflow).
+6. LIVE TELEMETRY FIDELITY: When answering queries about open workspaces, connected coding IDEs, git status, or today's tasks, report directly and accurately from the live telemetry above (Project Severus, Google Antigravity IDE, ZCode, etc.).`
   );
 
   return parts.join("\n\n");
@@ -89,8 +98,9 @@ export default function AICopilot({
     const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
     let title = "AI Synthesis";
     for (const line of lines) {
-      if (line.startsWith("# ")) {
-        title = line.replace(/^#+\s*/, "").replace(/[\\/:*?"<>|]/g, "").slice(0, 40).trim();
+      const match = line.match(/^#+\s+(.+)$/);
+      if (match && match[1]) {
+        title = match[1].replace(/[\\/:*?"<>|]/g, "").slice(0, 40).trim();
         break;
       }
     }
@@ -230,7 +240,18 @@ export default function AICopilot({
             <div className="copilot-msg-role">
               {m.role === "user" ? "YOU" : "SEVERUS AI"}
             </div>
-            <div className="copilot-msg-body">{m.content}</div>
+            <div className="copilot-msg-body">
+              {m.role === "assistant" ? (
+                <MarkdownPreview
+                  content={m.content}
+                  className="copilot-md-preview"
+                  onOpenLink={(name) => onOpenNote?.(name)}
+                  onToggleTag={() => {}}
+                />
+              ) : (
+                m.content
+              )}
+            </div>
             {m.role === "assistant" && (
               <div className="copilot-msg-footer">
                 <button
