@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Icon from "./components/Icon";
 import ErrorBoundary from "./components/ErrorBoundary";
 import GraphView, { type VisNode } from "./components/GraphView";
 import TagBar from "./components/TagBar";
 import TagsIndexView from "./components/TagsIndexView";
-import SidebarNav, { type KnowledgeSubTab, type NavSection } from "./components/SidebarNav";
+import { type KnowledgeSubTab, type NavSection } from "./components/SidebarNav";
 import TopHeader from "./components/TopHeader";
 import ContextInspector from "./components/ContextInspector";
 import NotesDrawer from "./components/NotesDrawer";
@@ -14,7 +15,20 @@ import AISettingsModal from "./components/AISettingsModal";
 import QuickSwitcherModal from "./components/QuickSwitcherModal";
 import ContextAssemblerModal from "./components/ContextAssemblerModal";
 import NewNoteModal from "./components/NewNoteModal";
+import ThinkingModeCapsule from "./components/ThinkingModeCapsule";
+import SystemConsoleModal, { type CommandOutcome } from "./components/SystemConsoleModal";
+import PasswordGateModal from "./components/PasswordGateModal";
+import { PillBase } from "@/components/ui/3d-adaptive-navigation-bar";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
+import { mapTextToIntent } from "./lib/deepseekIntent";
+import {
+  executeSystemIntent,
+  hasControlPassword,
+  resolveSystemCommand,
+  setControlPassword,
+  verifyControlPassword,
+  type SystemIntent,
+} from "./lib/systemControl";
 import {
   appendJournal,
   getGitStatus,
@@ -24,20 +38,27 @@ import {
   openInEditor,
   readNote,
   restoreWindow,
+  hideToTray,
   saveNote,
+  setFloatingMode,
+  moveToMonitor,
 } from "./lib/tauri";
 import { fade, freshnessOpacity, tagColors } from "./lib/colors";
 import type { GitStatusData, GraphData, GraphNode, NoteContent, NoteMeta } from "./types";
 import {
+  formatReplyWithSir,
+  getTimeGreetingData,
   getVoiceMuted,
   playTimeGreeting,
   playVoice,
   preloadVoice,
   setVoiceMuted,
+  speakText,
 } from "./lib/voice";
 import { ClapDetector, getClapEnabled, recordKeyPress, setClapEnabled } from "./lib/clapDetector";
 import {
   VoiceCommandListener,
+  type VoiceCommandHandlers,
   getVoiceCmdEnabled,
   setVoiceCmdEnabled,
 } from "./lib/voiceCommands";
@@ -46,12 +67,6 @@ const EMPTY_GRAPH: GraphData = { nodes: [], links: [], tags: [] };
 const IS_MAC =
   typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
 const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
-
-function greetingForHour(hour: number): string {
-  if (hour < 12) return "Good morning, Sir.";
-  if (hour < 18) return "Good afternoon, Sir.";
-  return "Good evening, Sir.";
-}
 
 export default function App() {
   const [graph, setGraph] = useState<GraphData>(EMPTY_GRAPH);
@@ -65,7 +80,8 @@ export default function App() {
   // Navigation & Shell Layout
   const [activeSection, setActiveSection] = useState<NavSection>("knowledge");
   const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>("graph");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [isFloatingMode, setIsFloatingMode] = useState<boolean>(true);
+  const [isThinkingMode, setIsThinkingMode] = useState<boolean>(false);
 
   // Inspector & Panes
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
@@ -77,6 +93,25 @@ export default function App() {
   const [voiceMuted, setVoiceMutedState] = useState<boolean>(getVoiceMuted);
   const [clapEnabled, setClapEnabledState] = useState<boolean>(getClapEnabled);
   const [voiceCmdEnabled, setVoiceCmdEnabledState] = useState<boolean>(getVoiceCmdEnabled);
+  const [listeningActive, setListeningActive] = useState<boolean>(true);
+  const voiceListenerRef = useRef<VoiceCommandListener | null>(null);
+
+  const handleToggleListening = useCallback((targetActive?: boolean, playAudio = false) => {
+    setListeningActive((prev) => {
+      const next = typeof targetActive === "boolean" ? targetActive : !prev;
+      if (voiceListenerRef.current) {
+        voiceListenerRef.current.setStandby(!next);
+      }
+      if (playAudio) {
+        if (next) {
+          void playVoice("listening_resumed");
+        } else {
+          void playVoice("listening_paused");
+        }
+      }
+      return next;
+    });
+  }, []);
 
   // Modals
   const [journalOpen, setJournalOpen] = useState(false);
@@ -84,22 +119,22 @@ export default function App() {
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
   const [groundingOpen, setGroundingOpen] = useState(false);
   const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
+  const [systemConsoleOpen, setSystemConsoleOpen] = useState(false);
+
+  // System control: destructive intents await the control password here
+  const [pendingGate, setPendingGate] = useState<{ intent: SystemIntent; description: string } | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [gateBusy, setGateBusy] = useState(false);
 
   // AI Config & Git
   const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
   const [gitStatus, setGitStatus] = useState<GitStatusData | null>(null);
 
-  // Notifications & State
-  const [toast, setToast] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Notifications & State (on-screen toast notes removed system-wide)
   const [refreshTick, setRefreshTick] = useState(0);
 
-  const showToast = useCallback((message: string) => {
-    setToast(message);
-    window.setTimeout(
-      () => setToast((current) => (current === message ? null : current)),
-      2600,
-    );
+  const showToast = useCallback((_message: string) => {
+    // Silent: on-screen toasts/notes disabled across the entire system
   }, []);
 
   const refreshGitStatus = useCallback(async () => {
@@ -120,9 +155,8 @@ export default function App() {
         for (const tag of data.tags) next.add(tag);
         return next;
       });
-      setLoadError(null);
     } catch (err) {
-      setLoadError(String(err));
+      console.error("Failed loading graph:", err);
     } finally {
       setBooting(false);
     }
@@ -148,6 +182,195 @@ export default function App() {
     }
   }, []);
 
+  const handleSectionSelect = useCallback(
+    async (id: string) => {
+      setIsFloatingMode(false);
+      try {
+        await setFloatingMode(false);
+      } catch (e) {
+        console.error("Failed to restore full window:", e);
+      }
+
+      if (id === "graph") {
+        setActiveSection("knowledge");
+        setKnowledgeSubTab("graph");
+        void playVoice("nav_graph_open.mp3");
+      } else if (id === "notes") {
+        setActiveSection("knowledge");
+        setKnowledgeSubTab("notes");
+        setNotesDrawerOpen(true);
+        void playVoice("nav_notes_drawer.mp3");
+      } else if (id === "copilot") {
+        setActiveSection("knowledge");
+        setInspectorOpen(true);
+        setInspectorTab("copilot");
+        void playVoice("nav_copilot_open.mp3");
+      } else if (id === "home") {
+        setActiveSection("home");
+        void playVoice("greeting_sir");
+      }
+    },
+    [],
+  );
+
+  const handleEnterFloatingMode = useCallback(async () => {
+    setIsFloatingMode(true);
+    try {
+      await setFloatingMode(true);
+    } catch (e) {
+      console.error("Failed to enter floating mode:", e);
+    }
+  }, []);
+
+  const handleHideToTray = useCallback(async () => {
+    try {
+      await hideToTray();
+    } catch (e) {
+      console.error("Failed to hide to tray:", e);
+    }
+  }, []);
+
+  const ensureWorkstation = useCallback(async () => {
+    try {
+      await restoreWindow();
+    } catch {
+      // ignore
+    }
+    setIsFloatingMode(false);
+    try {
+      await setFloatingMode(false);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleMoveMonitor = useCallback(
+    async (target: "left" | "right" | "next" | "primary" = "next") => {
+      try {
+        await moveToMonitor(target);
+      } catch (err) {
+        console.warn(`Could not switch display: ${String(err)}`);
+      }
+    },
+    [],
+  );
+
+  // --- System control (Tier 1/2): grammar first, model fallback second ---
+  const handleRunSystemCommand = useCallback(
+    async (text: string): Promise<CommandOutcome> => {
+      try {
+        const normalized = text.toLowerCase().trim();
+        if (
+          normalized === "stop listening" ||
+          normalized === "turn off listening" ||
+          normalized === "pause listening" ||
+          normalized === "mute mic" ||
+          normalized === "mute microphone" ||
+          normalized === "deafen"
+        ) {
+          handleToggleListening(false, true);
+          return {
+            ok: true,
+            message: "Listening mode paused, Sir.",
+          };
+        }
+        if (
+          normalized === "start listening" ||
+          normalized === "turn on listening" ||
+          normalized === "resume listening" ||
+          normalized === "unmute mic" ||
+          normalized === "unmute microphone" ||
+          normalized === "wake up"
+        ) {
+          handleToggleListening(true, true);
+          return {
+            ok: true,
+            message: "Listening mode active, Sir.",
+          };
+        }
+        if (
+          normalized === "system" ||
+          normalized === "open system" ||
+          normalized === "open the system" ||
+          normalized === "wake system" ||
+          normalized === "start system" ||
+          normalized === "severus" ||
+          normalized === "open severus" ||
+          normalized === "open workstation" ||
+          normalized === "restore workstation"
+        ) {
+          void ensureWorkstation();
+          void playVoice("system_initialized");
+          return {
+            ok: true,
+            message: "System initialized, Sir.",
+          };
+        }
+
+        let resolution = await resolveSystemCommand(text).catch(() => null);
+        if (!resolution) {
+          // Deterministic grammar missed — the configured model maps the phrase
+          // onto one of the same allowlisted intents, or nothing.
+          const mapped = await mapTextToIntent(text, aiConfig).catch(() => null);
+          if (!mapped) {
+            void playVoice("alert_api_error.mp3");
+            return {
+              ok: false,
+              message: "No matching system command, and the model could not map the phrase.",
+            };
+          }
+          resolution = {
+            intent: mapped,
+            requires_password: mapped.action === "lock_workstation" || mapped.action === "close_window",
+            description: `${mapped.action.replace(/_/g, " ")} — via ${aiConfig.model}`,
+          };
+        }
+        if (resolution.requires_password) {
+          setGateError(null);
+          setPendingGate({ intent: resolution.intent, description: resolution.description });
+          return { ok: true, message: `${resolution.description} — control password required` };
+        }
+        const message = await executeSystemIntent(resolution.intent, false);
+        return { ok: true, message };
+      } catch (err) {
+        void playVoice("alert_api_error.mp3");
+        return { ok: false, message: String(err) };
+      }
+    },
+    [aiConfig, handleToggleListening],
+  );
+
+  const handleGateConfirm = useCallback(
+    async (password: string) => {
+      if (!pendingGate) return;
+      setGateBusy(true);
+      setGateError(null);
+      try {
+        if (hasControlPassword()) {
+          const authorized = await verifyControlPassword(password);
+          if (!authorized) {
+            setGateError("Incorrect password.");
+            return;
+          }
+        } else {
+          await setControlPassword(password);
+        }
+        const message = await executeSystemIntent(pendingGate.intent, true);
+        setPendingGate(null);
+        console.log(`[system] ${message}`);
+      } catch (err) {
+        setGateError(String(err));
+      } finally {
+        setGateBusy(false);
+      }
+    },
+    [pendingGate],
+  );
+
+  useEffect(() => {
+    void setFloatingMode(true).catch(() => {});
+  }, []);
+
   useEffect(() => {
     void loadGraph();
     void loadNotesList();
@@ -169,6 +392,77 @@ export default function App() {
     };
   }, [loadGraph, loadNotesList, refreshGitStatus]);
 
+  const lastGreetingTimeRef = useRef<number>(0);
+  const startupGreetingPlayedRef = useRef<boolean>(false);
+  const startupGreetingTimerRef = useRef<number | null>(null);
+
+  const handlePlayGreeting = useCallback(
+    (expand = false) => {
+      if (expand) {
+        void ensureWorkstation();
+      }
+      const now = Date.now();
+      // Debounce voice playback (4s) to eliminate echo loops while keeping UI responsiveness immediate
+      if (now - lastGreetingTimeRef.current < 4000) {
+        return;
+      }
+      lastGreetingTimeRef.current = now;
+      void playTimeGreeting();
+    },
+    [ensureWorkstation],
+  );
+
+  // 1. Startup greeting: when Severus boots up or app launches, greet the user after settle delay
+  useEffect(() => {
+    startupGreetingTimerRef.current = window.setTimeout(() => {
+      startupGreetingTimerRef.current = null;
+      startupGreetingPlayedRef.current = true;
+      handlePlayGreeting(false);
+    }, 1500);
+    return () => {
+      if (startupGreetingTimerRef.current !== null) {
+        window.clearTimeout(startupGreetingTimerRef.current);
+        startupGreetingTimerRef.current = null;
+      }
+    };
+  }, [handlePlayGreeting]);
+
+  // 2. Laptop Sleep/Resume & Lid-Open Detection:
+  // Detects when the laptop resumes from sleep / modern standby / lid open by tracking timer intervals.
+  useEffect(() => {
+    let lastTick = Date.now();
+    const ticker = window.setInterval(() => {
+      const now = Date.now();
+      const delta = now - lastTick;
+      lastTick = now;
+      // If timer frozen for > 7 seconds, Windows was suspended/sleeping
+      if (delta > 7000) {
+        console.log(`[LaptopResume] System resumed from sleep (gap: ${Math.round(delta / 1000)}s). Greeting user...`);
+        window.setTimeout(() => {
+          handlePlayGreeting(false);
+        }, 1200);
+      }
+    }, 2000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const now = Date.now();
+        if (now - lastTick > 7000) {
+          window.setTimeout(() => {
+            handlePlayGreeting(false);
+          }, 1200);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(ticker);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [handlePlayGreeting]);
+
   // Preload voice files and start ClapDetector
   useEffect(() => {
     void preloadVoice("Good morning, Sir!.mp3");
@@ -182,9 +476,7 @@ export default function App() {
 
     const detector = new ClapDetector({
       onDoubleClap: () => {
-        void restoreWindow().catch(() => {});
-        void playTimeGreeting();
-        showToast("Double-clap detected — welcome back, Sir.");
+        handlePlayGreeting(true);
       },
     });
 
@@ -193,82 +485,184 @@ export default function App() {
     return () => {
       detector.stop();
     };
-  }, [clapEnabled, showToast]);
+  }, [clapEnabled, handlePlayGreeting]);
 
-  // Hands-free Voice Command Engine effect
-  useEffect(() => {
-    if (!voiceCmdEnabled) return;
-
-    const listener = new VoiceCommandListener({
-      onWakePhrase: () => {
-        void restoreWindow().catch(() => {});
-        void playTimeGreeting();
-        showToast("“Hey Severus” detected — welcome back, Sir.");
-      },
-      onOpenCopilot: () => {
-        setInspectorOpen(true);
-        setInspectorTab("copilot");
-        void playVoice("nav_copilot_open.mp3");
-        showToast("Voice command: opening Copilot");
-      },
-      onOpenSearch: () => {
-        setQuickSwitcherOpen(true);
-        void playVoice("nav_quick_switcher.mp3");
-        showToast("Voice command: opening search");
-      },
-      onOpenGrounding: () => {
-        setGroundingOpen(true);
-        void playVoice("nav_assembler_open.mp3");
-        showToast("Voice command: opening Grounding");
-      },
-      onOpenNotes: () => {
-        setNotesDrawerOpen((prev) => !prev);
-        void playVoice("nav_notes_drawer.mp3");
-        showToast("Voice command: toggling Notes Explorer");
-      },
-      onNewNote: () => {
-        setNewNoteModalOpen(true);
-        showToast("Voice command: creating a new note");
-      },
-      onJournal: () => {
-        setJournalOpen(true);
-        showToast("Voice command: quick journal capture");
-      },
-      onZenMode: () => {
-        setZenMode((prev) => !prev);
-        void playVoice("nav_zen_on.mp3");
-        showToast("Voice command: toggling Zen mode");
-      },
-      onClose: () => {
+  // Hands-free Voice Command Handlers ref (preserves active microphone stream across UI re-renders)
+  const voiceHandlersRef = useRef<VoiceCommandHandlers>({});
+  voiceHandlersRef.current = {
+    onOpenSystem: () => {
+      if (startupGreetingTimerRef.current !== null) {
+        window.clearTimeout(startupGreetingTimerRef.current);
+        startupGreetingTimerRef.current = null;
+      }
+      startupGreetingPlayedRef.current = true;
+      void ensureWorkstation();
+      void playVoice("system_initialized");
+    },
+    onWakePhrase: () => {
+      if (startupGreetingTimerRef.current !== null) {
+        window.clearTimeout(startupGreetingTimerRef.current);
+        startupGreetingTimerRef.current = null;
+      }
+      void ensureWorkstation();
+      // If startup greeting already played recently (or within current session),
+      // avoid redundant time greetings when opening the system; acknowledge cleanly
+      if (startupGreetingPlayedRef.current && Date.now() - lastGreetingTimeRef.current < 180000) {
+        void playVoice("system_initialized");
+      } else {
+        handlePlayGreeting(true);
+      }
+    },
+    onOpenCopilot: () => {
+      void ensureWorkstation();
+      setActiveSection("knowledge");
+      setInspectorOpen(true);
+      setInspectorTab("copilot");
+      void playVoice("nav_copilot_open.mp3");
+    },
+    onOpenGraph: () => {
+      void ensureWorkstation();
+      setActiveSection("knowledge");
+      setKnowledgeSubTab("graph");
+      void playVoice("nav_graph_open.mp3");
+    },
+    onOpenNotes: () => {
+      void ensureWorkstation();
+      setActiveSection("knowledge");
+      setKnowledgeSubTab("notes");
+      setNotesDrawerOpen(true);
+      void playVoice("nav_notes_drawer.mp3");
+    },
+    onOpenSearch: () => {
+      void ensureWorkstation();
+      setQuickSwitcherOpen(true);
+      void playVoice("nav_quick_switcher.mp3");
+    },
+    onOpenGrounding: () => {
+      void ensureWorkstation();
+      setGroundingOpen(true);
+      void playVoice("nav_assembler_open.mp3");
+    },
+    onNewNote: () => {
+      void ensureWorkstation();
+      setNewNoteModalOpen(true);
+    },
+    onJournal: () => {
+      void ensureWorkstation();
+      setJournalOpen(true);
+    },
+    onOpenHome: () => {
+      void ensureWorkstation();
+      setActiveSection("home");
+      void playVoice("greeting_sir");
+    },
+    onZenMode: () => {
+      void ensureWorkstation();
+      setZenMode((prev) => !prev);
+      void playVoice("nav_zen_on.mp3");
+    },
+    onMaximize: () => {
+      void ensureWorkstation();
+      void playVoice("system_initialized");
+    },
+    onFloat: () => {
+      void handleEnterFloatingMode();
+    },
+    onClose: () => {
+      if (
+        journalOpen ||
+        aiSettingsOpen ||
+        quickSwitcherOpen ||
+        groundingOpen ||
+        newNoteModalOpen ||
+        zenMode
+      ) {
         setJournalOpen(false);
         setAiSettingsOpen(false);
         setQuickSwitcherOpen(false);
         setGroundingOpen(false);
         setNewNoteModalOpen(false);
         setZenMode(false);
-        showToast("Voice command: closing active views");
-      },
+      } else {
+        void handleHideToTray();
+      }
+    },
+    onMoveMonitor: (target: "left" | "right" | "next" | "primary") => {
+      void handleMoveMonitor(target);
+    },
+    onThinkingMode: () => {
+      void handleEnterFloatingMode();
+      setIsThinkingMode(true);
+      void playVoice("action_copilot_ready.mp3");
+    },
+    onToggleListening: (active: boolean) => {
+      handleToggleListening(active, false);
+    },
+    onSystemCommand: async (text: string) => {
+      const outcome = await handleRunSystemCommand(text);
+      if (outcome.ok) {
+        speakText(formatReplyWithSir(outcome.message));
+      } else {
+        void playVoice("alert_api_error.mp3");
+      }
+    },
+  };
+
+  // Hands-free Voice Command Engine effect (stable mount, immune to UI state teardowns)
+  useEffect(() => {
+    if (!voiceCmdEnabled) {
+      voiceListenerRef.current?.stop();
+      voiceListenerRef.current = null;
+      return;
+    }
+
+    const listener = new VoiceCommandListener({
+      onWakePhrase: () => voiceHandlersRef.current.onWakePhrase?.(),
+      onOpenSystem: () => voiceHandlersRef.current.onOpenSystem?.(),
+      onOpenCopilot: () => voiceHandlersRef.current.onOpenCopilot?.(),
+      onOpenGraph: () => voiceHandlersRef.current.onOpenGraph?.(),
+      onOpenNotes: () => voiceHandlersRef.current.onOpenNotes?.(),
+      onOpenSearch: () => voiceHandlersRef.current.onOpenSearch?.(),
+      onOpenGrounding: () => voiceHandlersRef.current.onOpenGrounding?.(),
+      onNewNote: () => voiceHandlersRef.current.onNewNote?.(),
+      onJournal: () => voiceHandlersRef.current.onJournal?.(),
+      onOpenHome: () => voiceHandlersRef.current.onOpenHome?.(),
+      onZenMode: () => voiceHandlersRef.current.onZenMode?.(),
+      onMaximize: () => voiceHandlersRef.current.onMaximize?.(),
+      onFloat: () => voiceHandlersRef.current.onFloat?.(),
+      onClose: () => voiceHandlersRef.current.onClose?.(),
+      onMoveMonitor: (target) => voiceHandlersRef.current.onMoveMonitor?.(target),
+      onThinkingMode: () => voiceHandlersRef.current.onThinkingMode?.(),
+      onToggleListening: (active) => voiceHandlersRef.current.onToggleListening?.(active),
+      onSystemCommand: (text) => voiceHandlersRef.current.onSystemCommand?.(text),
     });
 
+    voiceListenerRef.current = listener;
+    listener.setStandby(!listeningActive);
     listener.start();
 
     return () => {
       listener.stop();
+      voiceListenerRef.current = null;
     };
-  }, [voiceCmdEnabled, showToast]);
+  }, [voiceCmdEnabled]);
+
+  // Pause background command listener when Thinking Mode is actively listening to avoid mic collision
+  useEffect(() => {
+    voiceListenerRef.current?.setPaused(isThinkingMode);
+  }, [isThinkingMode]);
 
   const handleOpenInEditor = useCallback(
     async (id: string) => {
       try {
         await openInEditor(id);
         void playVoice("action_vscode_launch.mp3");
-        showToast(`Opening “${id}.md” in your editor…`);
       } catch (err) {
         void playVoice("alert_api_error.mp3");
-        showToast(`Could not open editor: ${String(err)}`);
+        console.error(`Could not open editor: ${String(err)}`);
       }
     },
-    [showToast],
+    [],
   );
 
   const openNote = useCallback(
@@ -292,9 +686,8 @@ export default function App() {
     async (id: string, content: string) => {
       await saveNote(id, content);
       void playVoice("auto_note_saved.mp3");
-      showToast(`Saved “${id}”`);
     },
-    [showToast],
+    [],
   );
 
   const handleCreateNote = useCallback(
@@ -305,13 +698,12 @@ export default function App() {
         await loadGraph();
         await openNote(trimmed);
         void playVoice("action_note_created.mp3");
-        showToast(`Created note “${trimmed}.md”`);
       } catch (err) {
         void playVoice("alert_api_error.mp3");
-        showToast(`Could not create note: ${String(err)}`);
+        console.error(`Could not create note: ${String(err)}`);
       }
     },
-    [loadNotesList, loadGraph, openNote, showToast],
+    [loadNotesList, loadGraph, openNote],
   );
 
   const handleNewNote = useCallback(() => {
@@ -337,12 +729,11 @@ export default function App() {
         await loadNotesList();
         await loadGraph();
         await openNote(trimmed);
-        showToast(`Created “${trimmed}”`);
       } catch (err) {
-        showToast(`Could not create note: ${String(err)}`);
+        console.error(`Could not create note: ${String(err)}`);
       }
     },
-    [notesList, openNote, loadNotesList, loadGraph, showToast],
+    [notesList, openNote, loadNotesList, loadGraph],
   );
 
   const toggleTag = useCallback((tag: string) => {
@@ -356,11 +747,10 @@ export default function App() {
 
   const handleJournal = useCallback(
     async (text: string) => {
-      const stamp = await appendJournal(text);
+      await appendJournal(text);
       void playVoice("action_journal_captured.mp3");
-      showToast(`Journaled at ${stamp}`);
     },
-    [showToast],
+    [],
   );
 
   // Global Keyboard Shortcuts & Activity Tracker
@@ -369,7 +759,14 @@ export default function App() {
       recordKeyPress();
       const mod = event.ctrlKey || event.metaKey;
 
-      if (mod && (event.key.toLowerCase() === "k" || event.key.toLowerCase() === "p")) {
+      if (mod && event.shiftKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        handleToggleListening(undefined, true);
+      } else if (mod && event.shiftKey && event.key.toLowerCase() === "k") {
+        // Must precede the Ctrl+K branch — Shift+K would otherwise match it.
+        event.preventDefault();
+        setSystemConsoleOpen(true);
+      } else if (mod && (event.key.toLowerCase() === "k" || event.key.toLowerCase() === "p")) {
         event.preventDefault();
         setQuickSwitcherOpen((prev) => {
           if (!prev) void playVoice("nav_quick_switcher.mp3");
@@ -408,7 +805,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [handleNewNote, zenMode]);
+  }, [handleNewNote, zenMode, handleToggleListening]);
 
   const colors = useMemo(() => tagColors(graph.tags), [graph.tags]);
   const visNodes = useMemo<VisNode[]>(
@@ -420,7 +817,7 @@ export default function App() {
     [graph, colors],
   );
 
-  const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
+  const greeting = useMemo(() => getTimeGreetingData().text, []);
   const hubNodes = useMemo(
     () => [...graph.nodes].sort((a, b) => b.importance - a.importance).slice(0, 5),
     [graph.nodes],
@@ -429,6 +826,193 @@ export default function App() {
     () => [...graph.nodes].sort((a, b) => a.ageDays - b.ageDays).slice(0, 5),
     [graph.nodes],
   );
+
+  // System-control overlays are reachable from both the floating companion and
+  // the full workstation shell — voice commands work from either.
+  const systemOverlays = (
+    <>
+      <SystemConsoleModal
+        open={systemConsoleOpen}
+        onClose={() => setSystemConsoleOpen(false)}
+        onRunCommand={handleRunSystemCommand}
+      />
+      <PasswordGateModal
+        open={pendingGate !== null}
+        description={pendingGate?.description ?? ""}
+        isNewPassword={!hasControlPassword()}
+        error={gateError}
+        busy={gateBusy}
+        onConfirm={(password) => void handleGateConfirm(password)}
+        onCancel={() => {
+          setPendingGate(null);
+          setGateError(null);
+        }}
+      />
+    </>
+  );
+
+  if (isFloatingMode) {
+    return (
+      <div
+        className="floating-companion-viewport"
+        data-tauri-drag-region
+        onMouseDown={(e) => {
+          if (e.button !== 0) return;
+          const target = e.target as HTMLElement | null;
+          if (target?.closest("button, input, select, textarea, a, [data-no-drag]")) return;
+          try {
+            void getCurrentWindow().startDragging();
+          } catch {
+            // ignore
+          }
+        }}
+      >
+        <div className="floating-companion-cluster">
+          {isThinkingMode ? (
+            <ThinkingModeCapsule
+              open={isThinkingMode}
+              onClose={() => setIsThinkingMode(false)}
+              onExpandWorkstation={() => {
+                setIsThinkingMode(false);
+                void ensureWorkstation();
+              }}
+              onOpenSettings={() => setAiSettingsOpen(true)}
+              config={aiConfig}
+              vaultNotes={notesList}
+              onShowToast={showToast}
+            />
+          ) : (
+            <div className="floating-companion-row">
+              <PillBase
+                theme="dark"
+                items={[
+                  { label: "Severus", id: "home" },
+                  { label: "Thinking", id: "thinking" },
+                  { label: "Knowledge", id: "graph" },
+                  { label: "Notes", id: "notes" },
+                  { label: "Copilot", id: "copilot" },
+                ]}
+                onChange={(id) => {
+                  if (id === "thinking") {
+                    setIsThinkingMode(true);
+                    void playVoice("action_copilot_ready.mp3");
+                    showToast("Severus: Thinking Mode activated");
+                    return;
+                  }
+                  handleSectionSelect(id);
+                }}
+              />
+              <button
+                type="button"
+                className={`floating-mic-toggle ${listeningActive ? "active" : "paused"}`}
+                onClick={() => handleToggleListening(undefined, true)}
+                title={
+                  listeningActive
+                    ? `Listening Mode Active (Click or say "Stop listening" / ${MOD_KEY}+Shift+M)`
+                    : `Listening Mode Paused (Click or say "Start listening" / ${MOD_KEY}+Shift+M)`
+                }
+                aria-label={listeningActive ? "Mute listening mode" : "Resume listening mode"}
+              >
+                {listeningActive ? (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                ) : (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {quickSwitcherOpen && (
+          <QuickSwitcherModal
+            open={quickSwitcherOpen}
+            notes={notesList}
+            onSelectNote={(id) => void openNote(id)}
+            onNewNote={() => void handleNewNote()}
+            onOpenJournal={() => setJournalOpen(true)}
+            onOpenAISettings={() => setAiSettingsOpen(true)}
+            onOpenCopilot={() => {
+              setInspectorOpen(true);
+              setInspectorTab("copilot");
+            }}
+            onOpenGrounding={() => setGroundingOpen(true)}
+            onOpenSystemConsole={() => setSystemConsoleOpen(true)}
+            onClose={() => setQuickSwitcherOpen(false)}
+          />
+        )}
+
+        {newNoteModalOpen && (
+          <NewNoteModal
+            open={newNoteModalOpen}
+            existingNotes={notesList}
+            onClose={() => setNewNoteModalOpen(false)}
+            onCreate={handleCreateNote}
+          />
+        )}
+
+        {groundingOpen && (
+          <ContextAssemblerModal
+            open={groundingOpen}
+            notes={notesList}
+            activeNote={note}
+            onClose={() => setGroundingOpen(false)}
+            onShowToast={showToast}
+          />
+        )}
+
+        {journalOpen && (
+          <JournalCapture
+            open={journalOpen}
+            onClose={() => setJournalOpen(false)}
+            onSubmit={handleJournal}
+          />
+        )}
+
+        {aiSettingsOpen && (
+          <AISettingsModal
+            open={aiSettingsOpen}
+            config={aiConfig}
+            onSave={(newCfg) => {
+              setAiConfig(newCfg);
+              saveAIConfig(newCfg);
+            }}
+            onClose={() => setAiSettingsOpen(false)}
+          />
+        )}
+
+        {systemOverlays}
+      </div>
+    );
+  }
 
   return (
     <div className={`app workstation ${zenMode ? "zen-mode" : ""}`}>
@@ -460,55 +1044,49 @@ export default function App() {
             const next = !voiceMuted;
             setVoiceMutedState(next);
             setVoiceMuted(next);
-            showToast(next ? "Voice muted" : "Voice active");
           }}
           clapEnabled={clapEnabled}
           onToggleClapEnabled={() => {
             const next = !clapEnabled;
             setClapEnabledState(next);
             setClapEnabled(next);
-            showToast(next ? "Double-clap disabled" : "Double-clap active");
           }}
           voiceCmdEnabled={voiceCmdEnabled}
           onToggleVoiceCmdEnabled={() => {
             const next = !voiceCmdEnabled;
             setVoiceCmdEnabledState(next);
             setVoiceCmdEnabled(next);
-            showToast(next ? "Voice commands disabled" : "Voice commands active");
           }}
+          listeningActive={listeningActive}
+          onToggleListening={() => handleToggleListening(undefined, true)}
           gitStatus={gitStatus}
           copilotActive={inspectorOpen && inspectorTab === "copilot"}
+          onToggleFloatingMode={handleEnterFloatingMode}
+          onEnterThinkingMode={() => {
+            void handleEnterFloatingMode();
+            setIsThinkingMode(true);
+            void playVoice("action_copilot_ready.mp3");
+          }}
+          onHideToTray={handleHideToTray}
+          onMoveMonitor={handleMoveMonitor}
+          onOpenJournal={() => setJournalOpen(true)}
         />
       )}
 
       <main className="main workstation-main">
-        {!zenMode && (
-          <SidebarNav
-            activeSection={activeSection}
-            knowledgeSubTab={knowledgeSubTab}
-            onSelectSection={setActiveSection}
-            onSelectKnowledgeSubTab={setKnowledgeSubTab}
-            collapsed={sidebarCollapsed}
-            onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
-            notesDrawerOpen={notesDrawerOpen}
-            onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
-            onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
-            onOpenJournal={() => setJournalOpen(true)}
-            onOpenGrounding={() => setGroundingOpen(true)}
-            onOpenNewNote={handleNewNote}
-            onOpenAISettings={() => setAiSettingsOpen(true)}
-            gitStatus={gitStatus}
-          />
-        )}
-
-        {!zenMode && notesDrawerOpen && (
+        {!zenMode && (notesDrawerOpen || (activeSection === "knowledge" && knowledgeSubTab === "notes")) && (
           <NotesDrawer
-            open={notesDrawerOpen}
+            open={true}
             notes={notesList}
             selectedId={selectedId}
             onSelectNote={(id) => void openNote(id)}
             onNewNote={() => void handleNewNote()}
-            onClose={() => setNotesDrawerOpen(false)}
+            onClose={() => {
+              setNotesDrawerOpen(false);
+              if (knowledgeSubTab === "notes") {
+                setKnowledgeSubTab("graph");
+              }
+            }}
           />
         )}
 
@@ -620,6 +1198,9 @@ export default function App() {
                   <button type="button" onClick={() => setGroundingOpen(true)}>
                     <Icon name="layers" size={13} /> Grounding
                   </button>
+                  <button type="button" onClick={() => setSystemConsoleOpen(true)}>
+                    <Icon name="keyboard" size={13} /> System Console
+                  </button>
                 </div>
               </div>
             </div>
@@ -694,7 +1275,20 @@ export default function App() {
       </main>
 
       {!zenMode && (
-        <footer className="status-bar">
+        <footer
+          className="status-bar"
+          data-tauri-drag-region
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("button, input, select, textarea, a, [data-no-drag]")) return;
+            try {
+              void getCurrentWindow().startDragging();
+            } catch {
+              // ignore
+            }
+          }}
+        >
           <div className="status-bar-left">
             <span className="footer-item">
               Workspace: <strong className="val">Severus</strong>
@@ -733,6 +1327,7 @@ export default function App() {
           setInspectorTab("copilot");
         }}
         onOpenGrounding={() => setGroundingOpen(true)}
+        onOpenSystemConsole={() => setSystemConsoleOpen(true)}
         onClose={() => setQuickSwitcherOpen(false)}
       />
 
@@ -763,13 +1358,11 @@ export default function App() {
         onSave={(newCfg) => {
           setAiConfig(newCfg);
           saveAIConfig(newCfg);
-          showToast(`Active AI model set to ${newCfg.model}`);
         }}
         onClose={() => setAiSettingsOpen(false)}
       />
 
-      {loadError && <div className="toast error">Backend error: {loadError}</div>}
-      {toast && <div className="toast">{toast}</div>}
+      {systemOverlays}
     </div>
   );
 }

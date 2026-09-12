@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph3D from "3d-force-graph";
 import Icon from "./Icon";
+import { NeuralNoise } from "@/components/ui/neural-noise";
 import type { GraphLink } from "../types";
 
 export interface VisNode {
@@ -109,6 +110,40 @@ function computeLayout(nodes: VisNode[], links: GraphLink[]): Map<string, Point>
   return positions;
 }
 
+function parseColorToRgb(colorStr: string): [number, number, number] {
+  if (!colorStr) return [0.85, 0.85, 0.88];
+  if (colorStr.startsWith("#")) {
+    let hex = colorStr.slice(1);
+    if (hex.length === 3) {
+      hex = hex.split("").map((c) => c + c).join("");
+    }
+    if (hex.length >= 6) {
+      const r = parseInt(hex.slice(0, 2), 16) / 255;
+      const g = parseInt(hex.slice(2, 4), 16) / 255;
+      const b = parseInt(hex.slice(4, 6), 16) / 255;
+      return [r, g, b];
+    }
+  }
+  const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (match) {
+    return [parseInt(match[1], 10) / 255, parseInt(match[2], 10) / 255, parseInt(match[3], 10) / 255];
+  }
+  return [0.85, 0.85, 0.88];
+}
+
+function blendMonochromeWithColor(
+  rgb: [number, number, number],
+  weight = 0.32,
+): [number, number, number] {
+  const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+  const monoBase = Math.max(0.72, lum);
+  return [
+    monoBase * (1 - weight) + rgb[0] * weight,
+    monoBase * (1 - weight) + rgb[1] * weight,
+    monoBase * (1 - weight) + rgb[2] * weight,
+  ];
+}
+
 export default function GraphView({
   nodes,
   links,
@@ -118,7 +153,10 @@ export default function GraphView({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<GraphInstance>(null);
-  const [graphMode, setGraphMode] = useState<"2d" | "3d">("2d");
+  const [graphMode, setGraphMode] = useState<"2d" | "3d">("3d");
+  const [neuralActive, setNeuralActive] = useState(true);
+  const [colorFollowMode, setColorFollowMode] = useState<"topology" | "bw">("topology");
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [hudOpen, setHudOpen] = useState(false);
 
@@ -145,6 +183,33 @@ export default function GraphView({
     return Array.from(byTag.entries()).slice(0, 6);
   }, [nodes]);
 
+  const activeNeuralColor = useMemo<[number, number, number]>(() => {
+    if (colorFollowMode === "bw") {
+      return [0.85, 0.85, 0.88];
+    }
+
+    const targetId = hoveredNodeId || selectedId;
+    if (targetId) {
+      const targetNode = nodes.find((n) => n.id.toLowerCase() === targetId.toLowerCase());
+      if (targetNode?.color) {
+        const raw = parseColorToRgb(targetNode.color);
+        return blendMonochromeWithColor(raw, 0.35);
+      }
+    }
+
+    if (activeTags.size > 0) {
+      const firstActive = Array.from(activeTags)[0];
+      const match = tagSwatches.find(([t]) => t === firstActive);
+      if (match) {
+        const raw = parseColorToRgb(match[1]);
+        return blendMonochromeWithColor(raw, 0.25);
+      }
+    }
+
+    // Default obsidian monochrome silver
+    return [0.85, 0.85, 0.88];
+  }, [colorFollowMode, hoveredNodeId, selectedId, nodes, activeTags, tagSwatches]);
+
   const nodeVisible = (id: string): boolean => {
     const tags = tagsByIdRef.current.get(id);
     return !tags || tags.length === 0 || tags.some((tag) => activeRef.current.has(tag));
@@ -168,9 +233,26 @@ export default function GraphView({
 
     try {
       const fg = new ForceGraph3D(container);
-      fg.backgroundColor("#050505")
+      fg.backgroundColor("rgba(0,0,0,0)")
         .showNavInfo(false)
         .nodeRelSize(3)
+        .nodeColor((node: unknown) => {
+          const n = node as VisNode;
+          const isSelected =
+            Boolean(selectedRef.current) &&
+            n.id?.toLowerCase() === selectedRef.current?.toLowerCase();
+          return isSelected ? "#ffffff" : n.color || "#8f98a3";
+        })
+        .nodeVal((node: unknown) => Math.max(3, Math.min(10, ((node as VisNode).size || 3) * 1.2)))
+        .linkColor(() => "rgba(255, 255, 255, 0.15)")
+        .linkWidth(0.8)
+        .onNodeHover((node: unknown) => {
+          const n = node as VisNode | null;
+          setHoveredNodeId(n?.id ?? null);
+          if (container) {
+            container.style.cursor = n ? "pointer" : "default";
+          }
+        })
         .nodeLabel((node: unknown) => {
           const n = node as VisNode;
           const tagList = n.tags && n.tags.length > 0 ? `#${n.tags.join(" #")}` : "";
@@ -191,6 +273,11 @@ export default function GraphView({
       fg.onEngineStop(() => fg.zoomToFit(500, 100));
       instance = fg;
       fgRef.current = fg;
+      try {
+        (fg as any).renderer?.()?.setClearColor?.(0x000000, 0);
+      } catch {
+        // Ignored
+      }
 
       ro = new ResizeObserver(() => {
         if (container.clientWidth > 0 && container.clientHeight > 0) {
@@ -358,14 +445,15 @@ export default function GraphView({
         panY = nextPanY;
       } else {
         const mouse = getCanvasMousePos(e);
-        const hit = visibleNodes.some((n) => {
+        const hitNode = visibleNodes.find((n) => {
           const pos = layout.get(n.id);
           if (!pos) return false;
           const nodeRadius = Math.max(6, Math.min(20, n.size * 1.6));
           // hit-test in screen space so it stays consistent across zoom levels
           return Math.hypot(mouse.x - pos.x, mouse.y - pos.y) * zoom <= nodeRadius + 5;
         });
-        canvas.style.cursor = hit ? "pointer" : "grab";
+        canvas.style.cursor = hitNode ? "pointer" : "grab";
+        setHoveredNodeId(hitNode ? hitNode.id : null);
       }
     };
 
@@ -439,12 +527,41 @@ export default function GraphView({
           >
             3D Topology
           </button>
+          <button
+            type="button"
+            className={`mode-btn ${neuralActive ? "active" : ""}`}
+            onClick={() => setNeuralActive((prev) => !prev)}
+            title="Toggle interactive black-and-white neural noise background"
+          >
+            <Icon name="spark" size={11} />
+            Neural
+          </button>
+          {neuralActive && (
+            <button
+              type="button"
+              className={`mode-btn ${colorFollowMode === "topology" ? "active" : ""}`}
+              onClick={() =>
+                setColorFollowMode((prev) => (prev === "topology" ? "bw" : "topology"))
+              }
+              title={`Color mode: ${colorFollowMode === "topology" ? "Topology-reactive B&W (subtle tint from nodes)" : "Pure B&W Monochrome"}`}
+            >
+              {colorFollowMode === "topology" ? "Topology B&W" : "Pure B&W"}
+            </button>
+          )}
         </div>
 
         <span className="graph-count-badge">
           {nodes.length} nodes · {links.length} links
         </span>
       </div>
+
+      {neuralActive && (
+        <NeuralNoise
+          color={activeNeuralColor}
+          opacity={graphMode === "3d" ? 0.42 : 0.3}
+          speed={hoveredNodeId ? 0.0016 : 0.0008}
+        />
+      )}
 
       {graphMode === "3d" ? (
         <div ref={containerRef} className="graph-container mode-3d" />

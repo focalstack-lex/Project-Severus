@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { type AIConfig, type ChatMessage, sendAIChat } from "../lib/ai";
 import { getWorkspaceContext } from "../lib/tauri";
+import { formatReplyWithSir } from "../lib/voice";
 import type { NoteContent, WorkspaceContext, ChatSession } from "../types";
 import Icon from "./Icon";
 import MarkdownPreview from "./MarkdownPreview";
@@ -346,7 +347,7 @@ export default function AICopilot({
       const dynamicContext = buildDynamicContext(workspaceContext, activeNote);
       const reply = await sendAIChat(config, apiMsgs, dynamicContext);
 
-      const assistantMessage: ChatMessage = { role: "assistant", content: reply };
+      const assistantMessage: ChatMessage = { role: "assistant", content: formatReplyWithSir(reply) };
       setSessions((prev) =>
         prev.map((s) =>
           s.id === activeSession.id

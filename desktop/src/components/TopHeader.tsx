@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import Icon from "./Icon";
 import type { AIConfig } from "../lib/ai";
 import type { GitStatusData } from "../types";
@@ -30,6 +31,13 @@ interface Props {
   onToggleVoiceCmdEnabled: () => void;
   gitStatus: GitStatusData | null;
   copilotActive: boolean;
+  listeningActive?: boolean;
+  onToggleListening?: () => void;
+  onToggleFloatingMode?: () => void;
+  onEnterThinkingMode?: () => void;
+  onHideToTray?: () => void;
+  onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
+  onOpenJournal?: () => void;
 }
 
 /**
@@ -56,12 +64,54 @@ export default function TopHeader({
   onToggleVoiceCmdEnabled,
   gitStatus,
   copilotActive,
+  listeningActive = true,
+  onToggleListening,
+  onToggleFloatingMode,
+  onEnterThinkingMode,
+  onHideToTray,
+  onMoveMonitor,
+  onOpenJournal,
 }: Props) {
   const [systemPopoverOpen, setSystemPopoverOpen] = useState(false);
 
+  const handleStartDrag = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button, input, select, textarea, a, .system-popover, [data-no-drag]")) {
+      return;
+    }
+    try {
+      void getCurrentWindow().startDragging();
+    } catch {
+      // Not running in Tauri runtime
+    }
+  };
+
+  const handleDoubleClickHeader = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest("button, input, select, textarea, a, .system-popover, [data-no-drag]")) {
+      return;
+    }
+    try {
+      void getCurrentWindow().toggleMaximize();
+    } catch {
+      // Not running in Tauri runtime
+    }
+  };
+
   return (
-    <header className="framer-top-nav-wrapper">
-      <div className="framer-top-nav-capsule">
+    <header
+      className="framer-top-nav-wrapper"
+      data-tauri-drag-region
+      onMouseDown={handleStartDrag}
+      onDoubleClick={handleDoubleClickHeader}
+    >
+      <div
+        className="framer-top-nav-capsule"
+        data-tauri-drag-region
+        onMouseDown={handleStartDrag}
+      >
         {/* Brand */}
         <button
           type="button"
@@ -72,6 +122,8 @@ export default function TopHeader({
           <img src="/logo.png" alt="Severus" className="nav-brand-logo" />
           <span className="nav-brand-name">Severus</span>
         </button>
+
+        <span className="nav-divider" />
 
         {/* Primary views */}
         <nav className="nav-links-cluster">
@@ -125,20 +177,25 @@ export default function TopHeader({
             </span>
             <span>Copilot</span>
           </button>
-
-          <button
-            type="button"
-            className="nav-pill-item search-trigger"
-            onClick={onOpenQuickSearch}
-            title={`Search notes and commands (${MOD_KEY}+K)`}
-          >
-            <span className="nav-pill-icon">
-              <Icon name="search" size={14} />
-            </span>
-            <span className="search-text">Search</span>
-            <kbd className="nav-kbd">{MOD_KEY}K</kbd>
-          </button>
         </nav>
+
+        <span className="nav-divider" />
+
+        {/* Center Search Trigger */}
+        <button
+          type="button"
+          className="nav-pill-item search-trigger"
+          onClick={onOpenQuickSearch}
+          title={`Search notes and commands (${MOD_KEY}+K)`}
+        >
+          <span className="nav-pill-icon">
+            <Icon name="search" size={14} />
+          </span>
+          <span className="search-text">Search</span>
+          <kbd className="nav-kbd">{MOD_KEY}K</kbd>
+        </button>
+
+        <span className="nav-divider" />
 
         {/* Quick actions & system popover */}
         <div className="nav-actions-cluster">
@@ -152,6 +209,18 @@ export default function TopHeader({
             <span>Note</span>
           </button>
 
+          {onOpenJournal && (
+            <button
+              type="button"
+              className="nav-action-btn"
+              onClick={onOpenJournal}
+              title={`Capture Daily Journal (${MOD_KEY}+J)`}
+            >
+              <Icon name="pen" size={13} />
+              <span>Journal</span>
+            </button>
+          )}
+
           <button
             type="button"
             className="nav-action-btn"
@@ -162,6 +231,62 @@ export default function TopHeader({
             <span>Grounding</span>
           </button>
 
+          <span className="nav-divider" />
+
+          {onToggleListening && (
+            <button
+              type="button"
+              className={`nav-action-btn ${listeningActive ? "" : "paused"}`}
+              onClick={onToggleListening}
+              title={
+                listeningActive
+                  ? `Listening Active (Say "Stop listening" / ${MOD_KEY}+Shift+M)`
+                  : `Listening Paused (Say "Start listening" / ${MOD_KEY}+Shift+M)`
+              }
+            >
+              <Icon name="mic" size={13} />
+              <span>{listeningActive ? "Listening" : "Muted"}</span>
+            </button>
+          )}
+
+          {onEnterThinkingMode && (
+            <button
+              type="button"
+              className="nav-action-btn"
+              onClick={onEnterThinkingMode}
+              title="Enter Thinking Mode (live hands-free voice chat with Severus)"
+            >
+              <Icon name="brain" size={13} />
+              <span>Thinking</span>
+            </button>
+          )}
+
+          <span className="nav-divider" />
+
+          {onToggleFloatingMode && (
+            <button
+              type="button"
+              className="nav-action-btn window-ctrl-btn"
+              onClick={onToggleFloatingMode}
+              title="Switch to Desktop Floating Companion Pill"
+            >
+              <Icon name="external" size={12} />
+              <span>Float</span>
+            </button>
+          )}
+
+          {onHideToTray && (
+            <button
+              type="button"
+              className="nav-action-btn window-ctrl-btn"
+              onClick={onHideToTray}
+              title="Minimize to System Tray (actively listening in background)"
+            >
+              <Icon name="close" size={12} />
+              <span>Tray</span>
+            </button>
+          )}
+
           <div className="popover-wrapper">
             <button
               type="button"
@@ -169,7 +294,9 @@ export default function TopHeader({
               onClick={() => setSystemPopoverOpen((prev) => !prev)}
               title="System status and voice settings"
             >
-              <span className={`status-dot ${voiceMuted ? "muted" : ""}`} />
+              <span
+                className={`status-dot ${!listeningActive ? "paused" : voiceMuted ? "muted" : ""}`}
+              />
               <span>Status</span>
             </button>
 
@@ -248,6 +375,21 @@ export default function TopHeader({
                     </span>
                   </div>
 
+                  {onToggleListening && (
+                    <div className="popover-item" onClick={onToggleListening}>
+                      <div className="popover-item-text">
+                        <span className="item-label">
+                          <Icon name="mic" size={13} />
+                          Listening Mode
+                        </span>
+                        <span className="item-sub">Say “Stop listening” / “Start listening”</span>
+                      </div>
+                      <span className={`toggle-pill ${listeningActive ? "on" : "off"}`}>
+                        {listeningActive ? "Active" : "Paused"}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="popover-item readonly">
                     <div className="popover-item-text">
                       <span className="item-label">
@@ -261,6 +403,43 @@ export default function TopHeader({
                       </span>
                     </div>
                   </div>
+
+                  {onHideToTray && (
+                    <div
+                      className="popover-item"
+                      onClick={() => {
+                        setSystemPopoverOpen(false);
+                        onHideToTray();
+                      }}
+                    >
+                      <div className="popover-item-text">
+                        <span className="item-label">
+                          <Icon name="close" size={13} />
+                          Exit to System Tray
+                        </span>
+                        <span className="item-sub">Stays actively listening in background</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {onMoveMonitor && (
+                    <div
+                      className="popover-item"
+                      onClick={() => {
+                        setSystemPopoverOpen(false);
+                        onMoveMonitor("next");
+                      }}
+                      title="Switch window to next connected display monitor"
+                    >
+                      <div className="popover-item-text">
+                        <span className="item-label">
+                          <Icon name="external" size={13} />
+                          Switch Monitor
+                        </span>
+                        <span className="item-sub">Cycle to next display</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

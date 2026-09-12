@@ -11,6 +11,7 @@ interface Props {
   onOpenAISettings: () => void;
   onOpenCopilot: () => void;
   onOpenGrounding?: () => void;
+  onOpenSystemConsole?: () => void;
   onClose: () => void;
 }
 
@@ -42,6 +43,7 @@ export default function QuickSwitcherModal({
   onOpenAISettings,
   onOpenCopilot,
   onOpenGrounding,
+  onOpenSystemConsole,
   onClose,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -99,8 +101,16 @@ export default function QuickSwitcherModal({
         shortcut: "Settings",
         execute: onOpenAISettings,
       },
+      {
+        id: "action-system-console",
+        type: "action",
+        title: "Open System Console",
+        sub: "Windows apps, windows, volume, media, screenshots — Ctrl+Shift+K",
+        shortcut: "Ctrl+Shift+K",
+        execute: () => onOpenSystemConsole?.(),
+      },
     ],
-    [onNewNote, onOpenJournal, onOpenGrounding, onOpenCopilot, onOpenAISettings],
+    [onNewNote, onOpenJournal, onOpenGrounding, onOpenCopilot, onOpenAISettings, onOpenSystemConsole],
   );
 
   const filteredItems: ListItem[] = useMemo(() => {

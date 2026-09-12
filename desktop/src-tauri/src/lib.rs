@@ -6,10 +6,13 @@
 
 mod graph;
 mod notes;
+mod system_control;
 mod watcher;
 
 use std::path::PathBuf;
 
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, State};
 
 pub struct Paths {
@@ -100,8 +103,136 @@ fn get_voice_audio(paths: State<Paths>, name: String) -> Result<String, String> 
 fn restore_window(window: tauri::Window) -> Result<(), String> {
     let _ = window.unminimize();
     let _ = window.show();
+    let _ = window.maximize();
     let _ = window.set_focus();
     Ok(())
+}
+
+#[tauri::command]
+fn hide_to_tray(window: tauri::Window) -> Result<(), String> {
+    let _ = window.hide();
+    Ok(())
+}
+
+#[tauri::command]
+fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String> {
+    if floating {
+        let _ = window.unmaximize();
+        let _ = window.set_size(tauri::LogicalSize::new(720.0, 110.0));
+        let _ = window.set_always_on_top(true);
+        let _ = window.center();
+    } else {
+        let _ = window.set_always_on_top(false);
+        let _ = window.set_size(tauri::LogicalSize::new(1360.0, 860.0));
+        let _ = window.center();
+        let _ = window.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn move_to_monitor(window: tauri::Window, target: String) -> Result<String, String> {    let mut monitors = window.available_monitors().map_err(|e| e.to_string())?;
+    if monitors.is_empty() {
+        return Err("No display monitors detected".to_string());
+    }
+    // Sort horizontally by physical X coordinate
+    monitors.sort_by_key(|m| m.position().x);
+
+    let current = window.current_monitor().ok().flatten();
+    let curr_idx = if let Some(ref curr) = current {
+        monitors.iter().position(|m| m.name() == curr.name()).unwrap_or(0)
+    } else {
+        0
+    };
+
+    let target_idx = match target.trim().to_lowercase().as_str() {
+        "left" => {
+            if curr_idx > 0 {
+                curr_idx - 1
+            } else {
+                monitors.len() - 1
+            }
+        }
+        "right" => {
+            (curr_idx + 1) % monitors.len()
+        }
+        "next" | "switch" | "cycle" | "other" => {
+            (curr_idx + 1) % monitors.len()
+        }
+        "prev" | "previous" => {
+            if curr_idx > 0 {
+                curr_idx - 1
+            } else {
+                monitors.len() - 1
+            }
+        }
+        "primary" | "main" => {
+            if let Ok(Some(pri)) = window.primary_monitor() {
+                monitors.iter().position(|m| m.name() == pri.name()).unwrap_or(0)
+            } else {
+                0
+            }
+        }
+        idx_str => {
+            if let Ok(idx) = idx_str.parse::<usize>() {
+                if idx > 0 && idx <= monitors.len() {
+                    idx - 1
+                } else {
+                    (curr_idx + 1) % monitors.len()
+                }
+            } else {
+                (curr_idx + 1) % monitors.len()
+            }
+        }
+    };
+
+    let target_monitor = &monitors[target_idx];
+    let monitor_name = target_monitor
+        .name()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("Display {}", target_idx + 1));
+
+    let was_maximized = window.is_maximized().unwrap_or(false);
+    if was_maximized {
+        let _ = window.unmaximize();
+    }
+
+    let m_pos = target_monitor.position();
+    let m_size = target_monitor.size();
+    let w_size = window.outer_size().unwrap_or(tauri::PhysicalSize::new(720, 110));
+
+    let new_x = m_pos.x + ((m_size.width as i32 - w_size.width as i32) / 2);
+    let new_y = m_pos.y + ((m_size.height as i32 - w_size.height as i32) / 2);
+
+    window
+        .set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(new_x, new_y)))
+        .map_err(|e| e.to_string())?;
+
+    if was_maximized {
+        let _ = window.maximize();
+    }
+    let _ = window.set_focus();
+
+    Ok(format!("Moved Severus to {}", monitor_name))
+}
+
+#[tauri::command]
+fn system_resolve_command(text: String) -> Result<system_control::Resolution, String> {
+    system_control::parse_command(&text).ok_or_else(|| "no matching system command".to_string())
+}
+
+#[tauri::command]
+fn system_execute(
+    paths: State<Paths>,
+    intent: system_control::SystemIntent,
+    confirmed: bool,
+) -> Result<String, String> {
+    system_control::execute(&intent, confirmed, &paths)
+}
+
+#[tauri::command]
+fn system_list_windows() -> Result<Vec<system_control::WindowInfo>, String> {
+    system_control::list_windows()
 }
 
 fn base64_encode(data: &[u8]) -> String {
@@ -147,13 +278,75 @@ pub fn run() {
             get_git_status,
             get_workspace_context,
             get_voice_audio,
-            restore_window
+            restore_window,
+            hide_to_tray,
+            set_floating_mode,
+            move_to_monitor,
+            system_resolve_command,
+            system_execute,
+            system_list_windows
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             if let Some(icon) = app.default_window_icon() {
                 for window in app.webview_windows().values() {
                     let _ = window.set_icon(icon.clone());
                 }
+
+                let show_i = MenuItem::with_id(app, "show", "Show Severus", true, None::<&str>)?;
+                let max_i = MenuItem::with_id(app, "maximize", "Maximize Window", true, None::<&str>)?;
+                let sep = PredefinedMenuItem::separator(app)?;
+                let quit_i = MenuItem::with_id(app, "quit", "Quit Severus", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_i, &max_i, &sep, &quit_i])?;
+
+                let _tray = TrayIconBuilder::new()
+                    .icon(icon.clone())
+                    .tooltip("Severus.ai — Second Brain")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "maximize" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.maximize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.maximize();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
             }
             let notes_dir = app.state::<Paths>().notes_dir();
             watcher::start(app.handle().clone(), notes_dir);

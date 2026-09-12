@@ -1,3 +1,5 @@
+import { isVoiceSpeaking, isVoiceInEchoCooldown } from "./voice";
+
 /**
  * Acoustic Double-Clap Detector using Web Audio API.
  * Analyzes audio energy peaks to identify fast double-claps.
@@ -40,6 +42,7 @@ export class ClapDetector {
   private isListening = false;
   private lastClapTime = 0;
   private animFrameId: number | null = null;
+  private startTime = 0;
 
   private threshold: number;
   private minIntervalMs: number;
@@ -77,6 +80,7 @@ export class ClapDetector {
       this.analyser.fftSize = 512;
       this.analyser.smoothingTimeConstant = 0.1;
 
+      this.startTime = Date.now();
       source.connect(this.analyser);
       this.isListening = true;
       this.loop();
@@ -107,8 +111,23 @@ export class ClapDetector {
   private loop = () => {
     if (!this.isListening || !this.analyser) return;
 
-    // Keyboard activity gate: Suppress clap detection if a key was pressed in the last 1.8 seconds!
     const now = Date.now();
+
+    // Startup grace period: ignore mic initialization transients for first 1500ms
+    if (now - this.startTime < 1500) {
+      this.animFrameId = requestAnimationFrame(this.loop);
+      return;
+    }
+
+    // Voice playback protection: Suppress clap detection while Severus is speaking or in echo cooldown
+    if (isVoiceSpeaking() || isVoiceInEchoCooldown(600)) {
+      this.lastClapTime = 0;
+      this.isPeakHolding = false;
+      this.animFrameId = requestAnimationFrame(this.loop);
+      return;
+    }
+
+    // Keyboard activity gate: Suppress clap detection if a key was pressed in the last 1.8 seconds!
     if (now - lastKeyPressTime < 1800) {
       this.animFrameId = requestAnimationFrame(this.loop);
       return;

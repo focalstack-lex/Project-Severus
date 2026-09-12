@@ -1,3 +1,23 @@
+# Environment, Secrets & API Keys (CRITICAL: NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+*.key
+*.pem
+*.cert
+*.crt
+*secret*
+*credential*
+*api_key*
+*apikeys*
+token*
+tokens*
+*.token
+*.local
+secrets/
+config/keys/
+
 # Logs
 logs
 *.log
@@ -10,7 +30,6 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-*.local
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +41,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+

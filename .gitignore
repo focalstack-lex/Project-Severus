@@ -1,8 +1,28 @@
+# Python
 __pycache__/
 *.pyc
 *.log
-.env
 vendor/
+
+# Environment, Secrets & API Keys (CRITICAL: NEVER COMMIT)
+.env
+.env.*
+!.env.example
+*.env
+*.key
+*.pem
+*.cert
+*.crt
+*secret*
+*credential*
+*api_key*
+*apikeys*
+token*
+tokens*
+*.token
+*.local
+secrets/
+config/keys/
 
 # Desktop app build artifacts
 node_modules/
@@ -10,5 +30,9 @@ dist/
 src-tauri/target/
 second-brain/graph.html
 
+# Sync & Temp
 .stfolder/
 .stignore
+.DS_Store
+Thumbs.db
+

@@ -34,4 +34,26 @@ $sc.Description = "Second Brain - boots at login"
 $sc.Save()
 Write-Host "Created: Startup\Second Brain.lnk"
 
-Write-Host "pythonw: $pythonw"
+# Native Severus Tauri Desktop Companion shortcut
+$severusBin = "C:\Users\User\Documents\Severus\desktop\src-tauri\target\release\severus-secondbrain.exe"
+if (-not (Test-Path $severusBin)) {
+    $severusBin = "C:\Users\User\Documents\Severus\desktop\src-tauri\target\debug\severus-secondbrain.exe"
+}
+
+if (Test-Path $severusBin) {
+    $desktopSeverus = $ws.CreateShortcut("$desktop\Severus.lnk")
+    $desktopSeverus.TargetPath = $severusBin
+    $desktopSeverus.WorkingDirectory = "C:\Users\User\Documents\Severus\desktop"
+    $desktopSeverus.IconLocation = $icon
+    $desktopSeverus.Description = "Severus - Desktop Companion & Knowledge Copilot"
+    $desktopSeverus.Save()
+    Write-Host "Created: $desktop\Severus.lnk"
+
+    $startupSeverus = $ws.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Severus.lnk")
+    $startupSeverus.TargetPath = $severusBin
+    $startupSeverus.WorkingDirectory = "C:\Users\User\Documents\Severus\desktop"
+    $startupSeverus.IconLocation = $icon
+    $startupSeverus.Description = "Severus - Desktop Companion boots at login"
+    $startupSeverus.Save()
+    Write-Host "Created: Startup\Severus.lnk"
+}

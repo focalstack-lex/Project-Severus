@@ -13,12 +13,15 @@
     "windows": [
       {
         "title": "Severus.ai",
-        "width": 1360,
-        "height": 860,
-        "minWidth": 1024,
-        "minHeight": 720,
+        "width": 720,
+        "height": 110,
+        "minWidth": 160,
+        "minHeight": 60,
         "center": true,
-        "backgroundColor": "#050505"
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "shadow": false
       }
     ],
     "security": {

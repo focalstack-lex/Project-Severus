@@ -192,6 +192,81 @@ function silentWavDataUrl(): string {
 
 const SILENT_AUDIO = silentWavDataUrl();
 
+/**
+ * Small mirror of the Rust grammar — harness-only, so the Command Console and
+ * password flow are demonstrable in a plain browser. The real grammar lives in
+ * src-tauri/src/system_control.rs.
+ */
+function mockResolveCommand(textRaw: string) {
+  const text = textRaw.toLowerCase().trim();
+  const wrap = (action: string, arg: unknown, description: string) => ({
+    intent: { action, arg },
+    requires_password: action === "lock_workstation" || action === "close_window",
+    description,
+  });
+
+  let match = /^(open|launch|start|run)\s+(up\s+)?(.+)$/.exec(text);
+  if (match) {
+    const rest = match[3].replace(/"/g, "");
+    if (rest.startsWith("c:\\") || rest.startsWith("%")) {
+      return wrap("open_path", rest, `Open ${rest}`);
+    }
+    const folders: Record<string, string> = {
+      documents: "shell:Personal",
+      downloads: "shell:Downloads",
+      desktop: "shell:Desktop",
+      pictures: "shell:My Pictures",
+      severus: "@workspace",
+      "second brain": "@notes",
+    };
+    if (folders[rest]) {
+      return wrap("open_known_folder", folders[rest], `Open ${rest}`);
+    }
+    return wrap("launch_app", rest, `Launch ${rest}`);
+  }
+  match = /^snap\s+(.*)$/.exec(text);
+  if (match) {
+    const rest = match[1];
+    const position = rest.includes("left")
+      ? "left"
+      : rest.includes("right")
+        ? "right"
+        : rest.includes("maximize")
+          ? "maximize"
+          : "minimize";
+    const target = rest
+      .replace(/left|right|maximize|minimize|half|side|screen|window|to|the/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .join(" ");
+    return wrap("snap_window", { target: target || null, position }, `Snap to the ${position} half`);
+  }
+  match = /^volume to (\d+)/.exec(text) ?? /^volume (\d+)/.exec(text);
+  if (match) return wrap("volume_set", Math.min(100, Number(match[1])), `Set volume to ${match[1]}%`);
+  if (text.includes("volume up") || text.includes("louder")) return wrap("volume_step", 10, "Volume up 10%");
+  if (text.includes("volume down") || text.includes("quieter")) return wrap("volume_step", -10, "Volume down 10%");
+  if (text.includes("mute")) return wrap("mute_toggle", null, "Toggle mute");
+  if (/next (track|song)/.test(text)) return wrap("media_key", "next", "Next track");
+  if (/previous (track|song)/.test(text)) return wrap("media_key", "prev", "Previous track");
+  if (/^(play|pause|resume)\b/.test(text)) return wrap("media_key", "play_pause", "Play / pause");
+  if (text.includes("screenshot")) return wrap("screenshot", null, "Capture a full-screen screenshot");
+  if (/next desktop/.test(text)) return wrap("switch_desktop", "next", "Next desktop");
+  if (/previous desktop/.test(text)) return wrap("switch_desktop", "prev", "Previous desktop");
+  if (text.includes("minimize all") || text.includes("show desktop"))
+    return wrap("minimize_all", null, "Minimize every window");
+  match = /^(close|quit|kill)\s+(the\s+)?(.+)$/.exec(text);
+  if (match) return wrap("close_window", match[3], `Close the ${match[3]} window`);
+  if (text.includes("lock")) return wrap("lock_workstation", null, "Lock the workstation");
+  match = /^(switch to|focus)\s+(the\s+)?(.+)$/.exec(text);
+  if (match) return wrap("focus_app", match[3], `Bring ${match[3]} to the foreground`);
+  if (/list windows|show windows|what windows/.test(text)) return wrap("list_windows", null, "List open windows");
+  match = /^clipboard\s+(.+)$/.exec(text);
+  if (match) return wrap("clipboard_write", match[1], "Copy text to the clipboard");
+  if (/^clipboard$/.test(text) || text.includes("read clipboard"))
+    return wrap("clipboard_read", null, "Read the clipboard");
+  throw new Error("no matching system command");
+}
+
 const HANDLERS: Record<string, (args: Record<string, unknown>) => unknown> = {
   get_graph_data: () => GRAPH_DATA,
   list_notes: () =>
@@ -231,6 +306,44 @@ const HANDLERS: Record<string, (args: Record<string, unknown>) => unknown> = {
   "plugin:dialog|open": () => null,
   "plugin:dialog|message": () => null,
   "plugin:dialog|ask": () => true,
+  hide_to_tray: () => null,
+  set_floating_mode: () => null,
+  move_to_monitor: () => "Moved Severus to Display 1 (mock)",
+  system_list_windows: () => [
+    { hwnd: 101, title: "system_control.rs — severus-desktop", exe: "Code.exe" },
+    { hwnd: 102, title: "New Tab — Google Chrome", exe: "chrome.exe" },
+    { hwnd: 103, title: "Downloads", exe: "explorer.exe" },
+    { hwnd: 104, title: "Spotify", exe: "spotify.exe" },
+  ],
+  system_resolve_command: (args) => mockResolveCommand(String(args.text ?? "")),
+  system_execute: (args) => {
+    const intent = args.intent as { action: string; arg?: unknown };
+    const destructive = intent.action === "lock_workstation" || intent.action === "close_window";
+    if (destructive && !args.confirmed) {
+      throw new Error("password confirmation required");
+    }
+    const target = typeof intent.arg === "string" ? intent.arg : "";
+    const messages: Record<string, string> = {
+      launch_app: `Launched ${target} (mock)`,
+      open_known_folder: `Opened ${target} (mock)`,
+      open_path: `Opened ${target} (mock)`,
+      volume_set: `Volume set to ${intent.arg}% (mock)`,
+      volume_step: `Volume adjusted (mock)`,
+      mute_toggle: "Mute toggled (mock)",
+      media_key: `Media ${target} (mock)`,
+      clipboard_write: "Copied to clipboard (mock)",
+      clipboard_read: "Clipboard: (mock contents)",
+      screenshot: "Screenshot saved to Pictures\\Severus (mock)",
+      focus_app: `Focused ${target} (mock)`,
+      list_windows: "Code.exe — system_control.rs\nchrome.exe — New Tab (mock)",
+      snap_window: `Snapped window (mock)`,
+      minimize_all: "Minimized every window (mock)",
+      switch_desktop: `Switched desktop ${target} (mock)`,
+      lock_workstation: "Workstation locked (mock)",
+      close_window: `Asked ${target} to close (mock)`,
+    };
+    return messages[intent.action] ?? "Done (mock)";
+  },
 };
 
 export function installMockBackend(): void {

@@ -17,16 +17,30 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   apiKey: "",
   model: "llama3.2",
   systemPrompt:
-    "You are Severus AI, an engineering assistant and academic mentor embedded in Lex Matondo's Second Brain. Keep answers concise, factual, and actionable.",
+    "You are Severus AI, an engineering assistant and academic mentor embedded in Lex Matondo's Second Brain. Keep answers concise, factual, and actionable. Maintain the dignified, stoic persona of Professor Severus Snape, and always address the user respectfully by appending 'Sir' at the end of your response.",
 };
 
 const STORAGE_KEY = "severus_ai_config";
 
 export function loadAIConfig(): AIConfig {
   try {
+    const metaEnv = (import.meta as any).env || {};
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_AI_CONFIG;
-    return { ...DEFAULT_AI_CONFIG, ...JSON.parse(raw) };
+    const parsed = raw ? JSON.parse(raw) : {};
+
+    const providerName = parsed.providerName || metaEnv.VITE_AI_PROVIDER || DEFAULT_AI_CONFIG.providerName;
+    const baseUrl = parsed.baseUrl || metaEnv.VITE_AI_BASE_URL || DEFAULT_AI_CONFIG.baseUrl;
+    const apiKey = parsed.apiKey || metaEnv.VITE_AI_API_KEY || DEFAULT_AI_CONFIG.apiKey;
+    const model = parsed.model || metaEnv.VITE_AI_MODEL || DEFAULT_AI_CONFIG.model;
+    const systemPrompt = parsed.systemPrompt || DEFAULT_AI_CONFIG.systemPrompt;
+
+    return {
+      providerName,
+      baseUrl,
+      apiKey,
+      model,
+      systemPrompt,
+    };
   } catch {
     return DEFAULT_AI_CONFIG;
   }
@@ -126,6 +140,55 @@ export async function testAIConnection(config: AIConfig): Promise<{ ok: boolean;
       ok: false,
       message: err instanceof Error ? err.message : "Connection failed or timed out",
     };
+  }
+}
+
+/**
+ * Single-shot completion used by utility callers (e.g. the system-command
+ * fallback) that need a bare model answer without Severus persona or telemetry.
+ */
+export async function chatOnce(config: AIConfig, systemPrompt: string, userText: string): Promise<string> {
+  const base = cleanBaseUrl(config.baseUrl);
+  const endpoint = `${base}/chat/completions`;
+  const cleanKey = sanitizeApiKey(config.apiKey);
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (cleanKey) {
+    headers["Authorization"] = `Bearer ${cleanKey}`;
+    if (base.includes("generativelanguage.googleapis.com")) {
+      headers["x-goog-api-key"] = cleanKey;
+    }
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: config.model.trim(),
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userText },
+        ],
+        temperature: 0,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status}: ${parseErrorMessage(res.status, text)}`);
+    }
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content;
+    if (!reply) {
+      throw new Error("No response message returned from model.");
+    }
+    return reply;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

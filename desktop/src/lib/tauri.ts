@@ -42,6 +42,18 @@ export function restoreWindow(): Promise<void> {
   return invoke<void>("restore_window");
 }
 
+export function hideToTray(): Promise<void> {
+  return invoke<void>("hide_to_tray");
+}
+
+export function setFloatingMode(floating: boolean): Promise<void> {
+  return invoke<void>("set_floating_mode", { floating });
+}
+
+export function moveToMonitor(target: "left" | "right" | "next" | "primary" | string): Promise<string> {
+  return invoke<string>("move_to_monitor", { target });
+}
+
 /** Resolves with an unlisten function once the event subscription is registered. */
 export function onNotesChanged(handler: () => void): Promise<() => void> {
   return listen("notes-changed", () => handler());
