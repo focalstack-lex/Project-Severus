@@ -17,9 +17,12 @@ const SEVERUS_ECHO_PHRASES = [
   "launched in vs code",
 ];
 
-// Phonetic spelling variations recognized by Web Speech API for "Severus"
+// Phonetic spelling variations recognized by Web Speech API for "Severus" (Severus Snape)
 const SEVERUS_NAME_ALIASES = [
   "severus",
+  "snape",
+  "severus snape",
+  "professor snape",
   "severes",
   "severe us",
   "sever us",
@@ -34,6 +37,7 @@ const SEVERUS_NAME_ALIASES = [
   "syverus",
   "cyrus",
   "severed",
+  "severous",
 ];
 
 function matchesWakePhrase(text: string): boolean {
