@@ -27,6 +27,12 @@ export function getClapEnabled(): boolean {
   return true;
 }
 
+let lastKeyPressTime = 0;
+
+export function recordKeyPress() {
+  lastKeyPressTime = Date.now();
+}
+
 export class ClapDetector {
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
@@ -43,7 +49,7 @@ export class ClapDetector {
   private isPeakHolding = false;
 
   constructor(options: ClapDetectorOptions = {}) {
-    this.threshold = options.threshold ?? 0.35;
+    this.threshold = options.threshold ?? 0.46; // Raised threshold to ignore soft keyboard clicks
     this.minIntervalMs = options.minIntervalMs ?? 140;
     this.maxIntervalMs = options.maxIntervalMs ?? 750;
     this.onDoubleClap = options.onDoubleClap;
@@ -101,6 +107,13 @@ export class ClapDetector {
   private loop = () => {
     if (!this.isListening || !this.analyser) return;
 
+    // Keyboard activity gate: Suppress clap detection if a key was pressed in the last 1.8 seconds!
+    const now = Date.now();
+    if (now - lastKeyPressTime < 1800) {
+      this.animFrameId = requestAnimationFrame(this.loop);
+      return;
+    }
+
     const dataArray = new Uint8Array(this.analyser.fftSize);
     this.analyser.getByteTimeDomainData(dataArray);
 
@@ -128,12 +141,15 @@ export class ClapDetector {
     const rms = Math.sqrt(sumSq / dataArray.length);
     const crestFactor = rms > 0.001 ? maxVal / rms : 0;
 
-    // Transient impulse filter:
-    // Real hand claps have high peak-to-RMS crest factor (> 4.0) and high zero-crossings (> 20).
-    // Spoken voice syllables have lower crest factor (< 3.5) due to vowel RMS sustain.
-    const isTransientClap = maxVal > this.threshold && crestFactor >= 4.0 && zeroCrossings >= 18;
-
-    const now = Date.now();
+    // Acoustic Transient Hand-Clap Filter:
+    // Real hand claps are loud (> 0.46), have substantial frame energy (sumSq >= 0.20),
+    // high peak-to-RMS crest factor (>= 4.2), and high zero-crossings (>= 18).
+    // Soft keyboard clicks fail volume (> 0.46) and total frame energy (sumSq >= 0.20).
+    const isTransientClap =
+      maxVal > this.threshold &&
+      sumSq >= 0.20 &&
+      crestFactor >= 4.2 &&
+      zeroCrossings >= 18;
 
     if (isTransientClap) {
       if (!this.isPeakHolding) {

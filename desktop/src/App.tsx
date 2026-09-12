@@ -31,7 +31,7 @@ import {
   preloadVoice,
   setVoiceMuted,
 } from "./lib/voice";
-import { ClapDetector, getClapEnabled, setClapEnabled } from "./lib/clapDetector";
+import { ClapDetector, getClapEnabled, recordKeyPress, setClapEnabled } from "./lib/clapDetector";
 import {
   VoiceCommandListener,
   getVoiceCmdEnabled,
@@ -342,9 +342,10 @@ export default function App() {
     [showToast],
   );
 
-  // Global Keyboard Shortcuts
+  // Global Keyboard Shortcuts & Activity Tracker
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      recordKeyPress();
       const mod = event.ctrlKey || event.metaKey;
 
       // Quick Switcher (Ctrl+K or Ctrl+P)
