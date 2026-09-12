@@ -34,6 +34,10 @@ export function getWorkspaceContext(): Promise<WorkspaceContext> {
   return invoke<WorkspaceContext>("get_workspace_context");
 }
 
+export function getVoiceAudio(name: string): Promise<string> {
+  return invoke<string>("get_voice_audio", { name });
+}
+
 /** Resolves with an unlisten function once the event subscription is registered. */
 export function onNotesChanged(handler: () => void): Promise<() => void> {
   return listen("notes-changed", () => handler());

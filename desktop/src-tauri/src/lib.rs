@@ -34,6 +34,10 @@ impl Paths {
     pub fn journal_dir(&self) -> PathBuf {
         self.root.join("journal")
     }
+
+    pub fn voices_dir(&self) -> PathBuf {
+        self.root.join("Voices")
+    }
 }
 
 #[tauri::command]
@@ -76,6 +80,47 @@ fn get_workspace_context(paths: State<Paths>) -> notes::WorkspaceContext {
     notes::get_workspace_context(&paths)
 }
 
+#[tauri::command]
+fn get_voice_audio(paths: State<Paths>, name: String) -> Result<String, String> {
+    let filename = if name.ends_with(".mp3") { name } else { format!("{}.mp3", name) };
+    let voice_path = paths.voices_dir().join(&filename);
+
+    if !voice_path.starts_with(paths.voices_dir()) {
+        return Err("Security violation: path traversal rejected".to_string());
+    }
+
+    let bytes = std::fs::read(&voice_path)
+        .map_err(|e| format!("Could not read voice audio '{}': {}", filename, e))?;
+
+    let b64 = base64_encode(&bytes);
+    Ok(format!("data:audio/mp3;base64,{}", b64))
+}
+
+fn base64_encode(data: &[u8]) -> String {
+    const ENGINE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut buf = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0] as usize;
+        let b1 = chunk.get(1).map(|&b| b as usize).unwrap_or(0);
+        let b2 = chunk.get(2).map(|&b| b as usize).unwrap_or(0);
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+
+        buf.push(ENGINE[(triple >> 18) & 0x3F] as char);
+        buf.push(ENGINE[(triple >> 12) & 0x3F] as char);
+        if chunk.len() > 1 {
+            buf.push(ENGINE[(triple >> 6) & 0x3F] as char);
+        } else {
+            buf.push('=');
+        }
+        if chunk.len() > 2 {
+            buf.push(ENGINE[triple & 0x3F] as char);
+        } else {
+            buf.push('=');
+        }
+    }
+    buf
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -92,7 +137,8 @@ pub fn run() {
             append_journal,
             open_in_editor,
             get_git_status,
-            get_workspace_context
+            get_workspace_context,
+            get_voice_audio
         ])
         .setup(|app| {
             if let Some(icon) = app.default_window_icon() {

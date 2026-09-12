@@ -23,6 +23,14 @@ import {
 } from "./lib/tauri";
 import { fade, freshnessOpacity, tagColors } from "./lib/colors";
 import type { GitStatusData, GraphData, NoteContent, NoteMeta } from "./types";
+import {
+  getVoiceMuted,
+  playTimeGreeting,
+  playVoice,
+  preloadVoice,
+  setVoiceMuted,
+} from "./lib/voice";
+import { ClapDetector, getClapEnabled, setClapEnabled } from "./lib/clapDetector";
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [], tags: [] };
 
@@ -32,6 +40,10 @@ export default function App() {
   const [notesList, setNotesList] = useState<NoteMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState<NoteContent | null>(null);
+
+  // Voice & Acoustic Settings
+  const [voiceMuted, setVoiceMutedState] = useState<boolean>(getVoiceMuted);
+  const [clapEnabled, setClapEnabledState] = useState<boolean>(getClapEnabled);
 
   // Layout & Panes
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
@@ -130,12 +142,39 @@ export default function App() {
     };
   }, [loadGraph, loadNotesList, refreshGitStatus]);
 
+  // Preload voice files and start ClapDetector
+  useEffect(() => {
+    void preloadVoice("Good morning, Sir!.mp3");
+    void preloadVoice("Good afternoon, Sir!.mp3");
+    void preloadVoice("Good evening, Sir!.mp3");
+    void preloadVoice("action_vscode_launch.mp3");
+    void preloadVoice("action_note_created.mp3");
+    void preloadVoice("action_journal_captured.mp3");
+
+    if (!clapEnabled) return;
+
+    const detector = new ClapDetector({
+      onDoubleClap: () => {
+        void playTimeGreeting();
+        showToast("👏 Double-clap detected — Greetings, Sir!");
+      },
+    });
+
+    void detector.start();
+
+    return () => {
+      detector.stop();
+    };
+  }, [clapEnabled, showToast]);
+
   const handleOpenInEditor = useCallback(
     async (id: string) => {
       try {
         await openInEditor(id);
+        void playVoice("action_vscode_launch.mp3");
         showToast(`Opening "${id}.md" in editor…`);
       } catch (err) {
+        void playVoice("alert_api_error.mp3");
         showToast(`Could not open editor: ${String(err)}`);
       }
     },
@@ -160,6 +199,7 @@ export default function App() {
   const handleSave = useCallback(
     async (id: string, content: string) => {
       await saveNote(id, content);
+      void playVoice("auto_note_saved.mp3");
       showToast(`Saved "${id}"`);
     },
     [showToast],
@@ -172,8 +212,10 @@ export default function App() {
         await loadNotesList();
         await loadGraph();
         await openNote(trimmed);
+        void playVoice("action_note_created.mp3");
         showToast(`Created note "${trimmed}.md"`);
       } catch (err) {
+        void playVoice("alert_api_error.mp3");
         showToast(`Could not create note: ${String(err)}`);
       }
     },
@@ -223,6 +265,7 @@ export default function App() {
   const handleJournal = useCallback(
     async (text: string) => {
       const stamp = await appendJournal(text);
+      void playVoice("action_journal_captured.mp3");
       showToast(`Journaled at ${stamp}`);
     },
     [showToast],
@@ -236,7 +279,10 @@ export default function App() {
       // Quick Switcher (Ctrl+K or Ctrl+P)
       if (mod && (event.key.toLowerCase() === "k" || event.key.toLowerCase() === "p")) {
         event.preventDefault();
-        setQuickSwitcherOpen((prev) => !prev);
+        setQuickSwitcherOpen((prev) => {
+          if (!prev) void playVoice("nav_quick_switcher.mp3");
+          return !prev;
+        });
       }
       // Quick Journal (Ctrl+J)
       else if (mod && event.key.toLowerCase() === "j") {
@@ -248,16 +294,23 @@ export default function App() {
         event.preventDefault();
         setWorkbenchOpen(true);
         setWorkbenchTab("copilot");
+        void playVoice("nav_copilot_open.mp3");
       }
       // Toggle Grounding Assembler (Ctrl+Shift+G)
       else if (mod && event.shiftKey && event.key.toLowerCase() === "g") {
         event.preventDefault();
-        setGroundingOpen((prev) => !prev);
+        setGroundingOpen((prev) => {
+          if (!prev) void playVoice("nav_assembler_open.mp3");
+          return !prev;
+        });
       }
       // Toggle Notes Drawer (Ctrl+B)
       else if (mod && event.key.toLowerCase() === "b") {
         event.preventDefault();
-        setNotesDrawerOpen((prev) => !prev);
+        setNotesDrawerOpen((prev) => {
+          if (!prev) void playVoice("nav_notes_drawer.mp3");
+          return !prev;
+        });
       }
       // Toggle Workbench / Inspector (Ctrl+\)
       else if (mod && event.key === "\\") {
@@ -311,13 +364,42 @@ export default function App() {
               <span className="live-dot" />
               <span>AI: {aiConfig.model}</span>
             </div>
+            <div
+              className={`badge-pill ai-nav-pill voice-nav-pill ${voiceMuted ? "muted" : ""}`}
+              onClick={() => {
+                const next = !voiceMuted;
+                setVoiceMutedState(next);
+                setVoiceMuted(next);
+                showToast(next ? "Voice Audio Muted" : "Voice Audio Active");
+              }}
+              title="Toggle Severus Voice Audio"
+            >
+              <span className={`live-dot ${voiceMuted ? "muted" : ""}`} />
+              <span>{voiceMuted ? "🎙️ VOICE: OFF" : "🎙️ VOICE: ON"}</span>
+            </div>
+            <div
+              className={`badge-pill ai-nav-pill voice-nav-pill ${!clapEnabled ? "muted" : ""}`}
+              onClick={() => {
+                const next = !clapEnabled;
+                setClapEnabledState(next);
+                setClapEnabled(next);
+                showToast(next ? "Clap Detector Disabled" : "Clap Detector Active (Greet on 2 Claps)");
+              }}
+              title="Toggle Double-Clap Detection (Greet on 2 Claps)"
+            >
+              <span className={`live-dot ${!clapEnabled ? "muted" : ""}`} />
+              <span>{clapEnabled ? "👏 CLAP: ON" : "👏 CLAP: OFF"}</span>
+            </div>
           </div>
 
           {/* Center Quick Search Button */}
           <button
             type="button"
             className="topbar-search-btn"
-            onClick={() => setQuickSwitcherOpen(true)}
+            onClick={() => {
+              void playVoice("nav_quick_switcher.mp3");
+              setQuickSwitcherOpen(true);
+            }}
             title="Open Command Palette (Ctrl+K)"
           >
             <span className="search-icon">⌘</span>
