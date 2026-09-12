@@ -10,3 +10,5 @@ dist/
 src-tauri/target/
 second-brain/graph.html
 
+.stfolder/
+.stignore
