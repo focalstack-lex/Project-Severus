@@ -431,6 +431,17 @@ export default function App() {
       {!zenMode && (
         <TopHeader
           breadcrumb={breadcrumb}
+          activeSection={activeSection}
+          onSelectSection={(sec) => {
+            setActiveSection(sec);
+            if (sec === "ai") {
+              setInspectorOpen(true);
+              setInspectorTab("copilot");
+            }
+          }}
+          knowledgeSubTab={knowledgeSubTab}
+          onSelectKnowledgeSubTab={setKnowledgeSubTab}
+          onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
           onOpenQuickSearch={() => {
             void playVoice("nav_quick_switcher.mp3");
             setQuickSwitcherOpen(true);

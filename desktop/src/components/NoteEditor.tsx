@@ -85,8 +85,8 @@ export default function NoteEditor({
     <aside className="editor-pane">
       <div className="editor-header">
         <div className="editor-title-wrap">
-          <span className="editor-section-num">02 / ACTIVE NOTE</span>
-          <div className="editor-title">{note ? `${note.title}.md` : "NO NOTE SELECTED"}</div>
+          <span className="editor-section-num">Active Note</span>
+          <div className="editor-title">{note ? `${note.title}.md` : "No note selected"}</div>
         </div>
         <div className="editor-actions">
           {note && (
@@ -97,15 +97,15 @@ export default function NoteEditor({
                   onClick={() => void onOpenInEditor(note.id)}
                   title="Open this note in VS Code / IDE"
                 >
-                  VS CODE ↗
+                  VS Code ↗
                 </button>
               )}
               <button onClick={() => setPreview(!preview)} title="Toggle markdown preview">
-                {preview ? "EDIT" : "PREVIEW"}
+                {preview ? "Edit" : "Preview"}
               </button>
               {dirty && (
                 <button onClick={reloadFromDisk} title="Discard local edits and reload from disk">
-                  REVERT
+                  Revert
                 </button>
               )}
               <button
@@ -130,10 +130,10 @@ export default function NoteEditor({
           <div className="vault-dash-hero">
             <div className="vault-dash-icon">⬡</div>
             <div className="vault-dash-header">
-              <span className="vault-dash-sub">02 // KNOWLEDGE ENGINE</span>
-              <h2 className="vault-dash-title">VAULT COMMAND CENTER</h2>
+              <span className="vault-dash-sub">Second Brain</span>
+              <h2 className="vault-dash-title">Knowledge Vault</h2>
               <p className="vault-dash-desc">
-                Select any node from the 3D topology graph, or access quick actions and indexed notes below.
+                Select any concept from the graph map, or access quick actions and indexed notes below.
               </p>
             </div>
           </div>
@@ -146,7 +146,7 @@ export default function NoteEditor({
                 onClick={onNewNote}
                 title="Create a new note in second-brain"
               >
-                <span>+</span> NEW NOTE
+                <span>+</span> New Note
               </button>
             )}
             {onOpenGrounding && (
@@ -156,7 +156,7 @@ export default function NoteEditor({
                 onClick={onOpenGrounding}
                 title="Assemble grounding context (Ctrl+Shift+G)"
               >
-                <span>⚡</span> GROUNDING
+                <span>⚡</span> Grounding
               </button>
             )}
             {onOpenJournal && (
@@ -166,7 +166,7 @@ export default function NoteEditor({
                 onClick={onOpenJournal}
                 title="Capture quick journal entry (Ctrl+J)"
               >
-                <span>✎</span> JOURNAL
+                <span>✎</span> Journal
               </button>
             )}
           </div>
@@ -174,8 +174,8 @@ export default function NoteEditor({
           {notesList && notesList.length > 0 && (
             <div className="vault-recent-section">
               <div className="vault-section-title">
-                <span>INDEXED NOTES</span>
-                <span className="vault-count-pill">{notesList.length} NOTES</span>
+                <span>Indexed Notes</span>
+                <span className="vault-count-pill">{notesList.length} notes</span>
               </div>
               <div className="vault-notes-grid">
                 {notesList.map((n) => (
@@ -188,11 +188,11 @@ export default function NoteEditor({
                     <div className="vault-note-card-tags">
                       {n.tags.map((t) => (
                         <span key={t} className="vault-mini-tag">
-                          #{t}
+                          #{t.toLowerCase()}
                         </span>
                       ))}
                     </div>
-                    <span className="vault-note-jump">OPEN ↗</span>
+                    <span className="vault-note-jump">Open ↗</span>
                   </div>
                 ))}
               </div>

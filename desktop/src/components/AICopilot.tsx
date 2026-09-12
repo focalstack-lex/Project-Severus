@@ -368,7 +368,7 @@ export default function AICopilot({
     <aside className="copilot-pane">
       <div className="copilot-header">
         <div className="copilot-title-wrap">
-          <span className="copilot-section-num">04 / KNOWLEDGE COPILOT</span>
+          <span className="copilot-section-num">AI Copilot</span>
           <div className="copilot-model-pill" onClick={onOpenSettings} title="Click to change model or provider">
             <span className="live-dot" />
             <span>{config.model}</span>
@@ -377,10 +377,10 @@ export default function AICopilot({
         </div>
         <div className="copilot-actions">
           <button onClick={handleClearCurrentSession} title="Clear current conversation messages">
-            CLEAR
+            Clear
           </button>
           <button onClick={onOpenSettings} title="Configure AI Provider">
-            ⚙ PROVIDER
+            ⚙ Settings
           </button>
           <button className="close-btn" onClick={onClose} title="Close Copilot">
             ✕
@@ -441,7 +441,7 @@ export default function AICopilot({
             onClick={handleNewChat}
             title="Start new conversation"
           >
-            + NEW
+            + New
           </button>
           <button
             type="button"
@@ -449,7 +449,7 @@ export default function AICopilot({
             onClick={() => setShowHistory((prev) => !prev)}
             title="Toggle conversation histories"
           >
-            🕒 HISTORY ({sessions.length})
+            🕒 History ({sessions.length})
           </button>
         </div>
       </div>
@@ -636,7 +636,7 @@ export default function AICopilot({
           disabled={loading || !input.trim()}
           onClick={() => void handleSend()}
         >
-          SEND →
+          Send →
         </button>
       </div>
     </aside>

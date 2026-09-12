@@ -128,7 +128,7 @@ export default function GraphView({
     });
   }, [nodes, links, graphMode]);
 
-  // 2D Canvas Graph Mode Implementation
+  // 2D Canvas Graph Mode Implementation with Pan/Zoom & ResizeObserver
   const canvas2DRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (graphMode !== "2d") return;
@@ -138,6 +138,14 @@ export default function GraphView({
     if (!ctx) return;
 
     let animId: number;
+    let panX = 0;
+    let panY = 0;
+    let zoom = 1;
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let didDrag = false;
+
     const visibleNodes = nodes.filter((n) => nodeVisible(n.id));
     const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
     const visibleLinks = links.filter((l) => {
@@ -146,32 +154,48 @@ export default function GraphView({
       return visibleNodeIds.has(src) && visibleNodeIds.has(tgt);
     });
 
-    // Create 2D position state
-    const positions = new Map<string, { x: number; y: number; vx: number; vy: number }>();
+    // Create 2D position state spread naturally around center
+    const positions = new Map<string, { x: number; y: number }>();
     visibleNodes.forEach((n, idx) => {
-      const angle = (idx / visibleNodes.length) * 2 * Math.PI;
-      const radius = 120 + Math.random() * 80;
+      const angle = (idx / Math.max(1, visibleNodes.length)) * 2 * Math.PI;
+      const radius = 160 + (idx % 2 === 0 ? 40 : -30);
       positions.set(n.id, {
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius,
-        vx: 0,
-        vy: 0,
       });
     });
 
-    let width = canvas.clientWidth;
-    let height = canvas.clientHeight;
-    canvas.width = width;
-    canvas.height = height;
+    let cssWidth = canvas.clientWidth || 800;
+    let cssHeight = canvas.clientHeight || 600;
+    const dpr = window.devicePixelRatio || 1;
+
+    const updateDimensions = () => {
+      if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+        cssWidth = canvas.clientWidth;
+        cssHeight = canvas.clientHeight;
+        canvas.width = cssWidth * dpr;
+        canvas.height = cssHeight * dpr;
+      }
+    };
+    updateDimensions();
+
+    const ro = new ResizeObserver(() => {
+      updateDimensions();
+    });
+    ro.observe(canvas);
 
     const render = () => {
-      ctx.clearRect(0, 0, width, height);
       ctx.save();
-      ctx.translate(width / 2, height / 2);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+      // Center + pan + zoom
+      ctx.translate(cssWidth / 2 + panX, cssHeight / 2 + panY);
+      ctx.scale(zoom, zoom);
 
       // Draw links
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+      ctx.lineWidth = 1.2;
       visibleLinks.forEach((l) => {
         const srcId = typeof l.source === "string" ? l.source : (l.source as any)?.id;
         const tgtId = typeof l.target === "string" ? l.target : (l.target as any)?.id;
@@ -191,22 +215,28 @@ export default function GraphView({
         if (!pos) return;
 
         const isSelected = selectedId && n.id.toLowerCase() === selectedId.toLowerCase();
-        const nodeRadius = Math.max(6, Math.min(18, n.size * 1.8));
+        const nodeRadius = Math.max(8, Math.min(22, n.size * 2));
+
+        // Node glow if selected
+        if (isSelected) {
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, nodeRadius + 6, 0, 2 * Math.PI);
+          ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
+          ctx.fill();
+        }
 
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, nodeRadius, 0, 2 * Math.PI);
-        ctx.fillStyle = isSelected ? "#3b82f6" : n.color || "#9ca3af";
+        ctx.fillStyle = isSelected ? "#ffffff" : n.color || "#9ca3af";
         ctx.fill();
 
-        if (isSelected) {
-          ctx.strokeStyle = "#ffffff";
-          ctx.lineWidth = 2;
-          ctx.stroke();
-        }
+        ctx.strokeStyle = isSelected ? "#ffffff" : "rgba(255, 255, 255, 0.25)";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
 
-        // Draw title label
-        ctx.font = "12px Inter, sans-serif";
-        ctx.fillStyle = isSelected ? "#ffffff" : "#d1d5db";
+        // Title label
+        ctx.font = "500 12px Inter, -apple-system, sans-serif";
+        ctx.fillStyle = isSelected ? "#ffffff" : "rgba(255, 255, 255, 0.85)";
         ctx.textAlign = "center";
         ctx.fillText(n.title, pos.x, pos.y + nodeRadius + 14);
       });
@@ -217,37 +247,72 @@ export default function GraphView({
 
     render();
 
-    const handleResize = () => {
-      if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
-        width = canvas.clientWidth;
-        height = canvas.clientHeight;
-        canvas.width = width;
-        canvas.height = height;
+    const getCanvasMousePos = (e: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const rawX = e.clientX - rect.left - (cssWidth / 2 + panX);
+      const rawY = e.clientY - rect.top - (cssHeight / 2 + panY);
+      return { x: rawX / zoom, y: rawY / zoom };
+    };
+
+    const handleMouseDown = (e: MouseEvent) => {
+      isDragging = true;
+      didDrag = false;
+      dragStartX = e.clientX - panX;
+      dragStartY = e.clientY - panY;
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isDragging) {
+        const nextPanX = e.clientX - dragStartX;
+        const nextPanY = e.clientY - dragStartY;
+        if (Math.hypot(nextPanX - panX, nextPanY - panY) > 4) {
+          didDrag = true;
+        }
+        panX = nextPanX;
+        panY = nextPanY;
+      } else {
+        const mouse = getCanvasMousePos(e);
+        const hit = visibleNodes.some((n) => {
+          const pos = positions.get(n.id);
+          return pos && Math.hypot(mouse.x - pos.x, mouse.y - pos.y) <= 22;
+        });
+        canvas.style.cursor = hit ? "pointer" : "grab";
       }
     };
-    window.addEventListener("resize", handleResize);
 
-    const handleCanvasClick = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const clickX = e.clientX - rect.left - width / 2;
-      const clickY = e.clientY - rect.top - height / 2;
-
-      for (const n of visibleNodes) {
-        const pos = positions.get(n.id);
-        if (!pos) continue;
-        const dist = Math.hypot(clickX - pos.x, clickY - pos.y);
-        if (dist <= 18) {
-          onSelectNote(n.id);
-          break;
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!didDrag) {
+        const mouse = getCanvasMousePos(e);
+        for (const n of visibleNodes) {
+          const pos = positions.get(n.id);
+          if (!pos) continue;
+          if (Math.hypot(mouse.x - pos.x, mouse.y - pos.y) <= 22) {
+            onSelectNote(n.id);
+            break;
+          }
         }
       }
+      isDragging = false;
     };
-    canvas.addEventListener("click", handleCanvasClick);
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      zoom = Math.max(0.4, Math.min(3.5, zoom * zoomFactor));
+    };
+
+    canvas.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
 
     return () => {
       cancelAnimationFrame(animId);
-      window.removeEventListener("resize", handleResize);
-      canvas.removeEventListener("click", handleCanvasClick);
+      ro.disconnect();
+      canvas.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+      canvas.removeEventListener("wheel", handleWheel);
     };
   }, [graphMode, nodes, links, activeTags, selectedId, onSelectNote]);
 

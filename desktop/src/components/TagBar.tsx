@@ -45,10 +45,9 @@ export default function TagBar({ tags, colors, active, onToggle, onReset }: Prop
               className="tag-dot"
               style={{
                 backgroundColor: isActive ? dotColor : "rgba(255, 255, 255, 0.2)",
-                boxShadow: isActive ? `0 0 6px ${dotColor}` : "none",
               }}
             />
-            <span className="tag-text">#{tag.toUpperCase()}</span>
+            <span className="tag-text">#{tag.toLowerCase()}</span>
           </button>
         );
       })}
