@@ -289,6 +289,7 @@ export default function App() {
       {!zenMode && (
         <header className="topbar">
           <div className="brand-wrap">
+            <img src="/logo.png" alt="Severus" className="topbar-logo-img" />
             <div className="brand">
               LEX MATONDO <span className="dim">// SEVERUS</span>
             </div>

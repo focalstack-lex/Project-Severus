@@ -49,7 +49,7 @@ export default function ActivityRail({
             if (notesDrawerOpen) onToggleNotesDrawer();
           }}
         >
-          <span className="rail-logo">S</span>
+          <img src="/logo.png" alt="Severus Logo" className="rail-logo-img" />
         </button>
 
         <div className="rail-divider" />

@@ -14,11 +14,13 @@ $dir = "C:\Users\User\Documents\Severus\second-brain"
 $desktop = [Environment]::GetFolderPath("Desktop")
 
 $ws = New-Object -ComObject WScript.Shell
+$icon = "C:\Users\User\Documents\Severus\desktop\src-tauri\icons\icon.ico"
 
 $sc = $ws.CreateShortcut("$desktop\Second Brain.lnk")
 $sc.TargetPath = $pythonw
 $sc.Arguments = "`"$app`""
 $sc.WorkingDirectory = $dir
+$sc.IconLocation = $icon
 $sc.Description = "Second Brain - live 3D knowledge graph"
 $sc.Save()
 Write-Host "Created: $desktop\Second Brain.lnk"
@@ -27,6 +29,7 @@ $sc = $ws.CreateShortcut("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Sta
 $sc.TargetPath = $pythonw
 $sc.Arguments = "`"$app`""
 $sc.WorkingDirectory = $dir
+$sc.IconLocation = $icon
 $sc.Description = "Second Brain - boots at login"
 $sc.Save()
 Write-Host "Created: Startup\Second Brain.lnk"
