@@ -53,3 +53,15 @@ export interface WorkspaceContext {
   today_journal: string | null;
   vault_notes: string[];
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: Array<{
+    role: "system" | "user" | "assistant";
+    content: string;
+  }>;
+}
+

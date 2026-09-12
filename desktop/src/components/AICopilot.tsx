@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { type AIConfig, type ChatMessage, sendAIChat } from "../lib/ai";
 import { getWorkspaceContext } from "../lib/tauri";
-import type { NoteContent, WorkspaceContext } from "../types";
+import type { NoteContent, WorkspaceContext, ChatSession } from "../types";
 import MarkdownPreview from "./MarkdownPreview";
 
 interface Props {
@@ -13,6 +13,103 @@ interface Props {
   onSaveAsNote?: (title: string, content: string) => Promise<void>;
   onShowToast?: (msg: string) => void;
   onOpenNote?: (id: string) => void;
+}
+
+const SESSIONS_STORAGE_KEY = "severus_copilot_sessions";
+const ACTIVE_SESSION_ID_KEY = "severus_copilot_active_session_id";
+
+function createNewSession(title = "New Conversation"): ChatSession {
+  return {
+    id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `sess_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    title,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    messages: [],
+  };
+}
+
+function loadInitialSessions(): { sessions: ChatSession[]; activeId: string } {
+  try {
+    const raw = localStorage.getItem(SESSIONS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as ChatSession[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const savedActiveId = localStorage.getItem(ACTIVE_SESSION_ID_KEY);
+        const exists = parsed.some((s) => s.id === savedActiveId);
+        return {
+          sessions: parsed,
+          activeId: exists && savedActiveId ? savedActiveId : parsed[0].id,
+        };
+      }
+    }
+  } catch {
+    // fallback
+  }
+  const defaultSess = createNewSession();
+  return { sessions: [defaultSess], activeId: defaultSess.id };
+}
+
+function titleCase(str: string): string {
+  const minorWords = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in", "nor", "of", "on", "or", "so", "the", "to", "up", "yet", "with"]);
+  return str
+    .split(/\s+/)
+    .map((word, index) => {
+      const lower = word.toLowerCase();
+      if (index > 0 && minorWords.has(lower)) {
+        return lower;
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
+export function generateSessionTitle(firstPrompt: string, activeNoteTitle?: string): string {
+  const p = firstPrompt.trim();
+
+  if (p.includes("workspace and coding IDE environments") || p.includes("WORKSPACES & TASKS")) {
+    return "Workspace & Tasks Telemetry";
+  }
+  if (p.includes("Summarize the core concepts") || p.includes("SUMMARIZE NOTE")) {
+    return activeNoteTitle ? `Summary: ${activeNoteTitle}` : "Note Summary";
+  }
+  if (p.includes("suggest 3 relevant [[wiki-links]]") || p.includes("SUGGEST LINKS")) {
+    return activeNoteTitle ? `Links & Tags: ${activeNoteTitle}` : "Suggested Links";
+  }
+
+  // Extract from task wrappers if present
+  const taskMatch = p.match(/Task:\s*([^\n]+)/i);
+  let cleaned = (taskMatch && taskMatch[1] ? taskMatch[1] : p).trim();
+
+  // Strip conversational noise
+  cleaned = cleaned
+    .replace(/^(can you (please )?|please |could you |how (do|can) (i|we) |what (is|are) |tell me about |explain (to me )?)/i, "")
+    .replace(/[?!.]+$/, "")
+    .trim();
+
+  if (!cleaned) return "New Conversation";
+
+  let titled = titleCase(cleaned);
+  if (titled.length > 34) {
+    const cut = titled.slice(0, 34);
+    const lastSpace = cut.lastIndexOf(" ");
+    titled = (lastSpace > 18 ? cut.slice(0, lastSpace) : cut).trim() + "…";
+  }
+  return titled;
+}
+
+function formatRelativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  const d = new Date(timestamp);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function buildDynamicContext(ctx: WorkspaceContext | null, activeNote: NoteContent | null): string {
@@ -67,12 +164,34 @@ export default function AICopilot({
   onShowToast,
   onOpenNote,
 }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sessionData] = useState(() => loadInitialSessions());
+  const [sessions, setSessions] = useState<ChatSession[]>(sessionData.sessions);
+  const [activeSessionId, setActiveSessionId] = useState<string>(sessionData.activeId);
+  const [showHistory, setShowHistory] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitleText, setEditingTitleText] = useState("");
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const activeSession = useMemo(() => {
+    return sessions.find((s) => s.id === activeSessionId) ?? sessions[0] ?? createNewSession();
+  }, [sessions, activeSessionId]);
+
+  const messages = activeSession.messages;
+
+  // Persist sessions to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+      localStorage.setItem(ACTIVE_SESSION_ID_KEY, activeSessionId);
+    } catch {
+      // ignore
+    }
+  }, [sessions, activeSessionId]);
 
   const refreshContext = useCallback(async () => {
     try {
@@ -93,10 +212,68 @@ export default function AICopilot({
 
   if (!open) return null;
 
+  const handleNewChat = () => {
+    if (activeSession.messages.length === 0 && activeSession.title === "New Conversation") {
+      setShowHistory(false);
+      return;
+    }
+    const fresh = createNewSession();
+    setSessions((prev) => [fresh, ...prev]);
+    setActiveSessionId(fresh.id);
+    setShowHistory(false);
+    setError(null);
+    onShowToast?.("Started new conversation thread");
+  };
+
+  const handleDeleteSession = (id: string) => {
+    setSessions((prev) => {
+      const filtered = prev.filter((s) => s.id !== id);
+      if (filtered.length === 0) {
+        const fresh = createNewSession();
+        setActiveSessionId(fresh.id);
+        return [fresh];
+      }
+      if (activeSessionId === id) {
+        setActiveSessionId(filtered[0].id);
+      }
+      return filtered;
+    });
+    onShowToast?.("Conversation deleted");
+  };
+
+  const handleClearCurrentSession = () => {
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSession.id
+          ? { ...s, title: "New Conversation", messages: [], updatedAt: Date.now() }
+          : s
+      )
+    );
+    setError(null);
+    onShowToast?.("Conversation cleared");
+  };
+
+  const handleStartRename = () => {
+    setEditingTitleText(activeSession.title);
+    setIsEditingTitle(true);
+  };
+
+  const handleSaveCustomTitle = () => {
+    const clean = editingTitleText.trim();
+    if (clean) {
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSession.id ? { ...s, title: clean, updatedAt: Date.now() } : s
+        )
+      );
+    }
+    setIsEditingTitle(false);
+  };
+
   const handleSaveMessageAsNote = async (content: string) => {
     if (!onSaveAsNote) return;
     const lines = content.split("\n").map((l) => l.trim()).filter(Boolean);
-    let title = "AI Synthesis";
+    let title = activeSession.title !== "New Conversation" ? activeSession.title : "AI Synthesis";
     for (const line of lines) {
       const match = line.match(/^#+\s+(.+)$/);
       if (match && match[1]) {
@@ -130,39 +307,61 @@ export default function AICopilot({
     if (!text || loading) return;
 
     let enrichedContent = text;
-    // If asking about the current note, include excerpt or context if available
     if (activeNote && (text.includes("active note") || text.includes("this note") || customPrompt)) {
       enrichedContent = `Context (Active Note "${activeNote.title}"):\n${activeNote.content}\n\nTask: ${text}`;
     }
 
-    const newMsgs: ChatMessage[] = [
-      ...messages,
-      { role: "user", content: text },
-    ];
-    setMessages(newMsgs);
+    const isFirstMessage = activeSession.messages.length === 0 || activeSession.title === "New Conversation";
+    const sessionTitle = isFirstMessage
+      ? generateSessionTitle(text, activeNote?.title)
+      : activeSession.title;
+
+    const userMessage: ChatMessage = { role: "user", content: text };
+    const updatedMessages: ChatMessage[] = [...activeSession.messages, userMessage];
+
+    // Optimistically update session with user message and generated title
+    setSessions((prev) =>
+      prev.map((s) =>
+        s.id === activeSession.id
+          ? {
+              ...s,
+              title: sessionTitle,
+              updatedAt: Date.now(),
+              messages: updatedMessages,
+            }
+          : s
+      )
+    );
+
     if (!customPrompt) setInput("");
     setLoading(true);
     setError(null);
 
     try {
-      // Send payload with the enriched context for the latest message and live workspace telemetry
       const apiMsgs: ChatMessage[] = [
-        ...messages,
+        ...activeSession.messages,
         { role: "user", content: enrichedContent },
       ];
       const dynamicContext = buildDynamicContext(workspaceContext, activeNote);
       const reply = await sendAIChat(config, apiMsgs, dynamicContext);
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+
+      const assistantMessage: ChatMessage = { role: "assistant", content: reply };
+      setSessions((prev) =>
+        prev.map((s) =>
+          s.id === activeSession.id
+            ? {
+                ...s,
+                updatedAt: Date.now(),
+                messages: [...s.messages, assistantMessage],
+              }
+            : s
+        )
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate response");
     } finally {
       setLoading(false);
     }
-  };
-
-  const clearChat = () => {
-    setMessages([]);
-    setError(null);
   };
 
   return (
@@ -177,7 +376,7 @@ export default function AICopilot({
           </div>
         </div>
         <div className="copilot-actions">
-          <button onClick={clearChat} title="Clear conversation history">
+          <button onClick={handleClearCurrentSession} title="Clear current conversation messages">
             CLEAR
           </button>
           <button onClick={onOpenSettings} title="Configure AI Provider">
@@ -188,6 +387,125 @@ export default function AICopilot({
           </button>
         </div>
       </div>
+
+      {/* Session Bar with generated title and history toggle */}
+      <div className="copilot-session-bar">
+        <div
+          className={`copilot-session-selector ${showHistory ? "open" : ""}`}
+          onClick={() => setShowHistory((prev) => !prev)}
+          title="Click to view conversation history"
+        >
+          <span className="session-icon">💬</span>
+          {isEditingTitle ? (
+            <input
+              type="text"
+              className="session-title-input"
+              value={editingTitleText}
+              autoFocus
+              onChange={(e) => setEditingTitleText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSaveCustomTitle();
+                if (e.key === "Escape") setIsEditingTitle(false);
+              }}
+              onBlur={handleSaveCustomTitle}
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <span
+              className="session-title"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                handleStartRename();
+              }}
+              title="Double-click to rename conversation"
+            >
+              {activeSession.title}
+            </span>
+          )}
+          <span className="session-count">({activeSession.messages.length})</span>
+          <span className="session-arrow">{showHistory ? "▲" : "▼"}</span>
+        </div>
+
+        <div className="copilot-session-tools">
+          <button
+            type="button"
+            className="session-tool-btn"
+            onClick={handleStartRename}
+            title="Rename active chat"
+          >
+            ✎
+          </button>
+          <button
+            type="button"
+            className="session-tool-btn new-chat"
+            onClick={handleNewChat}
+            title="Start new conversation"
+          >
+            + NEW
+          </button>
+          <button
+            type="button"
+            className={`session-tool-btn history-toggle ${showHistory ? "active" : ""}`}
+            onClick={() => setShowHistory((prev) => !prev)}
+            title="Toggle conversation histories"
+          >
+            🕒 HISTORY ({sessions.length})
+          </button>
+        </div>
+      </div>
+
+      {/* History Drawer Dropdown */}
+      {showHistory && (
+        <div className="copilot-history-drawer">
+          <div className="history-drawer-header">
+            <span className="history-drawer-title">CONVERSATION HISTORIES</span>
+            <button
+              type="button"
+              className="history-new-btn"
+              onClick={handleNewChat}
+            >
+              + NEW CHAT
+            </button>
+          </div>
+          <div className="history-list">
+            {sessions.map((s) => {
+              const isActive = s.id === activeSession.id;
+              const timeStr = formatRelativeTime(s.updatedAt);
+              return (
+                <div
+                  key={s.id}
+                  className={`history-item ${isActive ? "active" : ""}`}
+                  onClick={() => {
+                    setActiveSessionId(s.id);
+                    setShowHistory(false);
+                  }}
+                >
+                  <div className="history-item-left">
+                    <span className="history-item-dot">{isActive ? "●" : "○"}</span>
+                    <div className="history-item-info">
+                      <span className="history-item-title" title={s.title}>{s.title}</span>
+                      <span className="history-item-meta">
+                        {timeStr} · {s.messages.length} msg{s.messages.length === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="history-delete-btn"
+                    title="Delete conversation"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteSession(s.id);
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick Prompts Bar */}
       <div className="copilot-quick-prompts">
