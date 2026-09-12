@@ -181,6 +181,11 @@ export default function App() {
     if (!voiceCmdEnabled) return;
 
     const listener = new VoiceCommandListener({
+      onWakePhrase: () => {
+        void restoreWindow().catch(() => {});
+        void playTimeGreeting();
+        showToast("🗣️ 'Hey Severus!' detected — Welcome back, Sir!");
+      },
       onOpenCopilot: () => {
         setWorkbenchOpen(true);
         setWorkbenchTab("copilot");

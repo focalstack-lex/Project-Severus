@@ -22,6 +22,7 @@ const SEVERUS_ECHO_PHRASES = [
  */
 
 export interface VoiceCommandHandlers {
+  onWakePhrase?: () => void;
   onOpenCopilot?: () => void;
   onOpenSearch?: () => void;
   onOpenGrounding?: () => void;
@@ -173,7 +174,15 @@ export class VoiceCommandListener {
 
     console.log(`[VoiceCommandListener] Executing voice command for: "${text}"`);
 
-    if (text.includes("copilot")) {
+    if (
+      text.includes("hey severus") ||
+      text.includes("severus") ||
+      text.includes("wake up severus") ||
+      text.includes("wake severus")
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onWakePhrase?.();
+    } else if (text.includes("copilot")) {
       this.lastCommandTime = now;
       this.handlers.onOpenCopilot?.();
     } else if (text.includes("search") || text.includes("command palette") || text.includes("palette")) {
