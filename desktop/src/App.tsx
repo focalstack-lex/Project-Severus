@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import GraphView, { type VisNode } from "./components/GraphView";
 import TagBar from "./components/TagBar";
-import ActivityRail from "./components/ActivityRail";
+import SidebarNav, { type KnowledgeSubTab, type NavSection } from "./components/SidebarNav";
+import TopHeader from "./components/TopHeader";
+import ContextInspector from "./components/ContextInspector";
 import NotesDrawer from "./components/NotesDrawer";
-import RightWorkbench from "./components/RightWorkbench";
 import JournalCapture from "./components/JournalCapture";
 import AISettingsModal from "./components/AISettingsModal";
 import QuickSwitcherModal from "./components/QuickSwitcherModal";
@@ -23,7 +24,7 @@ import {
   saveNote,
 } from "./lib/tauri";
 import { fade, freshnessOpacity, tagColors } from "./lib/colors";
-import type { GitStatusData, GraphData, NoteContent, NoteMeta } from "./types";
+import type { GitStatusData, GraphData, GraphNode, NoteContent, NoteMeta } from "./types";
 import {
   getVoiceMuted,
   playTimeGreeting,
@@ -45,18 +46,24 @@ export default function App() {
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [notesList, setNotesList] = useState<NoteMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [note, setNote] = useState<NoteContent | null>(null);
+
+  // Navigation & Shell Layout
+  const [activeSection, setActiveSection] = useState<NavSection>("knowledge");
+  const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>("graph");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Inspector & Panes
+  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorTab, setInspectorTab] = useState<"note" | "node" | "copilot">("note");
+  const [zenMode, setZenMode] = useState(false);
 
   // Voice & Acoustic Settings
   const [voiceMuted, setVoiceMutedState] = useState<boolean>(getVoiceMuted);
   const [clapEnabled, setClapEnabledState] = useState<boolean>(getClapEnabled);
   const [voiceCmdEnabled, setVoiceCmdEnabledState] = useState<boolean>(getVoiceCmdEnabled);
-
-  // Layout & Panes
-  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
-  const [workbenchOpen, setWorkbenchOpen] = useState(true);
-  const [workbenchTab, setWorkbenchTab] = useState<"note" | "copilot">("note");
-  const [zenMode, setZenMode] = useState(false);
 
   // Modals
   const [journalOpen, setJournalOpen] = useState(false);
@@ -65,10 +72,8 @@ export default function App() {
   const [groundingOpen, setGroundingOpen] = useState(false);
   const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
 
-  // AI Brain Config
+  // AI Config & Git
   const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
-
-  // Git Telemetry
   const [gitStatus, setGitStatus] = useState<GitStatusData | null>(null);
 
   // Notifications & State
@@ -89,7 +94,7 @@ export default function App() {
       const status = await getGitStatus();
       setGitStatus(status);
     } catch {
-      // Git may be uninitialized or outside PATH; fail silently
+      // Git uninitialized
     }
   }, []);
 
@@ -112,7 +117,7 @@ export default function App() {
     try {
       setNotesList(await listNotes());
     } catch {
-      // keep the previous list; the next watcher tick will retry
+      // retry next tick
     }
   }, []);
 
@@ -162,7 +167,6 @@ export default function App() {
 
     const detector = new ClapDetector({
       onDoubleClap: () => {
-        // Unminimize & restore native window to full focus
         void restoreWindow().catch(() => {});
         void playTimeGreeting();
         showToast("👏 Double-clap detected — Welcome back, Sir!");
@@ -187,8 +191,8 @@ export default function App() {
         showToast("🗣️ 'Hey Severus!' detected — Welcome back, Sir!");
       },
       onOpenCopilot: () => {
-        setWorkbenchOpen(true);
-        setWorkbenchTab("copilot");
+        setInspectorOpen(true);
+        setInspectorTab("copilot");
         void playVoice("nav_copilot_open.mp3");
         showToast("🗣️ Voice Command: Opening Copilot");
       },
@@ -255,14 +259,16 @@ export default function App() {
   const openNote = useCallback(
     async (id: string) => {
       setSelectedId(id);
-      setWorkbenchOpen(true);
-      setWorkbenchTab("note");
+      const foundNode = graph.nodes.find((n) => n.id.toLowerCase() === id.toLowerCase());
+      if (foundNode) setSelectedNode(foundNode);
+
+      setInspectorOpen(true);
+      setInspectorTab("note");
       await refreshSelected(id);
     },
-    [refreshSelected],
+    [graph.nodes, refreshSelected],
   );
 
-  // reload the selected note whenever the watcher signals a change
   useEffect(() => {
     if (refreshTick > 0) void refreshSelected(selectedId);
   }, [refreshTick, selectedId, refreshSelected]);
@@ -348,54 +354,39 @@ export default function App() {
       recordKeyPress();
       const mod = event.ctrlKey || event.metaKey;
 
-      // Quick Switcher (Ctrl+K or Ctrl+P)
       if (mod && (event.key.toLowerCase() === "k" || event.key.toLowerCase() === "p")) {
         event.preventDefault();
         setQuickSwitcherOpen((prev) => {
           if (!prev) void playVoice("nav_quick_switcher.mp3");
           return !prev;
         });
-      }
-      // Quick Journal (Ctrl+J)
-      else if (mod && event.key.toLowerCase() === "j") {
+      } else if (mod && event.key.toLowerCase() === "j") {
         event.preventDefault();
         setJournalOpen(true);
-      }
-      // Toggle Copilot (Ctrl+Shift+A)
-      else if (mod && event.shiftKey && event.key.toLowerCase() === "a") {
+      } else if (mod && event.shiftKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
-        setWorkbenchOpen(true);
-        setWorkbenchTab("copilot");
+        setInspectorOpen(true);
+        setInspectorTab("copilot");
         void playVoice("nav_copilot_open.mp3");
-      }
-      // Toggle Grounding Assembler (Ctrl+Shift+G)
-      else if (mod && event.shiftKey && event.key.toLowerCase() === "g") {
+      } else if (mod && event.shiftKey && event.key.toLowerCase() === "g") {
         event.preventDefault();
         setGroundingOpen((prev) => {
           if (!prev) void playVoice("nav_assembler_open.mp3");
           return !prev;
         });
-      }
-      // Toggle Notes Drawer (Ctrl+B)
-      else if (mod && event.key.toLowerCase() === "b") {
+      } else if (mod && event.key.toLowerCase() === "b") {
         event.preventDefault();
         setNotesDrawerOpen((prev) => {
           if (!prev) void playVoice("nav_notes_drawer.mp3");
           return !prev;
         });
-      }
-      // Toggle Workbench / Inspector (Ctrl+\)
-      else if (mod && event.key === "\\") {
+      } else if (mod && event.key === "\\") {
         event.preventDefault();
-        setWorkbenchOpen((prev) => !prev);
-      }
-      // New Note (Ctrl+Alt+N)
-      else if (mod && event.altKey && event.key.toLowerCase() === "n") {
+        setInspectorOpen((prev) => !prev);
+      } else if (mod && event.altKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         void handleNewNote();
-      }
-      // Exit Zen Mode (Escape)
-      else if (event.key === "Escape" && zenMode) {
+      } else if (event.key === "Escape" && zenMode) {
         event.preventDefault();
         setZenMode(false);
       }
@@ -414,141 +405,98 @@ export default function App() {
     [graph, colors],
   );
 
+  // Dynamic Location Breadcrumb
+  const breadcrumb = useMemo(() => {
+    if (activeSection === "knowledge") {
+      return [
+        "Severus.ai",
+        "Knowledge",
+        knowledgeSubTab === "graph"
+          ? "Graph Map"
+          : knowledgeSubTab === "notes"
+          ? "Notes Vault"
+          : "Tags & Index",
+      ];
+    }
+    if (activeSection === "home") return ["Severus.ai", "Home Overview"];
+    if (activeSection === "work") return ["Severus.ai", "Workspaces & Tasks"];
+    if (activeSection === "ai") return ["Severus.ai", "AI Copilot"];
+    if (activeSection === "personal") return ["Severus.ai", "Personal Journal"];
+    return ["Severus.ai", "System Settings"];
+  }, [activeSection, knowledgeSubTab]);
+
   return (
-    <div className={`app workstation ${zenMode ? "zen-mode" : ""}`}>
-      {/* Top Header Bar */}
+    <div className={`app workstation human-designed ${zenMode ? "zen-mode" : ""}`}>
+      {/* Streamlined Top Header */}
       {!zenMode && (
-        <header className="topbar">
-          <div className="brand-wrap">
-            <img src="/logo.png" alt="Severus" className="topbar-logo-img" />
-            <div className="brand">
-              LEX MATONDO <span className="dim">// SEVERUS.AI</span>
-            </div>
-            <div className="badge-pill live">
-              <span className="live-dot" />
-              <span>KNOWLEDGE ENGINE</span>
-            </div>
-            <div
-              className="badge-pill ai-nav-pill"
-              onClick={() => setAiSettingsOpen(true)}
-              title="Configure AI Provider & Model"
-            >
-              <span className="live-dot" />
-              <span>AI: {aiConfig.model}</span>
-            </div>
-            <div
-              className={`badge-pill ai-nav-pill voice-nav-pill ${voiceMuted ? "muted" : ""}`}
-              onClick={() => {
-                const next = !voiceMuted;
-                setVoiceMutedState(next);
-                setVoiceMuted(next);
-                showToast(next ? "Voice Audio Muted" : "Voice Audio Active");
-              }}
-              title="Toggle Severus Voice Audio"
-            >
-              <span className={`live-dot ${voiceMuted ? "muted" : ""}`} />
-              <span>{voiceMuted ? "🎙️ VOICE: OFF" : "🎙️ VOICE: ON"}</span>
-            </div>
-            <div
-              className={`badge-pill ai-nav-pill voice-nav-pill ${!clapEnabled ? "muted" : ""}`}
-              onClick={() => {
-                const next = !clapEnabled;
-                setClapEnabledState(next);
-                setClapEnabled(next);
-                showToast(next ? "Clap Detector Disabled" : "Clap Detector Active (Greet on 2 Claps)");
-              }}
-              title="Toggle Double-Clap Detection (Greet on 2 Claps)"
-            >
-              <span className={`live-dot ${!clapEnabled ? "muted" : ""}`} />
-              <span>{clapEnabled ? "👏 CLAP: ON" : "👏 CLAP: OFF"}</span>
-            </div>
-            <div
-              className={`badge-pill ai-nav-pill voice-nav-pill ${!voiceCmdEnabled ? "muted" : ""}`}
-              onClick={() => {
-                const next = !voiceCmdEnabled;
-                setVoiceCmdEnabledState(next);
-                setVoiceCmdEnabled(next);
-                showToast(next ? "Voice Commands Disabled" : "Voice Commands Active (Hands-Free)");
-              }}
-              title="Toggle Hands-Free Voice Commands (Say 'Open Copilot', 'Search', 'Zen Mode', etc.)"
-            >
-              <span className={`live-dot ${!voiceCmdEnabled ? "muted" : ""}`} />
-              <span>{voiceCmdEnabled ? "🗣️ VOICE CMD: ON" : "🗣️ VOICE CMD: OFF"}</span>
-            </div>
-          </div>
-
-          {/* Center Quick Search Button */}
-          <button
-            type="button"
-            className="topbar-search-btn"
-            onClick={() => {
-              void playVoice("nav_quick_switcher.mp3");
-              setQuickSwitcherOpen(true);
-            }}
-            title="Open Command Palette (Ctrl+K)"
-          >
-            <span className="search-icon">⌘</span>
-            <span className="search-text">Search notes or commands...</span>
-            <kbd className="search-kbd">CTRL+K</kbd>
-          </button>
-
-          {/* Right Actions */}
-          <div className="topbar-actions">
-            <button
-              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "copilot" ? "active" : ""}`}
-              onClick={() => {
-                if (workbenchOpen && workbenchTab === "copilot") {
-                  setWorkbenchOpen(false);
-                } else {
-                  setWorkbenchOpen(true);
-                  setWorkbenchTab("copilot");
-                }
-              }}
-              title="Toggle Knowledge Copilot (Ctrl+Shift+A)"
-            >
-              ✦ COPILOT
-            </button>
-            <button
-              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "note" ? "active" : ""}`}
-              onClick={() => {
-                if (workbenchOpen && workbenchTab === "note") {
-                  setWorkbenchOpen(false);
-                } else {
-                  setWorkbenchOpen(true);
-                  setWorkbenchTab("note");
-                }
-              }}
-              title="Toggle Note Workspace (Ctrl+\)"
-            >
-              {workbenchOpen ? "HIDE WORKSPACE" : "VIEW WORKSPACE"}
-            </button>
-            <button onClick={() => setJournalOpen(true)} title="Quick capture (Ctrl+J)">
-              + JOURNAL
-            </button>
-          </div>
-        </header>
+        <TopHeader
+          breadcrumb={breadcrumb}
+          onOpenQuickSearch={() => {
+            void playVoice("nav_quick_switcher.mp3");
+            setQuickSwitcherOpen(true);
+          }}
+          onToggleCopilot={() => {
+            if (inspectorOpen && inspectorTab === "copilot") {
+              setInspectorOpen(false);
+            } else {
+              setInspectorOpen(true);
+              setInspectorTab("copilot");
+            }
+          }}
+          onOpenGrounding={() => setGroundingOpen(true)}
+          onOpenNewNote={handleNewNote}
+          onOpenAISettings={() => setAiSettingsOpen(true)}
+          aiConfig={aiConfig}
+          voiceMuted={voiceMuted}
+          onToggleVoiceMuted={() => {
+            const next = !voiceMuted;
+            setVoiceMutedState(next);
+            setVoiceMuted(next);
+            showToast(next ? "Voice Muted" : "Voice Active");
+          }}
+          clapEnabled={clapEnabled}
+          onToggleClapEnabled={() => {
+            const next = !clapEnabled;
+            setClapEnabledState(next);
+            setClapEnabled(next);
+            showToast(next ? "Clap Disabled" : "Clap Active");
+          }}
+          voiceCmdEnabled={voiceCmdEnabled}
+          onToggleVoiceCmdEnabled={() => {
+            const next = !voiceCmdEnabled;
+            setVoiceCmdEnabledState(next);
+            setVoiceCmdEnabled(next);
+            showToast(next ? "Voice Commands Disabled" : "Voice Commands Active");
+          }}
+          gitStatus={gitStatus}
+          copilotActive={inspectorOpen && inspectorTab === "copilot"}
+        />
       )}
 
-      {/* Main Multi-Pane Area */}
+      {/* Main 3-Zone Stage */}
       <main className="main workstation-main">
-        {/* Far Left Activity Rail */}
+        {/* ZONE 1: LEFT PRIMARY NAVIGATION SIDEBAR */}
         {!zenMode && (
-          <ActivityRail
+          <SidebarNav
+            activeSection={activeSection}
+            knowledgeSubTab={knowledgeSubTab}
+            onSelectSection={(sec) => {
+              setActiveSection(sec);
+              if (sec === "ai") {
+                setInspectorOpen(true);
+                setInspectorTab("copilot");
+              }
+            }}
+            onSelectKnowledgeSubTab={setKnowledgeSubTab}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
             notesDrawerOpen={notesDrawerOpen}
             onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
             onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
             onOpenJournal={() => setJournalOpen(true)}
             onOpenGrounding={() => setGroundingOpen(true)}
-            workbenchOpen={workbenchOpen}
-            activeTab={workbenchTab}
-            onSelectTab={(tab) => {
-              setWorkbenchTab(tab);
-              setWorkbenchOpen(true);
-            }}
-            onToggleWorkbench={() => setWorkbenchOpen((prev) => !prev)}
+            onOpenNewNote={handleNewNote}
             onOpenAISettings={() => setAiSettingsOpen(true)}
-            zenMode={zenMode}
-            onToggleZenMode={() => setZenMode((prev) => !prev)}
             gitStatus={gitStatus}
           />
         )}
@@ -565,8 +513,8 @@ export default function App() {
           />
         )}
 
-        {/* Center Stage: 3D Knowledge Graph */}
-        <div className="graph-pane">
+        {/* ZONE 2: CENTER MAIN WORKSPACE STAGE */}
+        <div className="graph-pane center-stage">
           {zenMode && (
             <button
               type="button"
@@ -574,32 +522,83 @@ export default function App() {
               onClick={() => setZenMode(false)}
               title="Exit Zen Fullscreen (Esc)"
             >
-              ✕ EXIT ZEN (ESC)
+              ✕ Exit Zen Mode (Esc)
             </button>
           )}
-          <GraphView
-            nodes={visNodes}
-            links={graph.links}
-            activeTags={activeTags}
-            selectedId={selectedId}
-            onSelectNote={(id) => void openNote(id)}
-          />
-          <TagBar
-            tags={graph.tags}
-            colors={colors}
-            active={activeTags}
-            onToggle={toggleTag}
-            onReset={() => setActiveTags(new Set(graph.tags))}
-          />
+
+          {/* Render Active View */}
+          {activeSection === "home" ? (
+            <div className="home-dashboard">
+              <div className="dashboard-welcome">
+                <h2>Welcome to Severus.ai</h2>
+                <p className="subtitle">
+                  Start with a question, select a concept in the graph, or write a note.
+                </p>
+
+                <div className="dashboard-actions-grid">
+                  <button type="button" className="dash-card" onClick={handleNewNote}>
+                    <span className="card-icon">📝</span>
+                    <h4>Create a Note</h4>
+                    <p>Capture ideas, research, and technical notes</p>
+                  </button>
+                  <button
+                    type="button"
+                    className="dash-card"
+                    onClick={() => {
+                      setActiveSection("knowledge");
+                      setKnowledgeSubTab("graph");
+                    }}
+                  >
+                    <span className="card-icon">🕸️</span>
+                    <h4>Knowledge Map</h4>
+                    <p>Explore relationships and PageRank hubs</p>
+                  </button>
+                  <button
+                    type="button"
+                    className="dash-card"
+                    onClick={() => {
+                      setInspectorOpen(true);
+                      setInspectorTab("copilot");
+                    }}
+                  >
+                    <span className="card-icon">✦</span>
+                    <h4>Ask AI Copilot</h4>
+                    <p>Synthesize concepts from your vault notes</p>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <GraphView
+                nodes={visNodes}
+                links={graph.links}
+                activeTags={activeTags}
+                selectedId={selectedId}
+                onSelectNote={(id) => {
+                  const node = graph.nodes.find((n) => n.id.toLowerCase() === id.toLowerCase());
+                  if (node) setSelectedNode(node);
+                  void openNote(id);
+                }}
+              />
+              <TagBar
+                tags={graph.tags}
+                colors={colors}
+                active={activeTags}
+                onToggle={toggleTag}
+                onReset={() => setActiveTags(new Set(graph.tags))}
+              />
+            </>
+          )}
         </div>
 
-        {/* Right Stage: Unified Tabbed Workbench */}
-        {!zenMode && workbenchOpen && (
-          <RightWorkbench
-            open={workbenchOpen}
-            activeTab={workbenchTab}
-            onSelectTab={setWorkbenchTab}
-            onClose={() => setWorkbenchOpen(false)}
+        {/* ZONE 3: RIGHT CONTEXTUAL INSPECTOR */}
+        {!zenMode && inspectorOpen && (
+          <ContextInspector
+            open={inspectorOpen}
+            onClose={() => setInspectorOpen(false)}
+            activeTab={inspectorTab}
+            onSelectTab={setInspectorTab}
             note={note}
             notesList={notesList}
             onSaveNote={handleSave}
@@ -609,6 +608,9 @@ export default function App() {
             onNewNote={handleNewNote}
             onOpenJournal={() => setJournalOpen(true)}
             onOpenGrounding={() => setGroundingOpen(true)}
+            onOpenNote={(id) => void openNote(id)}
+            selectedNode={selectedNode}
+            graphData={graph}
             aiConfig={aiConfig}
             onOpenAISettings={() => setAiSettingsOpen(true)}
             onSaveAsNote={async (title, content) => {
@@ -617,52 +619,37 @@ export default function App() {
               await loadGraph();
             }}
             onShowToast={showToast}
-            onOpenNote={(id) => void openNote(id)}
           />
         )}
       </main>
 
-      {/* Bottom Status Bar */}
+      {/* Clean System Footer */}
       {!zenMode && (
-        <footer className="status-bar">
+        <footer className="status-bar human-footer">
           <div className="status-bar-left">
-            <div className="status-item">
-              <span>WORKBENCH:</span>{" "}
-              <span className="highlight">
-                {workbenchOpen ? workbenchTab.toUpperCase() : "COLLAPSED"}
-              </span>
-            </div>
-            <div className="status-item">
-              <span>ACTIVE NOTE:</span>{" "}
-              <span className="highlight">
-                {selectedId ? `${selectedId}.md` : "NONE (CLICK NODE / SEARCH)"}
-              </span>
-            </div>
+            <span className="footer-item">
+              Workspace: <strong className="val">Severus</strong>
+            </span>
+            <span className="footer-item">
+              Active Note:{" "}
+              <strong className="val">
+                {selectedId ? `${selectedId}.md` : "None"}
+              </strong>
+            </span>
           </div>
           <div className="status-bar-right">
-            <div className="status-item">
-              <span>GIT:</span>{" "}
-              <span className="highlight">
-                {gitStatus
-                  ? `${gitStatus.branch} (${gitStatus.is_clean ? "clean" : `${gitStatus.modified_count} mod`})`
-                  : "READY"}
-              </span>
-            </div>
-            <div className="status-item">
-              <span>AI MODEL:</span> <span className="highlight">{aiConfig.model}</span>
-            </div>
-            <div className="status-item">
-              <span>GRAPH:</span>{" "}
-              <span className="highlight">
-                {graph.nodes.length} NODES · {graph.links.length} LINKS
-              </span>
-            </div>
-            <div className="status-item">
-              <kbd className="status-kbd">CTRL+SHIFT+G</kbd> <span>GROUNDING</span>
-            </div>
-            <div className="status-item">
-              <kbd className="status-kbd">CTRL+K</kbd> <span>COMMANDS</span>
-            </div>
+            <span className="footer-item">
+              Model: <strong className="val">{aiConfig.model}</strong>
+            </span>
+            <span className="footer-item">
+              Graph:{" "}
+              <strong className="val">
+                {graph.nodes.length} nodes · {graph.links.length} links
+              </strong>
+            </span>
+            <span className="footer-item keyhint">
+              <kbd>⌘K</kbd> Search
+            </span>
           </div>
         </footer>
       )}
@@ -676,8 +663,8 @@ export default function App() {
         onOpenJournal={() => setJournalOpen(true)}
         onOpenAISettings={() => setAiSettingsOpen(true)}
         onOpenCopilot={() => {
-          setWorkbenchOpen(true);
-          setWorkbenchTab("copilot");
+          setInspectorOpen(true);
+          setInspectorTab("copilot");
         }}
         onOpenGrounding={() => setGroundingOpen(true)}
         onClose={() => setQuickSwitcherOpen(false)}
