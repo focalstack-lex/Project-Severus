@@ -17,6 +17,44 @@ const SEVERUS_ECHO_PHRASES = [
   "launched in vs code",
 ];
 
+// Phonetic spelling variations recognized by Web Speech API for "Severus"
+const SEVERUS_NAME_ALIASES = [
+  "severus",
+  "severes",
+  "severe us",
+  "sever us",
+  "server us",
+  "severis",
+  "sevrus",
+  "several us",
+  "severe",
+  "service",
+  "surverus",
+  "soverus",
+  "syverus",
+  "cyrus",
+  "severed",
+];
+
+function matchesWakePhrase(text: string): boolean {
+  if (SEVERUS_NAME_ALIASES.some((alias) => text.includes(alias))) {
+    return true;
+  }
+  if (
+    text.includes("wake up") ||
+    text.includes("open up") ||
+    text.includes("hello severus") ||
+    text.includes("hi severus")
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function matchesKeywords(text: string, keywords: string[]): boolean {
+  return keywords.some((kw) => text.includes(kw));
+}
+
 /**
  * 100% Free Hands-Free Voice Command Engine using native Web Speech API.
  */
@@ -112,6 +150,7 @@ export class VoiceCommandListener {
         if (lastIndex < 0) return;
         const transcript = event.results[lastIndex]?.[0]?.transcript?.trim().toLowerCase();
         if (transcript) {
+          console.log(`[VoiceCommandListener] Speech recognized transcript: "${transcript}"`);
           this.processCommand(transcript);
         }
       };
@@ -156,8 +195,8 @@ export class VoiceCommandListener {
   }
 
   private processCommand(text: string): void {
-    // 1. Check if Severus is currently speaking or spoke recently (<1.8s)
-    if (isVoiceSpeaking() || getTimeSinceVoicePlayback() < 1800) {
+    // 1. Check if Severus is currently speaking or spoke recently (<1.0s)
+    if (isVoiceSpeaking() || getTimeSinceVoicePlayback() < 1000) {
       return;
     }
 
@@ -166,44 +205,39 @@ export class VoiceCommandListener {
       return;
     }
 
-    // 3. Command execution cooldown buffer (1.6s)
+    // 3. Command execution cooldown buffer (1.2s)
     const now = Date.now();
-    if (now - this.lastCommandTime < 1600) {
+    if (now - this.lastCommandTime < 1200) {
       return;
     }
 
-    console.log(`[VoiceCommandListener] Executing voice command for: "${text}"`);
+    console.log(`[VoiceCommandListener] Matched voice command for: "${text}"`);
 
-    if (
-      text.includes("hey severus") ||
-      text.includes("severus") ||
-      text.includes("wake up severus") ||
-      text.includes("wake severus")
-    ) {
+    if (matchesWakePhrase(text)) {
       this.lastCommandTime = now;
       this.handlers.onWakePhrase?.();
-    } else if (text.includes("copilot")) {
+    } else if (matchesKeywords(text, ["copilot", "co pilot", "co-pilot", "assistant"])) {
       this.lastCommandTime = now;
       this.handlers.onOpenCopilot?.();
-    } else if (text.includes("search") || text.includes("command palette") || text.includes("palette")) {
+    } else if (matchesKeywords(text, ["search", "palette", "command", "find", "lookup"])) {
       this.lastCommandTime = now;
       this.handlers.onOpenSearch?.();
-    } else if (text.includes("grounding") || text.includes("assembler")) {
+    } else if (matchesKeywords(text, ["grounding", "assembler", "context", "agent"])) {
       this.lastCommandTime = now;
       this.handlers.onOpenGrounding?.();
-    } else if (text.includes("notes") || text.includes("explorer") || text.includes("drawer")) {
+    } else if (matchesKeywords(text, ["notes", "explorer", "drawer", "sidebar", "vault"])) {
       this.lastCommandTime = now;
       this.handlers.onOpenNotes?.();
-    } else if (text.includes("new note") || text.includes("create note")) {
+    } else if (matchesKeywords(text, ["new note", "create note", "add note", "make note"])) {
       this.lastCommandTime = now;
       this.handlers.onNewNote?.();
-    } else if (text.includes("journal") || text.includes("quick journal") || text.includes("log entry")) {
+    } else if (matchesKeywords(text, ["journal", "quick journal", "log", "capture"])) {
       this.lastCommandTime = now;
       this.handlers.onJournal?.();
-    } else if (text.includes("zen mode") || text.includes("zen") || text.includes("focus mode") || text.includes("full screen")) {
+    } else if (matchesKeywords(text, ["zen", "focus", "full screen", "fullscreen"])) {
       this.lastCommandTime = now;
       this.handlers.onZenMode?.();
-    } else if (text.includes("close") || text.includes("cancel") || text.includes("exit")) {
+    } else if (matchesKeywords(text, ["close", "cancel", "exit", "hide", "dismiss"])) {
       this.lastCommandTime = now;
       this.handlers.onClose?.();
     }
