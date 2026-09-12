@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import GraphView, { type VisNode } from "./components/GraphView";
 import TagBar from "./components/TagBar";
-import NoteEditor from "./components/NoteEditor";
+import ActivityRail from "./components/ActivityRail";
+import NotesDrawer from "./components/NotesDrawer";
+import RightWorkbench from "./components/RightWorkbench";
 import JournalCapture from "./components/JournalCapture";
 import AISettingsModal from "./components/AISettingsModal";
-import AICopilot from "./components/AICopilot";
+import QuickSwitcherModal from "./components/QuickSwitcherModal";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import {
   appendJournal,
@@ -26,11 +28,22 @@ export default function App() {
   const [notesList, setNotesList] = useState<NoteMeta[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState<NoteContent | null>(null);
-  const [editorOpen, setEditorOpen] = useState(true);
+
+  // Layout & Panes
+  const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
+  const [workbenchOpen, setWorkbenchOpen] = useState(true);
+  const [workbenchTab, setWorkbenchTab] = useState<"note" | "copilot">("note");
+  const [zenMode, setZenMode] = useState(false);
+
+  // Modals
   const [journalOpen, setJournalOpen] = useState(false);
-  const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
-  const [copilotOpen, setCopilotOpen] = useState(false);
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+
+  // AI Brain Config
+  const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
+
+  // Notifications & State
   const [toast, setToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -100,7 +113,8 @@ export default function App() {
   const openNote = useCallback(
     async (id: string) => {
       setSelectedId(id);
-      setEditorOpen(true);
+      setWorkbenchOpen(true);
+      setWorkbenchTab("note");
       await refreshSelected(id);
     },
     [refreshSelected],
@@ -115,10 +129,24 @@ export default function App() {
     async (id: string, content: string) => {
       await saveNote(id, content);
       showToast(`Saved "${id}"`);
-      // the watcher emits notes-changed; graph and note refresh automatically
     },
     [showToast],
   );
+
+  const handleNewNote = useCallback(async () => {
+    const rawName = window.prompt("Enter new note name:");
+    if (!rawName || !rawName.trim()) return;
+    const trimmed = rawName.trim().replace(/\.md$/, "");
+    try {
+      await saveNote(trimmed, `# ${trimmed}\n\n`);
+      await loadNotesList();
+      await loadGraph();
+      await openNote(trimmed);
+      showToast(`Created note "${trimmed}"`);
+    } catch (err) {
+      showToast(`Could not create note: ${String(err)}`);
+    }
+  }, [loadNotesList, loadGraph, openNote, showToast]);
 
   const handleOpenLink = useCallback(
     async (name: string) => {
@@ -164,20 +192,46 @@ export default function App() {
     [showToast],
   );
 
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "j") {
+      const mod = event.ctrlKey || event.metaKey;
+
+      // Quick Switcher (Ctrl+K or Ctrl+P)
+      if (mod && (event.key.toLowerCase() === "k" || event.key.toLowerCase() === "p")) {
+        event.preventDefault();
+        setQuickSwitcherOpen((prev) => !prev);
+      }
+      // Quick Journal (Ctrl+J)
+      else if (mod && event.key.toLowerCase() === "j") {
         event.preventDefault();
         setJournalOpen(true);
       }
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "a") {
+      // Toggle Copilot (Ctrl+Shift+A)
+      else if (mod && event.shiftKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
-        setCopilotOpen((open) => !open);
+        setWorkbenchOpen(true);
+        setWorkbenchTab("copilot");
+      }
+      // Toggle Notes Drawer (Ctrl+B)
+      else if (mod && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        setNotesDrawerOpen((prev) => !prev);
+      }
+      // Toggle Workbench / Inspector (Ctrl+\)
+      else if (mod && event.key === "\\") {
+        event.preventDefault();
+        setWorkbenchOpen((prev) => !prev);
+      }
+      // New Note (Ctrl+Alt+N)
+      else if (mod && event.altKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        void handleNewNote();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [handleNewNote]);
 
   const colors = useMemo(() => tagColors(graph.tags), [graph.tags]);
   const visNodes = useMemo<VisNode[]>(
@@ -190,59 +244,112 @@ export default function App() {
   );
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand-wrap">
-          <div className="brand">
-            LEX MATONDO <span className="dim">// SEVERUS</span>
+    <div className={`app workstation ${zenMode ? "zen-mode" : ""}`}>
+      {/* Top Header Bar */}
+      {!zenMode && (
+        <header className="topbar">
+          <div className="brand-wrap">
+            <div className="brand">
+              LEX MATONDO <span className="dim">// SEVERUS</span>
+            </div>
+            <div className="badge-pill live">
+              <span className="live-dot" />
+              <span>KNOWLEDGE ENGINE</span>
+            </div>
+            <div
+              className="badge-pill ai-nav-pill"
+              onClick={() => setAiSettingsOpen(true)}
+              title="Configure AI Provider & Model"
+            >
+              <span className="live-dot" />
+              <span>AI: {aiConfig.model}</span>
+            </div>
           </div>
-          <div className="badge-pill live">
-            <span className="live-dot" />
-            <span>KNOWLEDGE ENGINE</span>
-          </div>
-          <div
-            className="badge-pill ai-nav-pill"
-            onClick={() => setAiSettingsOpen(true)}
-            title="Click to configure custom AI Provider & Model"
-          >
-            <span className="live-dot" />
-            <span>AI: {aiConfig.model}</span>
-          </div>
-        </div>
 
-        <div className="topbar-center">
-          <div className="metrics-pill">
-            <strong>{graph.nodes.length}</strong> NODES · <strong>{graph.links.length}</strong> CONNECTIONS
+          {/* Center Quick Search Button */}
+          <button
+            type="button"
+            className="topbar-search-btn"
+            onClick={() => setQuickSwitcherOpen(true)}
+            title="Open Command Palette (Ctrl+K)"
+          >
+            <span className="search-icon">⌘</span>
+            <span className="search-text">Search notes or commands...</span>
+            <kbd className="search-kbd">CTRL+K</kbd>
+          </button>
+
+          {/* Right Actions */}
+          <div className="topbar-actions">
+            <button
+              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "copilot" ? "accent" : ""}`}
+              onClick={() => {
+                if (workbenchOpen && workbenchTab === "copilot") {
+                  setWorkbenchOpen(false);
+                } else {
+                  setWorkbenchOpen(true);
+                  setWorkbenchTab("copilot");
+                }
+              }}
+              title="Toggle Knowledge Copilot (Ctrl+Shift+A)"
+            >
+              ✦ COPILOT
+            </button>
+            <button
+              className={`topbar-tool-btn ${workbenchOpen && workbenchTab === "note" ? "accent" : ""}`}
+              onClick={() => {
+                if (workbenchOpen && workbenchTab === "note") {
+                  setWorkbenchOpen(false);
+                } else {
+                  setWorkbenchOpen(true);
+                  setWorkbenchTab("note");
+                }
+              }}
+              title="Toggle Note Workspace (Ctrl+\)"
+            >
+              {workbenchOpen ? "HIDE WORKSPACE" : "VIEW WORKSPACE"}
+            </button>
+            <button onClick={() => setJournalOpen(true)} title="Quick capture (Ctrl+J)">
+              + JOURNAL
+            </button>
           </div>
-        </div>
+        </header>
+      )}
 
-        <div className="topbar-actions">
-          <button
-            className={copilotOpen ? "accent" : ""}
-            onClick={() => setCopilotOpen((open) => !open)}
-            title="Toggle Knowledge Copilot (Ctrl+Shift+A)"
-          >
-            ✦ COPILOT
-          </button>
-          <button
-            onClick={() => setAiSettingsOpen(true)}
-            title="Configure AI Provider & Model"
-          >
-            ⚙ AI BRAIN
-          </button>
-          <button onClick={() => setJournalOpen(true)} title="Quick capture (Ctrl+J)">
-            + JOURNAL [CTRL+J]
-          </button>
-          <button
-            onClick={() => setEditorOpen((open) => !open)}
-            title="Show or hide the workspace note panel"
-          >
-            {editorOpen ? "HIDE WORKSPACE" : "VIEW WORKSPACE"}
-          </button>
-        </div>
-      </header>
+      {/* Main Multi-Pane Area */}
+      <main className="main workstation-main">
+        {/* Far Left Activity Rail */}
+        {!zenMode && (
+          <ActivityRail
+            notesDrawerOpen={notesDrawerOpen}
+            onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
+            onOpenQuickSwitcher={() => setQuickSwitcherOpen(true)}
+            onOpenJournal={() => setJournalOpen(true)}
+            workbenchOpen={workbenchOpen}
+            activeTab={workbenchTab}
+            onSelectTab={(tab) => {
+              setWorkbenchTab(tab);
+              setWorkbenchOpen(true);
+            }}
+            onToggleWorkbench={() => setWorkbenchOpen((prev) => !prev)}
+            onOpenAISettings={() => setAiSettingsOpen(true)}
+            zenMode={zenMode}
+            onToggleZenMode={() => setZenMode((prev) => !prev)}
+          />
+        )}
 
-      <main className="main">
+        {/* Slide-out Notes Drawer */}
+        {!zenMode && notesDrawerOpen && (
+          <NotesDrawer
+            open={notesDrawerOpen}
+            notes={notesList}
+            selectedId={selectedId}
+            onSelectNote={(id) => void openNote(id)}
+            onNewNote={() => void handleNewNote()}
+            onClose={() => setNotesDrawerOpen(false)}
+          />
+        )}
+
+        {/* Center Stage: 3D Knowledge Graph */}
         <div className="graph-pane">
           <GraphView
             nodes={visNodes}
@@ -257,51 +364,72 @@ export default function App() {
             onToggle={toggleTag}
           />
         </div>
-        {editorOpen && (
-          <NoteEditor
+
+        {/* Right Stage: Unified Tabbed Workbench */}
+        {!zenMode && workbenchOpen && (
+          <RightWorkbench
+            open={workbenchOpen}
+            activeTab={workbenchTab}
+            onSelectTab={setWorkbenchTab}
+            onClose={() => setWorkbenchOpen(false)}
             note={note}
-            onSave={handleSave}
+            onSaveNote={handleSave}
             onOpenLink={(name) => void handleOpenLink(name)}
             onToggleTag={toggleTag}
-            onClose={() => setEditorOpen(false)}
-          />
-        )}
-        {copilotOpen && (
-          <AICopilot
-            open={copilotOpen}
-            config={aiConfig}
-            activeNote={note}
-            onOpenSettings={() => setAiSettingsOpen(true)}
-            onClose={() => setCopilotOpen(false)}
+            aiConfig={aiConfig}
+            onOpenAISettings={() => setAiSettingsOpen(true)}
           />
         )}
       </main>
 
-      <footer className="status-bar">
-        <div className="status-bar-left">
-          <div className="status-item">
-            <span>MODE:</span> <span className="highlight">DESKTOP NATIVE (TAURI V2)</span>
+      {/* Bottom Status Bar */}
+      {!zenMode && (
+        <footer className="status-bar">
+          <div className="status-bar-left">
+            <div className="status-item">
+              <span>WORKBENCH:</span>{" "}
+              <span className="highlight">
+                {workbenchOpen ? workbenchTab.toUpperCase() : "COLLAPSED"}
+              </span>
+            </div>
+            <div className="status-item">
+              <span>ACTIVE NOTE:</span>{" "}
+              <span className="highlight">
+                {selectedId ? `${selectedId}.md` : "NONE (CLICK NODE / SEARCH)"}
+              </span>
+            </div>
           </div>
-          <div className="status-item">
-            <span>ACTIVE NOTE:</span>{" "}
-            <span className="highlight">{selectedId ? `${selectedId}.md` : "NONE (CLICK GRAPH NODE)"}</span>
+          <div className="status-bar-right">
+            <div className="status-item">
+              <span>AI MODEL:</span> <span className="highlight">{aiConfig.model}</span>
+            </div>
+            <div className="status-item">
+              <span>GRAPH:</span>{" "}
+              <span className="highlight">
+                {graph.nodes.length} NODES · {graph.links.length} LINKS
+              </span>
+            </div>
+            <div className="status-item">
+              <kbd className="status-kbd">CTRL+K</kbd> <span>COMMANDS</span>
+            </div>
           </div>
-        </div>
-        <div className="status-bar-right">
-          <div className="status-item">
-            <span>AI MODEL:</span> <span className="highlight">{aiConfig.model}</span>
-          </div>
-          <div className="status-item">
-            <span>FILTER:</span>{" "}
-            <span className="highlight">
-              {activeTags.size === graph.tags.length ? "ALL TAGS ACTIVE" : `${activeTags.size}/${graph.tags.length} TAGS`}
-            </span>
-          </div>
-          <div className="status-item">
-            <span>ENGINEERING &amp; SYSTEMS</span>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      )}
+
+      {/* Modals & Command Palettes */}
+      <QuickSwitcherModal
+        open={quickSwitcherOpen}
+        notes={notesList}
+        onSelectNote={(id) => void openNote(id)}
+        onNewNote={() => void handleNewNote()}
+        onOpenJournal={() => setJournalOpen(true)}
+        onOpenAISettings={() => setAiSettingsOpen(true)}
+        onOpenCopilot={() => {
+          setWorkbenchOpen(true);
+          setWorkbenchTab("copilot");
+        }}
+        onClose={() => setQuickSwitcherOpen(false)}
+      />
 
       <JournalCapture
         open={journalOpen}
