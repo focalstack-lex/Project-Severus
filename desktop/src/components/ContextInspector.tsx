@@ -1,5 +1,6 @@
 import type { AIConfig } from "../lib/ai";
 import type { GraphData, GraphNode, NoteContent, NoteMeta } from "../types";
+import Icon from "./Icon";
 import NoteEditor from "./NoteEditor";
 import AICopilot from "./AICopilot";
 
@@ -94,8 +95,8 @@ export default function ContextInspector({
           </button>
         </div>
 
-        <button type="button" className="inspector-close-btn" onClick={onClose} title="Close Inspector">
-          ✕
+        <button type="button" className="inspector-close-btn" onClick={onClose} title="Close inspector" aria-label="Close inspector">
+          <Icon name="close" size={13} />
         </button>
       </div>
 
@@ -120,12 +121,14 @@ export default function ContextInspector({
               />
             ) : (
               <div className="inspector-empty">
-                <span className="empty-icon">📄</span>
+                <span className="empty-icon">
+                  <Icon name="file" size={26} />
+                </span>
                 <h4>No Note Selected</h4>
-                <p>Select a note from the list or graph map to inspect and edit details.</p>
+                <p>Select a note from the graph map or the notes list to inspect and edit it.</p>
                 <div className="empty-actions">
                   <button type="button" className="btn-secondary" onClick={onNewNote}>
-                    + Create New Note
+                    <Icon name="plus" size={12} /> Create New Note
                   </button>
                 </div>
               </div>
@@ -153,7 +156,9 @@ export default function ContextInspector({
                 </div>
                 <div className="meta-item">
                   <span className="meta-label">Freshness</span>
-                  <span className="meta-val">{selectedNode.ageDays} days ago</span>
+                  <span className="meta-val">
+                    {selectedNode.ageDays === 0 ? "today" : `${selectedNode.ageDays}d`}
+                  </span>
                 </div>
               </div>
 
@@ -192,14 +197,14 @@ export default function ContextInspector({
                     className="context-btn"
                     onClick={() => onOpenNote(selectedNode.id)}
                   >
-                    📖 Open Full Note
+                    <Icon name="book" size={14} /> Open Full Note
                   </button>
                   <button
                     type="button"
                     className="context-btn"
                     onClick={() => onOpenInEditor?.(selectedNode.id)}
                   >
-                    ↗ Launch in VS Code
+                    <Icon name="external" size={14} /> Launch in VS Code
                   </button>
                   <button
                     type="button"
@@ -209,7 +214,7 @@ export default function ContextInspector({
                       onAskCopilotQuery?.(`Explain the concept of [[${selectedNode.title}]] and how it connects to other notes.`);
                     }}
                   >
-                    ✦ Ask Copilot about this concept
+                    <Icon name="spark" size={14} /> Ask Copilot about this concept
                   </button>
                 </div>
               </div>

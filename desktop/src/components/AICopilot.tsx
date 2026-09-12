@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { type AIConfig, type ChatMessage, sendAIChat } from "../lib/ai";
 import { getWorkspaceContext } from "../lib/tauri";
 import type { NoteContent, WorkspaceContext, ChatSession } from "../types";
+import Icon from "./Icon";
 import MarkdownPreview from "./MarkdownPreview";
 
 interface Props {
@@ -379,11 +380,11 @@ export default function AICopilot({
           <button onClick={handleClearCurrentSession} title="Clear current conversation messages">
             Clear
           </button>
-          <button onClick={onOpenSettings} title="Configure AI Provider">
-            ⚙ Settings
+          <button onClick={onOpenSettings} title="Configure AI provider">
+            <Icon name="gear" size={12} /> Settings
           </button>
-          <button className="close-btn" onClick={onClose} title="Close Copilot">
-            ✕
+          <button className="close-btn" onClick={onClose} title="Close Copilot" aria-label="Close Copilot">
+            <Icon name="close" size={13} />
           </button>
         </div>
       </div>
@@ -395,7 +396,9 @@ export default function AICopilot({
           onClick={() => setShowHistory((prev) => !prev)}
           title="Click to view conversation history"
         >
-          <span className="session-icon">💬</span>
+          <span className="session-icon">
+            <Icon name="message" size={12} />
+          </span>
           {isEditingTitle ? (
             <input
               type="text"
@@ -423,7 +426,12 @@ export default function AICopilot({
             </span>
           )}
           <span className="session-count">({activeSession.messages.length})</span>
-          <span className="session-arrow">{showHistory ? "▲" : "▼"}</span>
+          <span
+            className="session-arrow"
+            style={{ transform: showHistory ? "rotate(180deg)" : "none", transition: "transform 140ms var(--ease-out)" }}
+          >
+            <Icon name="chevron-down" size={11} />
+          </span>
         </div>
 
         <div className="copilot-session-tools">
@@ -432,8 +440,9 @@ export default function AICopilot({
             className="session-tool-btn"
             onClick={handleStartRename}
             title="Rename active chat"
+            aria-label="Rename active chat"
           >
-            ✎
+            <Icon name="pen" size={11} />
           </button>
           <button
             type="button"
@@ -441,7 +450,7 @@ export default function AICopilot({
             onClick={handleNewChat}
             title="Start new conversation"
           >
-            + New
+            <Icon name="plus" size={11} /> New
           </button>
           <button
             type="button"
@@ -449,7 +458,7 @@ export default function AICopilot({
             onClick={() => setShowHistory((prev) => !prev)}
             title="Toggle conversation histories"
           >
-            🕒 History ({sessions.length})
+            <Icon name="clock" size={11} /> History ({sessions.length})
           </button>
         </div>
       </div>
@@ -481,7 +490,7 @@ export default function AICopilot({
                   }}
                 >
                   <div className="history-item-left">
-                    <span className="history-item-dot">{isActive ? "●" : "○"}</span>
+                    <span className={`history-item-dot ${isActive ? "on" : ""}`} />
                     <div className="history-item-info">
                       <span className="history-item-title" title={s.title}>{s.title}</span>
                       <span className="history-item-meta">
@@ -493,12 +502,13 @@ export default function AICopilot({
                     type="button"
                     className="history-delete-btn"
                     title="Delete conversation"
+                    aria-label="Delete conversation"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDeleteSession(s.id);
                     }}
                   >
-                    ✕
+                    <Icon name="close" size={11} />
                   </button>
                 </div>
               );
@@ -519,25 +529,25 @@ export default function AICopilot({
           }
           title="Query active workspace, connected coding IDEs, and today's tasks"
         >
-          ✦ WORKSPACES &amp; TASKS
+          Workspaces &amp; Tasks
         </button>
         <button
           type="button"
           disabled={!activeNote || loading}
           onClick={() => handleSend(`Summarize the core concepts of this note in 3 concise bullet points.`)}
         >
-          ✦ SUMMARIZE NOTE
+          Summarize Note
         </button>
         <button
           type="button"
           disabled={!activeNote || loading}
           onClick={() =>
             handleSend(
-              `Based on this note, suggest 3 relevant [[wiki-links]] and 2 #tags to connect it to other knowledge hubs.`
+              `Based on this note, suggest 3 relevant [[wiki-links]] and 2 #tags to connect it to other knowledge hubs.`,
             )
           }
         >
-          ✦ SUGGEST LINKS
+          Suggest Links
         </button>
       </div>
 
@@ -545,10 +555,13 @@ export default function AICopilot({
       <div className="copilot-messages">
         {messages.length === 0 && (
           <div className="copilot-empty">
-            <div className="empty-icon">⌘</div>
-            <div>KNOWLEDGE COPILOT ACTIVE</div>
+            <span className="empty-icon">
+              <Icon name="spark" size={24} />
+            </span>
+            <div>Knowledge Copilot ready</div>
             <span className="hint">
-              Ask questions about your notes, brainstorm connections, or configure your local Ollama / custom provider.
+              Ask questions about your notes, brainstorm connections, or configure your local
+              Ollama / custom provider.
             </span>
           </div>
         )}
@@ -578,7 +591,7 @@ export default function AICopilot({
                   onClick={() => void handleSaveMessageAsNote(m.content)}
                   title="Synthesize this response directly into a new Second Brain note"
                 >
-                  ✦ SYNTHESIZE TO NOTE
+                  <Icon name="spark" size={11} /> Synthesize to Note
                 </button>
                 <button
                   type="button"
@@ -589,7 +602,7 @@ export default function AICopilot({
                   }}
                   title="Copy response markdown"
                 >
-                  COPY
+                  <Icon name="copy" size={11} /> Copy
                 </button>
               </div>
             )}
@@ -636,7 +649,7 @@ export default function AICopilot({
           disabled={loading || !input.trim()}
           onClick={() => void handleSend()}
         >
-          Send →
+          Send <Icon name="send" size={12} />
         </button>
       </div>
     </aside>

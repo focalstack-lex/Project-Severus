@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { NoteContent, NoteMeta } from "../types";
+import Icon from "./Icon";
 import MarkdownPreview from "./MarkdownPreview";
 
 interface Props {
@@ -26,7 +27,6 @@ export default function NoteEditor({
   onSave,
   onOpenLink,
   onToggleTag,
-  onClose,
   onOpenInEditor,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -86,7 +86,7 @@ export default function NoteEditor({
       <div className="editor-header">
         <div className="editor-title-wrap">
           <span className="editor-section-num">Active Note</span>
-          <div className="editor-title">{note ? `${note.title}.md` : "No note selected"}</div>
+          <div className="editor-title">{note ? note.title : "No note selected"}</div>
         </div>
         <div className="editor-actions">
           {note && (
@@ -97,15 +97,23 @@ export default function NoteEditor({
                   onClick={() => void onOpenInEditor(note.id)}
                   title="Open this note in VS Code / IDE"
                 >
-                  VS Code ↗
+                  <Icon name="external" size={12} /> VS Code
                 </button>
               )}
               <button onClick={() => setPreview(!preview)} title="Toggle markdown preview">
-                {preview ? "Edit" : "Preview"}
+                {preview ? (
+                  <>
+                    <Icon name="pen" size={12} /> Edit
+                  </>
+                ) : (
+                  <>
+                    <Icon name="eye" size={12} /> Preview
+                  </>
+                )}
               </button>
               {dirty && (
                 <button onClick={reloadFromDisk} title="Discard local edits and reload from disk">
-                  Revert
+                  <Icon name="history-undo" size={12} /> Revert
                 </button>
               )}
               <button
@@ -114,13 +122,10 @@ export default function NoteEditor({
                 onClick={() => void save()}
                 title="Save (Ctrl+S)"
               >
-                {saving ? "SAVING…" : "SAVE"}
+                <Icon name="save" size={12} /> {saving ? "Saving…" : "Save"}
               </button>
             </>
           )}
-          <button className="close-btn" onClick={onClose} title="Close workspace note panel">
-            ✕
-          </button>
         </div>
       </div>
       {banner && <div className="editor-banner">{banner}</div>}
@@ -128,12 +133,15 @@ export default function NoteEditor({
       {!note ? (
         <div className="vault-dashboard">
           <div className="vault-dash-hero">
-            <div className="vault-dash-icon">⬡</div>
+            <span className="vault-dash-icon">
+              <Icon name="hexagon" size={26} />
+            </span>
             <div className="vault-dash-header">
               <span className="vault-dash-sub">Second Brain</span>
               <h2 className="vault-dash-title">Knowledge Vault</h2>
               <p className="vault-dash-desc">
-                Select any concept from the graph map, or access quick actions and indexed notes below.
+                Select any concept from the graph map, or use the quick actions and indexed
+                notes below.
               </p>
             </div>
           </div>
@@ -146,7 +154,7 @@ export default function NoteEditor({
                 onClick={onNewNote}
                 title="Create a new note in second-brain"
               >
-                <span>+</span> New Note
+                <Icon name="plus" size={12} /> New Note
               </button>
             )}
             {onOpenGrounding && (
@@ -156,7 +164,7 @@ export default function NoteEditor({
                 onClick={onOpenGrounding}
                 title="Assemble grounding context (Ctrl+Shift+G)"
               >
-                <span>⚡</span> Grounding
+                <Icon name="layers" size={12} /> Grounding
               </button>
             )}
             {onOpenJournal && (
@@ -166,7 +174,7 @@ export default function NoteEditor({
                 onClick={onOpenJournal}
                 title="Capture quick journal entry (Ctrl+J)"
               >
-                <span>✎</span> Journal
+                <Icon name="pen" size={12} /> Journal
               </button>
             )}
           </div>
@@ -192,7 +200,9 @@ export default function NoteEditor({
                         </span>
                       ))}
                     </div>
-                    <span className="vault-note-jump">Open ↗</span>
+                    <span className="vault-note-jump">
+                      <Icon name="external" size={12} />
+                    </span>
                   </div>
                 ))}
               </div>

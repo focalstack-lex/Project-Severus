@@ -32,7 +32,7 @@ Severus/
 ## The Native Desktop App (`desktop/`)
 
 ### Features
-- **Monochrome Obsidian Design:** Deep `#050505` background, `Inter` and `JetBrains Mono` typography, and frosted glass pill badges.
+- **Monochrome Obsidian Design:** Deep `#050505` background, `Geist` and `JetBrains Mono` typography, drawn SVG icon set, and a solid floating capsule top bar.
 - **Interactive 3D WebGL Graph:** Real-time visual network powered by Three.js / `3d-force-graph` with dynamic node sizing by PageRank centrality and opacity fading by note age.
 - **Dual-Pane Note Workspace:** Markdown note viewer/editor with live `[[wiki-links]]` navigation and `#tag` indexing.
 - **Sub-Millisecond Engine:** Rust-native graph computation and debounced filesystem watcher (`notify` crate) triggering zero-latency updates.

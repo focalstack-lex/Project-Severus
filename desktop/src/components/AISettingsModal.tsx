@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { type AIConfig, testAIConnection } from "../lib/ai";
+import Icon from "./Icon";
 
 interface Props {
   open: boolean;
@@ -93,11 +94,10 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
       <div className="ai-settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="ai-modal-header">
           <div className="ai-modal-title-wrap">
-            <span className="ai-modal-section">04 / CONFIGURATION</span>
-            <h2 className="ai-modal-title">AI BRAIN &amp; MODEL PROVIDER</h2>
+            <h2 className="ai-modal-title">AI Brain &amp; Model Provider</h2>
           </div>
-          <button className="close-btn" onClick={onClose} title="Close settings">
-            ✕
+          <button className="close-btn" onClick={onClose} title="Close settings" aria-label="Close settings">
+            <Icon name="close" size={13} />
           </button>
         </div>
 
@@ -191,7 +191,13 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             disabled={testing}
             onClick={handleTest}
           >
-            {testing ? "TESTING…" : "⚡ TEST CONNECTION"}
+            {testing ? (
+              "Testing…"
+            ) : (
+              <>
+                <Icon name="activity" size={12} /> Test Connection
+              </>
+            )}
           </button>
           <div className="ai-footer-right">
             <button type="button" onClick={onClose}>

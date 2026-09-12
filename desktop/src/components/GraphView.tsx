@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph3D from "3d-force-graph";
+import Icon from "./Icon";
 import type { GraphLink } from "../types";
 
 export interface VisNode {
@@ -23,6 +24,90 @@ interface Props {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type GraphInstance = any;
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * Deterministic force-directed layout (repulsion + link springs + centering),
+ * seeded on a ring so the same vault always produces the same map. Computed
+ * over ALL nodes so toggling tag filters never reshuffles the layout.
+ */
+function computeLayout(nodes: VisNode[], links: GraphLink[]): Map<string, Point> {
+  const positions = new Map<string, Point>();
+  const n = nodes.length;
+  if (n === 0) return positions;
+
+  nodes.forEach((node, idx) => {
+    const angle = (idx / n) * 2 * Math.PI;
+    positions.set(node.id, {
+      x: Math.cos(angle) * 180,
+      y: Math.sin(angle) * 180,
+    });
+  });
+
+  const REPULSION = 130 * 130;
+  const REST_LENGTH = 155;
+  const SPRING = 0.018;
+  const GRAVITY = 0.004;
+  const ITERATIONS = 160;
+
+  const linkedPairs = links
+    .map((l) => ({
+      a: positions.get(typeof l.source === "string" ? l.source : (l.source as any)?.id),
+      b: positions.get(typeof l.target === "string" ? l.target : (l.target as any)?.id),
+    }))
+    .filter((p): p is { a: Point; b: Point } => Boolean(p.a && p.b));
+
+  for (let iter = 0; iter < ITERATIONS; iter += 1) {
+    const cooling = 1 - iter / ITERATIONS;
+
+    for (let i = 0; i < n; i += 1) {
+      const a = positions.get(nodes[i].id)!;
+      for (let j = i + 1; j < n; j += 1) {
+        const b = positions.get(nodes[j].id)!;
+        let dx = a.x - b.x;
+        let dy = a.y - b.y;
+        let dist = Math.hypot(dx, dy);
+        if (dist < 1) {
+          dx = (i - j) * 0.7 + 0.3;
+          dy = (j - i) * 0.5 + 0.3;
+          dist = Math.hypot(dx, dy);
+        }
+        const force = REPULSION / (dist * dist);
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        a.x += fx * cooling;
+        a.y += fy * cooling;
+        b.x -= fx * cooling;
+        b.y -= fy * cooling;
+      }
+    }
+
+    for (const pair of linkedPairs) {
+      const dx = pair.b.x - pair.a.x;
+      const dy = pair.b.y - pair.a.y;
+      const dist = Math.max(1, Math.hypot(dx, dy));
+      const force = (dist - REST_LENGTH) * SPRING;
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+      pair.a.x += fx * cooling;
+      pair.a.y += fy * cooling;
+      pair.b.x -= fx * cooling;
+      pair.b.y -= fy * cooling;
+    }
+
+    for (const node of nodes) {
+      const p = positions.get(node.id)!;
+      p.x -= p.x * GRAVITY;
+      p.y -= p.y * GRAVITY;
+    }
+  }
+
+  return positions;
+}
 
 export default function GraphView({
   nodes,
@@ -49,6 +134,17 @@ export default function GraphView({
     tagsByIdRef.current = new Map(nodes.map((n) => [n.id, n.tags]));
   }, [nodes]);
 
+  const layout = useMemo(() => computeLayout(nodes, links), [nodes, links]);
+
+  const tagSwatches = useMemo(() => {
+    const byTag = new Map<string, string>();
+    for (const node of nodes) {
+      const tag = node.tags[0];
+      if (tag && !byTag.has(tag)) byTag.set(tag, node.color);
+    }
+    return Array.from(byTag.entries()).slice(0, 6);
+  }, [nodes]);
+
   const nodeVisible = (id: string): boolean => {
     const tags = tagsByIdRef.current.get(id);
     return !tags || tags.length === 0 || tags.some((tag) => activeRef.current.has(tag));
@@ -62,7 +158,7 @@ export default function GraphView({
     return nodeVisible(sourceId ?? "") && nodeVisible(targetId ?? "");
   };
 
-  // 3D Graph Initialization
+  // 3D topology
   useEffect(() => {
     if (graphMode !== "3d") return;
     const container = containerRef.current;
@@ -72,20 +168,20 @@ export default function GraphView({
 
     try {
       const fg = new ForceGraph3D(container);
-      fg.backgroundColor("#090b0e")
+      fg.backgroundColor("#050505")
         .showNavInfo(false)
-        .nodeRelSize(2.5)
+        .nodeRelSize(3)
         .nodeLabel((node: unknown) => {
           const n = node as VisNode;
           const tagList = n.tags && n.tags.length > 0 ? `#${n.tags.join(" #")}` : "";
-          return `<div class="node-label"><strong>${n.title ?? ""}</strong> <span style="opacity:0.7;">${tagList}</span></div>`;
+          return `<div class="node-label"><strong>${n.title ?? ""}</strong><span>${tagList}</span></div>`;
         })
         .onNodeClick((node: unknown) => {
           const id = (node as VisNode).id;
           if (typeof id === "string") selectRef.current(id);
         })
         .linkVisibility((link: unknown) => linkVisible(link as { source: unknown; target: unknown }))
-        .linkOpacity(0.25);
+        .linkOpacity(0.22);
 
       const charge = (fg as unknown as { d3Force?: (key: string) => unknown }).d3Force?.(
         "charge",
@@ -112,14 +208,14 @@ export default function GraphView({
       try {
         instance?._destructor?.();
       } catch {
-        // destructor finished
+        // destructor already torn down
       }
       fgRef.current = null;
       if (container) container.innerHTML = "";
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graphMode]);
 
-  // Update 3D Data
   useEffect(() => {
     if (graphMode !== "3d" || !fgRef.current) return;
     fgRef.current.graphData({
@@ -128,7 +224,7 @@ export default function GraphView({
     });
   }, [nodes, links, graphMode]);
 
-  // 2D Canvas Graph Mode Implementation with Pan/Zoom & ResizeObserver
+  // 2D canvas map
   const canvas2DRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (graphMode !== "2d") return;
@@ -154,17 +250,6 @@ export default function GraphView({
       return visibleNodeIds.has(src) && visibleNodeIds.has(tgt);
     });
 
-    // Create 2D position state spread naturally around center
-    const positions = new Map<string, { x: number; y: number }>();
-    visibleNodes.forEach((n, idx) => {
-      const angle = (idx / Math.max(1, visibleNodes.length)) * 2 * Math.PI;
-      const radius = 160 + (idx % 2 === 0 ? 40 : -30);
-      positions.set(n.id, {
-        x: Math.cos(angle) * radius,
-        y: Math.sin(angle) * radius,
-      });
-    });
-
     let cssWidth = canvas.clientWidth || 800;
     let cssHeight = canvas.clientHeight || 600;
     const dpr = window.devicePixelRatio || 1;
@@ -173,8 +258,8 @@ export default function GraphView({
       if (canvas.clientWidth > 0 && canvas.clientHeight > 0) {
         cssWidth = canvas.clientWidth;
         cssHeight = canvas.clientHeight;
-        canvas.width = cssWidth * dpr;
-        canvas.height = cssHeight * dpr;
+        canvas.width = Math.round(cssWidth * dpr);
+        canvas.height = Math.round(cssHeight * dpr);
       }
     };
     updateDimensions();
@@ -189,57 +274,58 @@ export default function GraphView({
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, cssWidth, cssHeight);
 
-      // Center + pan + zoom
       ctx.translate(cssWidth / 2 + panX, cssHeight / 2 + panY);
       ctx.scale(zoom, zoom);
 
-      // Draw links
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-      ctx.lineWidth = 1.2;
-      visibleLinks.forEach((l) => {
+      // Links
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
+      ctx.lineWidth = 1 / zoom;
+      for (const l of visibleLinks) {
         const srcId = typeof l.source === "string" ? l.source : (l.source as any)?.id;
         const tgtId = typeof l.target === "string" ? l.target : (l.target as any)?.id;
-        const p1 = positions.get(srcId);
-        const p2 = positions.get(tgtId);
+        const p1 = layout.get(srcId);
+        const p2 = layout.get(tgtId);
         if (p1 && p2) {
           ctx.beginPath();
           ctx.moveTo(p1.x, p1.y);
           ctx.lineTo(p2.x, p2.y);
           ctx.stroke();
         }
-      });
+      }
 
-      // Draw nodes
-      visibleNodes.forEach((n) => {
-        const pos = positions.get(n.id);
-        if (!pos) return;
+      // Nodes
+      for (const n of visibleNodes) {
+        const pos = layout.get(n.id);
+        if (!pos) continue;
 
-        const isSelected = selectedId && n.id.toLowerCase() === selectedId.toLowerCase();
-        const nodeRadius = Math.max(8, Math.min(22, n.size * 2));
-
-        // Node glow if selected
-        if (isSelected) {
-          ctx.beginPath();
-          ctx.arc(pos.x, pos.y, nodeRadius + 6, 0, 2 * Math.PI);
-          ctx.fillStyle = "rgba(255, 255, 255, 0.15)";
-          ctx.fill();
-        }
+        const isSelected = Boolean(selectedId) && n.id.toLowerCase() === (selectedId ?? "").toLowerCase();
+        const nodeRadius = Math.max(6, Math.min(20, n.size * 1.6));
 
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, nodeRadius, 0, 2 * Math.PI);
-        ctx.fillStyle = isSelected ? "#ffffff" : n.color || "#9ca3af";
+        ctx.fillStyle = isSelected ? "#ffffff" : n.color || "#8f98a3";
         ctx.fill();
 
-        ctx.strokeStyle = isSelected ? "#ffffff" : "rgba(255, 255, 255, 0.25)";
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isSelected ? "#ffffff" : "rgba(255, 255, 255, 0.28)";
+        ctx.lineWidth = (isSelected ? 1.5 : 1) / zoom;
         ctx.stroke();
 
-        // Title label
-        ctx.font = "500 12px Inter, -apple-system, sans-serif";
-        ctx.fillStyle = isSelected ? "#ffffff" : "rgba(255, 255, 255, 0.85)";
-        ctx.textAlign = "center";
-        ctx.fillText(n.title, pos.x, pos.y + nodeRadius + 14);
-      });
+        // Crisp selection ring — no blur halo
+        if (isSelected) {
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, nodeRadius + 4, 0, 2 * Math.PI);
+          ctx.strokeStyle = "rgba(255, 255, 255, 0.65)";
+          ctx.lineWidth = 1.25 / zoom;
+          ctx.stroke();
+        }
+
+        if (zoom >= 0.65) {
+          ctx.font = "500 11px Geist, Inter, -apple-system, sans-serif";
+          ctx.fillStyle = isSelected ? "#ffffff" : "rgba(255, 255, 255, 0.78)";
+          ctx.textAlign = "center";
+          ctx.fillText(n.title, pos.x, pos.y + nodeRadius + 15);
+        }
+      }
 
       ctx.restore();
       animId = requestAnimationFrame(render);
@@ -273,8 +359,11 @@ export default function GraphView({
       } else {
         const mouse = getCanvasMousePos(e);
         const hit = visibleNodes.some((n) => {
-          const pos = positions.get(n.id);
-          return pos && Math.hypot(mouse.x - pos.x, mouse.y - pos.y) <= 22;
+          const pos = layout.get(n.id);
+          if (!pos) return false;
+          const nodeRadius = Math.max(6, Math.min(20, n.size * 1.6));
+          // hit-test in screen space so it stays consistent across zoom levels
+          return Math.hypot(mouse.x - pos.x, mouse.y - pos.y) * zoom <= nodeRadius + 5;
         });
         canvas.style.cursor = hit ? "pointer" : "grab";
       }
@@ -284,9 +373,10 @@ export default function GraphView({
       if (!didDrag) {
         const mouse = getCanvasMousePos(e);
         for (const n of visibleNodes) {
-          const pos = positions.get(n.id);
+          const pos = layout.get(n.id);
           if (!pos) continue;
-          if (Math.hypot(mouse.x - pos.x, mouse.y - pos.y) <= 22) {
+          const nodeRadius = Math.max(6, Math.min(20, n.size * 1.6));
+          if (Math.hypot(mouse.x - pos.x, mouse.y - pos.y) * zoom <= nodeRadius + 5) {
             onSelectNote(n.id);
             break;
           }
@@ -301,10 +391,17 @@ export default function GraphView({
       zoom = Math.max(0.4, Math.min(3.5, zoom * zoomFactor));
     };
 
+    const handleDoubleClick = () => {
+      panX = 0;
+      panY = 0;
+      zoom = 1;
+    };
+
     canvas.addEventListener("mousedown", handleMouseDown);
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     canvas.addEventListener("wheel", handleWheel, { passive: false });
+    canvas.addEventListener("dblclick", handleDoubleClick);
 
     return () => {
       cancelAnimationFrame(animId);
@@ -313,8 +410,10 @@ export default function GraphView({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
       canvas.removeEventListener("wheel", handleWheel);
+      canvas.removeEventListener("dblclick", handleDoubleClick);
     };
-  }, [graphMode, nodes, links, activeTags, selectedId, onSelectNote]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graphMode, nodes, links, activeTags, selectedId, onSelectNote, layout]);
 
   const handleResetCamera = () => {
     if (graphMode === "3d" && fgRef.current) {
@@ -324,7 +423,6 @@ export default function GraphView({
 
   return (
     <div className="graph-pane-inner">
-      {/* Visual Mode Switcher Header */}
       <div className="graph-toolbar">
         <div className="graph-mode-toggle">
           <button
@@ -332,7 +430,7 @@ export default function GraphView({
             className={`mode-btn ${graphMode === "2d" ? "active" : ""}`}
             onClick={() => setGraphMode("2d")}
           >
-            2D Canvas Map
+            2D Map
           </button>
           <button
             type="button"
@@ -344,57 +442,74 @@ export default function GraphView({
         </div>
 
         <span className="graph-count-badge">
-          {nodes.length} Nodes · {links.length} Links
+          {nodes.length} nodes · {links.length} links
         </span>
       </div>
 
-      {/* Render Canvas depending on mode */}
       {graphMode === "3d" ? (
-        <div ref={containerRef} className="graph-container 3d" />
+        <div ref={containerRef} className="graph-container mode-3d" />
       ) : (
-        <canvas ref={canvas2DRef} className="graph-container 2d" />
+        <canvas ref={canvas2DRef} className="graph-container mode-2d" />
       )}
 
-      {/* Topology HUD / Legend */}
       <div className={`graph-hud ${hudOpen ? "open" : "collapsed"}`}>
         <div className="graph-hud-bar">
           <button
             type="button"
             className="graph-hud-btn"
             onClick={() => setHudOpen((prev) => !prev)}
-            title="Toggle Graph Legend"
+            title="Toggle graph legend"
           >
-            <span className="hud-icon">{hudOpen ? "✕" : "ⓘ"}</span>
-            <span>{hudOpen ? "Close Legend" : "Graph Legend"}</span>
+            <span className="hud-icon">
+              <Icon name={hudOpen ? "close" : "info"} size={13} />
+            </span>
+            <span>{hudOpen ? "Close" : "Legend"}</span>
           </button>
           {graphMode === "3d" && (
             <button
               type="button"
               className="graph-hud-btn icon-only"
               onClick={handleResetCamera}
-              title="Reset Camera"
+              title="Reset camera"
+              aria-label="Reset camera"
             >
-              <span>⟲</span>
+              <Icon name="reset" size={13} />
             </button>
           )}
         </div>
 
         {hudOpen && (
           <div className="graph-hud-card">
-            <div className="hud-header">Knowledge Map Legend</div>
+            <div className="hud-header">Knowledge Map</div>
             <div className="hud-items">
               <div className="hud-item">
-                <span className="hud-dot blue" />
-                <span className="hud-label">Vault Note</span>
+                <span className="hud-swatch" style={{ width: 8, height: 8, background: "rgba(255,255,255,0.5)" }} />
+                <span className="hud-swatch" style={{ width: 14, height: 14, background: "rgba(255,255,255,0.85)" }} />
+                <span className="hud-label">Size = PageRank importance</span>
               </div>
               <div className="hud-item">
-                <span className="hud-dot yellow" />
-                <span className="hud-label">PageRank Central Hub</span>
+                <span className="hud-swatch" style={{ background: "#c9c8c5" }} />
+                <span className="hud-swatch" style={{ background: "#3a3a3c" }} />
+                <span className="hud-label">Brightness = freshness</span>
               </div>
               <div className="hud-item">
-                <span className="hud-dot green" />
-                <span className="hud-label">Active Selected Node</span>
+                {tagSwatches.map(([tag, color]) => (
+                  <span
+                    key={tag}
+                    className="hud-swatch"
+                    style={{ background: color, width: 10, height: 10, marginLeft: -4 }}
+                    title={`#${tag}`}
+                  />
+                ))}
+                <span className="hud-label">Color = primary tag</span>
               </div>
+              <div className="hud-item">
+                <span className="hud-swatch ring" />
+                <span className="hud-label">Selected note</span>
+              </div>
+            </div>
+            <div className="hud-note">
+              Drag to pan · scroll to zoom · double-click to recenter · click a node to open
             </div>
           </div>
         )}
@@ -402,12 +517,12 @@ export default function GraphView({
 
       {nodes.length === 0 && !failed && (
         <div className="graph-overlay">
-          No notes yet. Create markdown files in your vault to visualize your graph.
+          <span>No notes yet — create markdown files in your vault to see the graph.</span>
         </div>
       )}
       {failed && (
         <div className="graph-overlay">
-          WebGL canvas context was lost. Select 2D Canvas Map above to continue.
+          <span>WebGL context was lost. Switch back to 2D Map to continue.</span>
         </div>
       )}
     </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import type { NoteMeta } from "../types";
+import Icon from "./Icon";
 
 interface Props {
   open: boolean;
@@ -63,7 +64,7 @@ export default function QuickSwitcherModal({
         type: "action",
         title: "Create New Note",
         sub: "Initialize a blank markdown note in second-brain/notes/",
-        shortcut: "Ctrl+N",
+        shortcut: "Ctrl+Alt+N",
         execute: onNewNote,
       },
       {
@@ -174,12 +175,14 @@ export default function QuickSwitcherModal({
     <div className="overlay" onClick={onClose}>
       <div className="switcher-modal" onClick={(e) => e.stopPropagation()}>
         <div className="switcher-input-wrap">
-          <span className="switcher-icon">⌘</span>
+          <span className="switcher-icon">
+            <Icon name="search" size={15} />
+          </span>
           <input
             ref={inputRef}
             className="switcher-input"
             value={query}
-            placeholder="Jump to note or type a command... (↑↓ to navigate, Enter to select)"
+            placeholder="Jump to a note or command…"
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
           />
@@ -201,7 +204,7 @@ export default function QuickSwitcherModal({
                 >
                   <div className="switcher-item-left">
                     <span className="switcher-item-badge">
-                      {item.type === "action" ? "CMD" : "NOTE"}
+                      {item.type === "action" ? "ACTION" : "NOTE"}
                     </span>
                     <div className="switcher-item-info">
                       <div className="switcher-item-title">{item.title}</div>

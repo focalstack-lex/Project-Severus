@@ -20,7 +20,7 @@ function escapeHtmlAttr(value: string): string {
 function renderMarkdown(content: string): string {
   const withLinks = content.replace(/\[\[([^\]]+)\]\]/g, (_match, name: string) => {
     const trimmed = name.trim();
-    return `<a class="wikilink" data-note="${escapeHtmlAttr(trimmed)}"><span style="opacity:0.5;font-size:10px;">[[</span>${escapeHtmlAttr(trimmed)}<span style="opacity:0.5;font-size:10px;">]]</span></a>`;
+    return `<a class="wikilink" data-note="${escapeHtmlAttr(trimmed)}"><span>[[</span>${escapeHtmlAttr(trimmed)}<span>]]</span></a>`;
   });
   const withTags = withLinks.replace(
     /(^|\s)#([A-Za-z][A-Za-z0-9_-]*)/g,

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from "react";
+import Icon from "./Icon";
 
 interface Props {
   open: boolean;
@@ -88,11 +89,10 @@ export default function NewNoteModal({
       >
         <div className="modal-header">
           <div className="modal-title">
-            <span className="modal-num">01 //</span>
-            <strong>CREATE NEW NOTE</strong>
+            <strong>Create New Note</strong>
           </div>
-          <button className="modal-close" onClick={onClose} title="Cancel (Esc)">
-            ✕
+          <button className="modal-close" onClick={onClose} title="Cancel (Esc)" aria-label="Cancel (Esc)">
+            <Icon name="close" size={13} />
           </button>
         </div>
 
@@ -150,7 +150,8 @@ export default function NewNoteModal({
 
           {collision && (
             <div className="modal-warning">
-              ⚠️ Note already exists. Choosing this will open the existing note.
+              <Icon name="alert" size={13} />
+              <span>Note already exists. Creating will open the existing note.</span>
             </div>
           )}
 
@@ -176,7 +177,7 @@ export default function NewNoteModal({
               onClick={() => void handleSubmit()}
               disabled={submitting || !cleanId || collision}
             >
-              {submitting ? "INITIALIZING…" : "CREATE NOTE ↵"}
+              {submitting ? "Initializing…" : "Create Note"}
             </button>
           </div>
         </div>

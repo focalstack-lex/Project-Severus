@@ -1,12 +1,16 @@
 import { useState } from "react";
+import Icon from "./Icon";
 import type { AIConfig } from "../lib/ai";
 import type { GitStatusData } from "../types";
 
-export type NavSection = "home" | "knowledge" | "work" | "ai" | "personal" | "system";
-export type KnowledgeSubTab = "notes" | "graph" | "tags" | "collections";
+export type NavSection = "home" | "knowledge" | "ai";
+export type KnowledgeSubTab = "notes" | "graph" | "tags";
+
+const IS_MAC =
+  typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
+const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
 
 interface Props {
-  breadcrumb: string[];
   activeSection?: NavSection;
   onSelectSection?: (section: NavSection) => void;
   knowledgeSubTab?: KnowledgeSubTab;
@@ -29,8 +33,8 @@ interface Props {
 }
 
 /**
- * Framer-inspired floating capsule Top-Nav
- * Modeled on https://framer.com/m/Top-Nav-npC8Y8.js
+ * Floating capsule top-nav: brand, primary views, quick actions, and a
+ * system popover. Solid obsidian surface, drawn icons, honest shortcuts.
  */
 export default function TopHeader({
   activeSection = "knowledge",
@@ -58,24 +62,27 @@ export default function TopHeader({
   return (
     <header className="framer-top-nav-wrapper">
       <div className="framer-top-nav-capsule">
-        {/* Brand Identity */}
-        <div
+        {/* Brand */}
+        <button
+          type="button"
           className="nav-brand-item"
           onClick={() => onSelectSection?.("home")}
           title="Severus.ai Home"
         >
           <img src="/logo.png" alt="Severus" className="nav-brand-logo" />
           <span className="nav-brand-name">Severus</span>
-        </div>
+        </button>
 
-        {/* Primary Navigation Tabs */}
+        {/* Primary views */}
         <nav className="nav-links-cluster">
           <button
             type="button"
             className={`nav-pill-item ${activeSection === "home" ? "active" : ""}`}
             onClick={() => onSelectSection?.("home")}
           >
-            <span className="nav-pill-icon">⌂</span>
+            <span className="nav-pill-icon">
+              <Icon name="home" size={14} />
+            </span>
             <span>Home</span>
           </button>
 
@@ -87,7 +94,9 @@ export default function TopHeader({
               onSelectKnowledgeSubTab?.("graph");
             }}
           >
-            <span className="nav-pill-icon">🕸️</span>
+            <span className="nav-pill-icon">
+              <Icon name="graph" size={14} />
+            </span>
             <span>Graph</span>
           </button>
 
@@ -100,7 +109,9 @@ export default function TopHeader({
               onToggleNotesDrawer?.();
             }}
           >
-            <span className="nav-pill-icon">📚</span>
+            <span className="nav-pill-icon">
+              <Icon name="book" size={14} />
+            </span>
             <span>Notes</span>
           </button>
 
@@ -109,7 +120,9 @@ export default function TopHeader({
             className={`nav-pill-item ${copilotActive ? "active" : ""}`}
             onClick={onToggleCopilot}
           >
-            <span className="nav-pill-icon">✦</span>
+            <span className="nav-pill-icon">
+              <Icon name="spark" size={14} />
+            </span>
             <span>Copilot</span>
           </button>
 
@@ -117,109 +130,134 @@ export default function TopHeader({
             type="button"
             className="nav-pill-item search-trigger"
             onClick={onOpenQuickSearch}
-            title="Search notes, commands, or tags (Ctrl+K)"
+            title={`Search notes and commands (${MOD_KEY}+K)`}
           >
-            <span className="nav-pill-icon">🔍</span>
+            <span className="nav-pill-icon">
+              <Icon name="search" size={14} />
+            </span>
             <span className="search-text">Search</span>
-            <kbd className="nav-kbd">⌘K</kbd>
+            <kbd className="nav-kbd">{MOD_KEY}K</kbd>
           </button>
         </nav>
 
-        {/* Action Controls & Popover Trigger */}
+        {/* Quick actions & system popover */}
         <div className="nav-actions-cluster">
           <button
             type="button"
             className="nav-action-btn accent"
             onClick={onOpenNewNote}
-            title="Create New Note (Ctrl+Alt+N)"
+            title={`Create New Note (${MOD_KEY}+Alt+N)`}
           >
-            <span>+</span> Note
+            <Icon name="plus" size={13} />
+            <span>Note</span>
           </button>
 
           <button
             type="button"
             className="nav-action-btn"
             onClick={onOpenGrounding}
-            title="Open Context Grounding (Ctrl+J)"
+            title={`Assemble agent grounding context (${MOD_KEY}+Shift+G)`}
           >
-            <span>⚡</span> Grounding
+            <Icon name="layers" size={13} />
+            <span>Grounding</span>
           </button>
 
-          {/* System Telemetry & Audio Settings Popover */}
           <div className="popover-wrapper">
             <button
               type="button"
               className={`nav-action-btn status-btn ${systemPopoverOpen ? "active" : ""}`}
               onClick={() => setSystemPopoverOpen((prev) => !prev)}
-              title="System Status & Voice Settings"
+              title="System status and voice settings"
             >
-              <span className={`status-dot ${voiceMuted ? "muted" : "clean"}`} />
+              <span className={`status-dot ${voiceMuted ? "muted" : ""}`} />
               <span>Status</span>
             </button>
 
             {systemPopoverOpen && (
               <div className="system-popover">
                 <div className="popover-header">
-                  <span className="popover-title">System & Audio Controls</span>
+                  <span className="popover-title">System</span>
                   <button
                     type="button"
                     className="popover-close"
                     onClick={() => setSystemPopoverOpen(false)}
+                    aria-label="Close system popover"
                   >
-                    ✕
+                    <Icon name="close" size={13} />
                   </button>
                 </div>
 
                 <div className="popover-body">
-                  {/* AI Model Item */}
-                  <div className="popover-item" onClick={onOpenAISettings}>
+                  <div
+                    className="popover-item"
+                    onClick={() => {
+                      setSystemPopoverOpen(false);
+                      onOpenAISettings();
+                    }}
+                  >
                     <div className="popover-item-text">
-                      <span className="item-label">AI Model Provider</span>
-                      <span className="item-value">{aiConfig.model}</span>
+                      <span className="item-label">
+                        <Icon name="spark" size={13} />
+                        AI Model
+                      </span>
+                      <span className="item-value">
+                        {aiConfig.model} · {aiConfig.providerName}
+                      </span>
                     </div>
-                    <span className="item-arrow">→</span>
+                    <span className="item-arrow">
+                      <Icon name="chevron-right" size={13} />
+                    </span>
                   </div>
 
-                  {/* Voice Output Toggle */}
                   <div className="popover-item" onClick={onToggleVoiceMuted}>
                     <div className="popover-item-text">
-                      <span className="item-label">Voice Audio Output</span>
-                      <span className="item-sub">Audio response sound effects</span>
+                      <span className="item-label">
+                        <Icon name="waveform" size={13} />
+                        Voice Audio
+                      </span>
+                      <span className="item-sub">Spoken response sound effects</span>
                     </div>
                     <span className={`toggle-pill ${voiceMuted ? "off" : "on"}`}>
-                      {voiceMuted ? "Muted" : "Active"}
+                      {voiceMuted ? "Muted" : "On"}
                     </span>
                   </div>
 
-                  {/* Double-Clap Detector Toggle */}
                   <div className="popover-item" onClick={onToggleClapEnabled}>
                     <div className="popover-item-text">
-                      <span className="item-label">Double-Clap Wake Gesture</span>
-                      <span className="item-sub">Clap twice to unminimize & greet</span>
+                      <span className="item-label">
+                        <Icon name="waveform" size={13} />
+                        Double-Clap Wake
+                      </span>
+                      <span className="item-sub">Clap twice to restore & greet</span>
                     </div>
-                    <span className={`toggle-pill ${!clapEnabled ? "off" : "on"}`}>
-                      {clapEnabled ? "Active" : "Off"}
+                    <span className={`toggle-pill ${clapEnabled ? "on" : "off"}`}>
+                      {clapEnabled ? "On" : "Off"}
                     </span>
                   </div>
 
-                  {/* Voice Commands Toggle */}
                   <div className="popover-item" onClick={onToggleVoiceCmdEnabled}>
                     <div className="popover-item-text">
-                      <span className="item-label">Hands-Free Voice Commands</span>
-                      <span className="item-sub">Say "Open Copilot", "Search", etc.</span>
+                      <span className="item-label">
+                        <Icon name="mic" size={13} />
+                        Voice Commands
+                      </span>
+                      <span className="item-sub">Say “Open Copilot”, “Search”, etc.</span>
                     </div>
-                    <span className={`toggle-pill ${!voiceCmdEnabled ? "off" : "on"}`}>
-                      {voiceCmdEnabled ? "Active" : "Off"}
+                    <span className={`toggle-pill ${voiceCmdEnabled ? "on" : "off"}`}>
+                      {voiceCmdEnabled ? "On" : "Off"}
                     </span>
                   </div>
 
-                  {/* Git Status */}
                   <div className="popover-item readonly">
                     <div className="popover-item-text">
-                      <span className="item-label">Git Workspace</span>
+                      <span className="item-label">
+                        <Icon name="git-branch" size={13} />
+                        Git Workspace
+                      </span>
                       <span className="item-sub">
-                        Branch: {gitStatus ? gitStatus.branch : "main"} (
-                        {gitStatus?.is_clean ? "clean" : `${gitStatus?.modified_count} modified`})
+                        {gitStatus
+                          ? `${gitStatus.branch} · ${gitStatus.is_clean ? "clean" : `${gitStatus.modified_count} modified`}`
+                          : "status unavailable"}
                       </span>
                     </div>
                   </div>

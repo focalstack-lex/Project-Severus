@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import Icon from "./components/Icon";
+import ErrorBoundary from "./components/ErrorBoundary";
 import GraphView, { type VisNode } from "./components/GraphView";
 import TagBar from "./components/TagBar";
+import TagsIndexView from "./components/TagsIndexView";
 import SidebarNav, { type KnowledgeSubTab, type NavSection } from "./components/SidebarNav";
 import TopHeader from "./components/TopHeader";
 import ContextInspector from "./components/ContextInspector";
@@ -40,6 +43,15 @@ import {
 } from "./lib/voiceCommands";
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [], tags: [] };
+const IS_MAC =
+  typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
+const MOD_KEY = IS_MAC ? "⌘" : "Ctrl";
+
+function greetingForHour(hour: number): string {
+  if (hour < 12) return "Good morning, Sir.";
+  if (hour < 18) return "Good afternoon, Sir.";
+  return "Good evening, Sir.";
+}
 
 export default function App() {
   const [graph, setGraph] = useState<GraphData>(EMPTY_GRAPH);
@@ -48,6 +60,7 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [note, setNote] = useState<NoteContent | null>(null);
+  const [booting, setBooting] = useState(true);
 
   // Navigation & Shell Layout
   const [activeSection, setActiveSection] = useState<NavSection>("knowledge");
@@ -94,7 +107,7 @@ export default function App() {
       const status = await getGitStatus();
       setGitStatus(status);
     } catch {
-      // Git uninitialized
+      // Git may be uninitialized in this workspace
     }
   }, []);
 
@@ -110,6 +123,8 @@ export default function App() {
       setLoadError(null);
     } catch (err) {
       setLoadError(String(err));
+    } finally {
+      setBooting(false);
     }
   }, []);
 
@@ -117,7 +132,7 @@ export default function App() {
     try {
       setNotesList(await listNotes());
     } catch {
-      // retry next tick
+      // retried on the next notes-changed event
     }
   }, []);
 
@@ -169,7 +184,7 @@ export default function App() {
       onDoubleClap: () => {
         void restoreWindow().catch(() => {});
         void playTimeGreeting();
-        showToast("👏 Double-clap detected — Welcome back, Sir!");
+        showToast("Double-clap detected — welcome back, Sir.");
       },
     });
 
@@ -188,41 +203,41 @@ export default function App() {
       onWakePhrase: () => {
         void restoreWindow().catch(() => {});
         void playTimeGreeting();
-        showToast("🗣️ 'Hey Severus!' detected — Welcome back, Sir!");
+        showToast("“Hey Severus” detected — welcome back, Sir.");
       },
       onOpenCopilot: () => {
         setInspectorOpen(true);
         setInspectorTab("copilot");
         void playVoice("nav_copilot_open.mp3");
-        showToast("🗣️ Voice Command: Opening Copilot");
+        showToast("Voice command: opening Copilot");
       },
       onOpenSearch: () => {
         setQuickSwitcherOpen(true);
         void playVoice("nav_quick_switcher.mp3");
-        showToast("🗣️ Voice Command: Opening Search");
+        showToast("Voice command: opening search");
       },
       onOpenGrounding: () => {
         setGroundingOpen(true);
         void playVoice("nav_assembler_open.mp3");
-        showToast("🗣️ Voice Command: Opening Grounding Assembler");
+        showToast("Voice command: opening Grounding");
       },
       onOpenNotes: () => {
         setNotesDrawerOpen((prev) => !prev);
         void playVoice("nav_notes_drawer.mp3");
-        showToast("🗣️ Voice Command: Toggling Notes Explorer");
+        showToast("Voice command: toggling Notes Explorer");
       },
       onNewNote: () => {
         setNewNoteModalOpen(true);
-        showToast("🗣️ Voice Command: Creating New Note");
+        showToast("Voice command: creating a new note");
       },
       onJournal: () => {
         setJournalOpen(true);
-        showToast("🗣️ Voice Command: Quick Journal Capture");
+        showToast("Voice command: quick journal capture");
       },
       onZenMode: () => {
         setZenMode((prev) => !prev);
         void playVoice("nav_zen_on.mp3");
-        showToast("🗣️ Voice Command: Toggling Zen Mode");
+        showToast("Voice command: toggling Zen mode");
       },
       onClose: () => {
         setJournalOpen(false);
@@ -231,7 +246,7 @@ export default function App() {
         setGroundingOpen(false);
         setNewNoteModalOpen(false);
         setZenMode(false);
-        showToast("🗣️ Voice Command: Closing active views");
+        showToast("Voice command: closing active views");
       },
     });
 
@@ -247,7 +262,7 @@ export default function App() {
       try {
         await openInEditor(id);
         void playVoice("action_vscode_launch.mp3");
-        showToast(`Opening "${id}.md" in editor…`);
+        showToast(`Opening “${id}.md” in your editor…`);
       } catch (err) {
         void playVoice("alert_api_error.mp3");
         showToast(`Could not open editor: ${String(err)}`);
@@ -277,7 +292,7 @@ export default function App() {
     async (id: string, content: string) => {
       await saveNote(id, content);
       void playVoice("auto_note_saved.mp3");
-      showToast(`Saved "${id}"`);
+      showToast(`Saved “${id}”`);
     },
     [showToast],
   );
@@ -290,7 +305,7 @@ export default function App() {
         await loadGraph();
         await openNote(trimmed);
         void playVoice("action_note_created.mp3");
-        showToast(`Created note "${trimmed}.md"`);
+        showToast(`Created note “${trimmed}.md”`);
       } catch (err) {
         void playVoice("alert_api_error.mp3");
         showToast(`Could not create note: ${String(err)}`);
@@ -312,7 +327,7 @@ export default function App() {
         await openNote(existing.id);
         return;
       }
-      const ok = await confirm(`Note "${trimmed}" does not exist yet. Create it?`, {
+      const ok = await confirm(`Note “${trimmed}” does not exist yet. Create it?`, {
         title: "Second Brain",
         kind: "info",
       });
@@ -322,7 +337,7 @@ export default function App() {
         await loadNotesList();
         await loadGraph();
         await openNote(trimmed);
-        showToast(`Created "${trimmed}"`);
+        showToast(`Created “${trimmed}”`);
       } catch (err) {
         showToast(`Could not create note: ${String(err)}`);
       }
@@ -399,46 +414,28 @@ export default function App() {
   const visNodes = useMemo<VisNode[]>(
     () =>
       graph.nodes.map((node) => {
-        const base = node.tags.length > 0 ? (colors[node.tags[0]] ?? "#9aa4b2") : "#9aa4b2";
+        const base = node.tags.length > 0 ? (colors[node.tags[0]] ?? "#8f98a3") : "#8f98a3";
         return { ...node, color: fade(base, freshnessOpacity(node.ageDays)) };
       }),
     [graph, colors],
   );
 
-  // Dynamic Location Breadcrumb
-  const breadcrumb = useMemo(() => {
-    if (activeSection === "knowledge") {
-      return [
-        "Severus.ai",
-        "Knowledge",
-        knowledgeSubTab === "graph"
-          ? "Graph Map"
-          : knowledgeSubTab === "notes"
-          ? "Notes Vault"
-          : "Tags & Index",
-      ];
-    }
-    if (activeSection === "home") return ["Severus.ai", "Home Overview"];
-    if (activeSection === "work") return ["Severus.ai", "Workspaces & Tasks"];
-    if (activeSection === "ai") return ["Severus.ai", "AI Copilot"];
-    if (activeSection === "personal") return ["Severus.ai", "Personal Journal"];
-    return ["Severus.ai", "System Settings"];
-  }, [activeSection, knowledgeSubTab]);
+  const greeting = useMemo(() => greetingForHour(new Date().getHours()), []);
+  const hubNodes = useMemo(
+    () => [...graph.nodes].sort((a, b) => b.importance - a.importance).slice(0, 5),
+    [graph.nodes],
+  );
+  const freshNotes = useMemo(
+    () => [...graph.nodes].sort((a, b) => a.ageDays - b.ageDays).slice(0, 5),
+    [graph.nodes],
+  );
 
   return (
-    <div className={`app workstation human-designed ${zenMode ? "zen-mode" : ""}`}>
-      {/* Streamlined Top Header */}
+    <div className={`app workstation ${zenMode ? "zen-mode" : ""}`}>
       {!zenMode && (
         <TopHeader
-          breadcrumb={breadcrumb}
           activeSection={activeSection}
-          onSelectSection={(sec) => {
-            setActiveSection(sec);
-            if (sec === "ai") {
-              setInspectorOpen(true);
-              setInspectorTab("copilot");
-            }
-          }}
+          onSelectSection={setActiveSection}
           knowledgeSubTab={knowledgeSubTab}
           onSelectKnowledgeSubTab={setKnowledgeSubTab}
           onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
@@ -463,41 +460,33 @@ export default function App() {
             const next = !voiceMuted;
             setVoiceMutedState(next);
             setVoiceMuted(next);
-            showToast(next ? "Voice Muted" : "Voice Active");
+            showToast(next ? "Voice muted" : "Voice active");
           }}
           clapEnabled={clapEnabled}
           onToggleClapEnabled={() => {
             const next = !clapEnabled;
             setClapEnabledState(next);
             setClapEnabled(next);
-            showToast(next ? "Clap Disabled" : "Clap Active");
+            showToast(next ? "Double-clap disabled" : "Double-clap active");
           }}
           voiceCmdEnabled={voiceCmdEnabled}
           onToggleVoiceCmdEnabled={() => {
             const next = !voiceCmdEnabled;
             setVoiceCmdEnabledState(next);
             setVoiceCmdEnabled(next);
-            showToast(next ? "Voice Commands Disabled" : "Voice Commands Active");
+            showToast(next ? "Voice commands disabled" : "Voice commands active");
           }}
           gitStatus={gitStatus}
           copilotActive={inspectorOpen && inspectorTab === "copilot"}
         />
       )}
 
-      {/* Main 3-Zone Stage */}
       <main className="main workstation-main">
-        {/* ZONE 1: LEFT PRIMARY NAVIGATION SIDEBAR */}
         {!zenMode && (
           <SidebarNav
             activeSection={activeSection}
             knowledgeSubTab={knowledgeSubTab}
-            onSelectSection={(sec) => {
-              setActiveSection(sec);
-              if (sec === "ai") {
-                setInspectorOpen(true);
-                setInspectorTab("copilot");
-              }
-            }}
+            onSelectSection={setActiveSection}
             onSelectKnowledgeSubTab={setKnowledgeSubTab}
             collapsed={sidebarCollapsed}
             onToggleCollapsed={() => setSidebarCollapsed((prev) => !prev)}
@@ -512,7 +501,6 @@ export default function App() {
           />
         )}
 
-        {/* Slide-out Notes Drawer */}
         {!zenMode && notesDrawerOpen && (
           <NotesDrawer
             open={notesDrawerOpen}
@@ -524,74 +512,144 @@ export default function App() {
           />
         )}
 
-        {/* ZONE 2: CENTER MAIN WORKSPACE STAGE */}
         <div className="graph-pane center-stage">
           {zenMode && (
             <button
               type="button"
               className="zen-exit-btn"
               onClick={() => setZenMode(false)}
-              title="Exit Zen Fullscreen (Esc)"
+              title="Exit Zen fullscreen (Esc)"
             >
-              ✕ Exit Zen Mode (Esc)
+              <Icon name="close" size={12} /> Exit Zen (Esc)
             </button>
           )}
 
-          {/* Render Active View */}
           {activeSection === "home" ? (
-            <div className="home-dashboard">
-              <div className="dashboard-welcome">
-                <h2>Welcome to Severus.ai</h2>
-                <p className="subtitle">
-                  Start with a question, select a concept in the graph, or write a note.
+            <div className="home-view">
+              <div className="home-view-inner">
+                <h1 className="home-greeting">{greeting}</h1>
+                <p className="home-lede">
+                  Start with a question in the Copilot, pick up a hub note below, or capture
+                  something new before it slips away.
                 </p>
 
-                <div className="dashboard-actions-grid">
-                  <button type="button" className="dash-card" onClick={handleNewNote}>
-                    <span className="card-icon">📝</span>
-                    <h4>Create a Note</h4>
-                    <p>Capture ideas, research, and technical notes</p>
+                <div className="home-stats">
+                  <span>
+                    <strong>{graph.nodes.length}</strong> notes
+                  </span>
+                  <span className="sep">/</span>
+                  <span>
+                    <strong>{graph.links.length}</strong> links
+                  </span>
+                  <span className="sep">/</span>
+                  <span>
+                    <strong>{graph.tags.length}</strong> tags
+                  </span>
+                  <span className="sep">/</span>
+                  <span>
+                    model <strong>{aiConfig.model}</strong>
+                  </span>
+                </div>
+
+                <div className="home-columns">
+                  <section>
+                    <div className="home-section-title">Hub notes · PageRank</div>
+                    <div className="home-list">
+                      {hubNodes.map((node) => (
+                        <button
+                          key={node.id}
+                          type="button"
+                          className="home-row"
+                          onClick={() => void openNote(node.id)}
+                        >
+                          <span>{node.title}</span>
+                          <span className="home-row-meta">{node.importance.toFixed(1)}%</span>
+                        </button>
+                      ))}
+                      {hubNodes.length === 0 && (
+                        <span className="home-row-meta">Vault is empty — create a note.</span>
+                      )}
+                    </div>
+                  </section>
+
+                  <section>
+                    <div className="home-section-title">Freshest notes</div>
+                    <div className="home-list">
+                      {freshNotes.map((node) => (
+                        <button
+                          key={node.id}
+                          type="button"
+                          className="home-row"
+                          onClick={() => void openNote(node.id)}
+                        >
+                          <span>{node.title}</span>
+                          <span className="home-row-meta">
+                            {node.ageDays === 0 ? "today" : `${node.ageDays}d ago`}
+                          </span>
+                        </button>
+                      ))}
+                      {freshNotes.length === 0 && (
+                        <span className="home-row-meta">Nothing indexed yet.</span>
+                      )}
+                    </div>
+                  </section>
+                </div>
+
+                <div className="home-actions">
+                  <button type="button" className="accent" onClick={handleNewNote}>
+                    <Icon name="plus" size={13} /> New Note
                   </button>
                   <button
                     type="button"
-                    className="dash-card"
                     onClick={() => {
                       setActiveSection("knowledge");
                       setKnowledgeSubTab("graph");
                     }}
                   >
-                    <span className="card-icon">🕸️</span>
-                    <h4>Knowledge Map</h4>
-                    <p>Explore relationships and PageRank hubs</p>
+                    <Icon name="graph" size={13} /> Knowledge Map
                   </button>
                   <button
                     type="button"
-                    className="dash-card"
                     onClick={() => {
                       setInspectorOpen(true);
                       setInspectorTab("copilot");
                     }}
                   >
-                    <span className="card-icon">✦</span>
-                    <h4>Ask AI Copilot</h4>
-                    <p>Synthesize concepts from your vault notes</p>
+                    <Icon name="spark" size={13} /> Ask Copilot
+                  </button>
+                  <button type="button" onClick={() => setGroundingOpen(true)}>
+                    <Icon name="layers" size={13} /> Grounding
                   </button>
                 </div>
               </div>
             </div>
+          ) : activeSection === "knowledge" && knowledgeSubTab === "tags" ? (
+            <TagsIndexView
+              graph={graph}
+              tagColors={colors}
+              onSelectNote={(id) => void openNote(id)}
+              onToggleTag={toggleTag}
+            />
+          ) : booting ? (
+            <div className="boot-loading">
+              <span>Indexing vault…</span>
+              <div className="boot-loading-bar" />
+            </div>
           ) : (
             <>
-              <GraphView
-                nodes={visNodes}
-                links={graph.links}
-                activeTags={activeTags}
-                selectedId={selectedId}
-                onSelectNote={(id) => {
-                  const node = graph.nodes.find((n) => n.id.toLowerCase() === id.toLowerCase());
-                  if (node) setSelectedNode(node);
-                  void openNote(id);
-                }}
-              />
+              <ErrorBoundary label="Knowledge graph">
+                <GraphView
+                  nodes={visNodes}
+                  links={graph.links}
+                  activeTags={activeTags}
+                  selectedId={selectedId}
+                  onSelectNote={(id) => {
+                    const node = graph.nodes.find((n) => n.id.toLowerCase() === id.toLowerCase());
+                    if (node) setSelectedNode(node);
+                    void openNote(id);
+                  }}
+                />
+              </ErrorBoundary>
               <TagBar
                 tags={graph.tags}
                 colors={colors}
@@ -603,49 +661,47 @@ export default function App() {
           )}
         </div>
 
-        {/* ZONE 3: RIGHT CONTEXTUAL INSPECTOR */}
         {!zenMode && inspectorOpen && (
-          <ContextInspector
-            open={inspectorOpen}
-            onClose={() => setInspectorOpen(false)}
-            activeTab={inspectorTab}
-            onSelectTab={setInspectorTab}
-            note={note}
-            notesList={notesList}
-            onSaveNote={handleSave}
-            onOpenLink={(name) => void handleOpenLink(name)}
-            onToggleTag={toggleTag}
-            onOpenInEditor={handleOpenInEditor}
-            onNewNote={handleNewNote}
-            onOpenJournal={() => setJournalOpen(true)}
-            onOpenGrounding={() => setGroundingOpen(true)}
-            onOpenNote={(id) => void openNote(id)}
-            selectedNode={selectedNode}
-            graphData={graph}
-            aiConfig={aiConfig}
-            onOpenAISettings={() => setAiSettingsOpen(true)}
-            onSaveAsNote={async (title, content) => {
-              await saveNote(title, content);
-              await loadNotesList();
-              await loadGraph();
-            }}
-            onShowToast={showToast}
-          />
+          <ErrorBoundary label="Context inspector">
+            <ContextInspector
+              open={inspectorOpen}
+              onClose={() => setInspectorOpen(false)}
+              activeTab={inspectorTab}
+              onSelectTab={setInspectorTab}
+              note={note}
+              notesList={notesList}
+              onSaveNote={handleSave}
+              onOpenLink={(name) => void handleOpenLink(name)}
+              onToggleTag={toggleTag}
+              onOpenInEditor={handleOpenInEditor}
+              onNewNote={handleNewNote}
+              onOpenJournal={() => setJournalOpen(true)}
+              onOpenGrounding={() => setGroundingOpen(true)}
+              onOpenNote={(id) => void openNote(id)}
+              selectedNode={selectedNode}
+              graphData={graph}
+              aiConfig={aiConfig}
+              onOpenAISettings={() => setAiSettingsOpen(true)}
+              onSaveAsNote={async (title, content) => {
+                await saveNote(title, content);
+                await loadNotesList();
+                await loadGraph();
+              }}
+              onShowToast={showToast}
+            />
+          </ErrorBoundary>
         )}
       </main>
 
-      {/* Clean System Footer */}
       {!zenMode && (
-        <footer className="status-bar human-footer">
+        <footer className="status-bar">
           <div className="status-bar-left">
             <span className="footer-item">
               Workspace: <strong className="val">Severus</strong>
             </span>
             <span className="footer-item">
-              Active Note:{" "}
-              <strong className="val">
-                {selectedId ? `${selectedId}.md` : "None"}
-              </strong>
+              Active:{" "}
+              <strong className="val">{selectedId ? `${selectedId}.md` : "None"}</strong>
             </span>
           </div>
           <div className="status-bar-right">
@@ -659,13 +715,12 @@ export default function App() {
               </strong>
             </span>
             <span className="footer-item keyhint">
-              <kbd>⌘K</kbd> Search
+              <kbd>{MOD_KEY}K</kbd> Search
             </span>
           </div>
         </footer>
       )}
 
-      {/* Modals & Command Palettes */}
       <QuickSwitcherModal
         open={quickSwitcherOpen}
         notes={notesList}
@@ -708,7 +763,7 @@ export default function App() {
         onSave={(newCfg) => {
           setAiConfig(newCfg);
           saveAIConfig(newCfg);
-          showToast(`Active AI Model set to ${newCfg.model}`);
+          showToast(`Active AI model set to ${newCfg.model}`);
         }}
         onClose={() => setAiSettingsOpen(false)}
       />

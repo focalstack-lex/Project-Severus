@@ -1,9 +1,20 @@
 // Palette and freshness-fade logic, mirroring second-brain/build_graph.py
-// so the desktop app and the generated graph.html look identical.
+// so the desktop app and the generated graph.html stay visually aligned.
 
-export const PALETTE = ["#4f8ef7", "#f75f8e", "#4ff7a8", "#f7c94f", "#b44ff7", "#f78a4f"];
-export const FALLBACK_COLOR = "#9aa4b2";
-const BACKGROUND: [number, number, number] = [0x0b, 0x0e, 0x14];
+// Muted information hues: color carries meaning (tag clusters), so it stays
+// quiet enough to sit inside the monochrome chrome without turning neon.
+export const PALETTE = [
+  "#7fa5d6", // blue
+  "#d98a9c", // rose
+  "#7cc29a", // green
+  "#d6bd7d", // gold
+  "#b394dd", // violet
+  "#d9a678", // amber
+];
+export const FALLBACK_COLOR = "#8f98a3";
+// Must match the app canvas (--bg-canvas) so freshness fade blends into
+// the surface notes actually render on.
+const BACKGROUND: [number, number, number] = [0x05, 0x05, 0x05];
 export const HALF_LIFE_DAYS = 45;
 
 export function tagColors(tags: string[]): Record<string, string> {

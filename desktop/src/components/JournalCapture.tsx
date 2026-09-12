@@ -42,9 +42,9 @@ export default function JournalCapture({ open, onClose, onSubmit }: Props) {
       <div className="capture" onClick={(event) => event.stopPropagation()}>
         <div className="capture-header">
           <div className="capture-title">
-            03 / QUICK CAPTURE // <strong>JOURNAL STREAM</strong>
+            Quick Capture — <strong>Journal Stream</strong>
           </div>
-          <span className="badge-pill">ESC TO DISMISS</span>
+          <span className="badge-pill">Esc to dismiss</span>
         </div>
         <input
           ref={inputRef}
@@ -58,8 +58,8 @@ export default function JournalCapture({ open, onClose, onSubmit }: Props) {
           }}
         />
         <div className="capture-hint">
-          <span>APPENDS TO JOURNAL/YYYY-MM-DD.MD</span>
-          <span>PRESS ENTER ↵</span>
+          <span>Appends to journal/YYYY-MM-DD.md</span>
+          <span>Press Enter ↵</span>
         </div>
         {error && <div className="editor-banner error">{error}</div>}
       </div>

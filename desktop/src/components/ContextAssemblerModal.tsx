@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { NoteContent, NoteMeta } from "../types";
+import Icon from "./Icon";
 import { readNote } from "../lib/tauri";
 
 interface Props {
@@ -211,15 +212,15 @@ export default function ContextAssemblerModal({
         <div className="grounding-header">
           <div className="grounding-title-wrap">
             <span className="grounding-section-num">05 / GROUNDING ENGINE</span>
-            <div className="grounding-title">AGENT PROMPT ASSEMBLER</div>
+            <div className="grounding-title">Agent Prompt Assembler</div>
           </div>
           <div className="grounding-header-badges">
             <span className="token-badge" title="Estimated model context token consumption">
-              ~{stats.estTokens.toLocaleString()} TOKENS
+              ~{stats.estTokens.toLocaleString()} tokens
             </span>
-            <span className="word-badge">{stats.words} WORDS</span>
-            <button className="close-btn" onClick={onClose} title="Close (Esc)">
-              ✕
+            <span className="word-badge">{stats.words} words</span>
+            <button className="close-btn" onClick={onClose} title="Close (Esc)" aria-label="Close (Esc)">
+              <Icon name="close" size={13} />
             </button>
           </div>
         </div>
@@ -359,7 +360,13 @@ export default function ContextAssemblerModal({
               className={`btn-primary copy-btn ${copied ? "copied" : ""}`}
               onClick={() => void handleCopy()}
             >
-              {copied ? "✓ COPIED TO CLIPBOARD" : "COPY GROUNDING PROMPT [CTRL+ENTER]"}
+              {copied ? (
+                <>
+                  <Icon name="check" size={12} /> Copied to clipboard
+                </>
+              ) : (
+                "Copy Grounding Prompt (Ctrl+Enter)"
+              )}
             </button>
           </div>
         </div>

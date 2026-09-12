@@ -1,8 +1,9 @@
 import { useState } from "react";
+import Icon from "./Icon";
 import type { GitStatusData } from "../types";
 
-export type NavSection = "home" | "knowledge" | "work" | "ai" | "personal" | "system";
-export type KnowledgeSubTab = "notes" | "graph" | "tags" | "collections";
+export type NavSection = "home" | "knowledge" | "ai";
+export type KnowledgeSubTab = "notes" | "graph" | "tags";
 
 interface Props {
   activeSection: NavSection;
@@ -21,6 +22,11 @@ interface Props {
   gitStatus: GitStatusData | null;
 }
 
+/**
+ * Left sidebar. Sections map to real views (Home, Knowledge, Copilot);
+ * tools that only open dialogs (Grounding, Journal, Settings) are honest
+ * actions and never fake a navigation state.
+ */
 export default function SidebarNav({
   activeSection,
   knowledgeSubTab,
@@ -41,14 +47,13 @@ export default function SidebarNav({
 
   return (
     <aside className={`sidebar-nav ${collapsed ? "collapsed" : ""}`}>
-      {/* Brand & Collapse Toggle */}
       <div className="sidebar-header">
         <div className="sidebar-brand">
           <img src="/logo.png" alt="Severus" className="brand-icon" />
           {!collapsed && (
             <div className="brand-text">
               <span className="brand-title">Severus.ai</span>
-              <span className="brand-subtitle">Knowledge Vault</span>
+              <span className="brand-subtitle">Second Brain</span>
             </div>
           )}
         </div>
@@ -56,46 +61,49 @@ export default function SidebarNav({
           type="button"
           className="sidebar-collapse-btn"
           onClick={onToggleCollapsed}
-          title={collapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? "→" : "←"}
+          <Icon name="chevron-right" size={13} style={{ transform: collapsed ? "none" : "rotate(180deg)" }} />
         </button>
       </div>
 
-      {/* Quick Action Button */}
       {!collapsed && (
         <div className="sidebar-quick-actions">
           <button type="button" className="btn-primary-action" onClick={onOpenNewNote}>
-            <span>+</span> New Note
+            <Icon name="plus" size={13} />
+            New Note
           </button>
         </div>
       )}
 
-      {/* Navigation Menu */}
       <nav className="sidebar-menu">
-        {/* HOME SECTION */}
         <div className="menu-group">
+          {!collapsed && <div className="menu-group-label">Workspace</div>}
           <button
             type="button"
             className={`menu-item ${activeSection === "home" ? "active" : ""}`}
             onClick={() => onSelectSection("home")}
-            title={collapsed ? "Home Overview" : undefined}
+            title={collapsed ? "Home overview" : undefined}
           >
-            <span className="menu-icon">⌂</span>
+            <span className="menu-icon">
+              <Icon name="home" size={15} />
+            </span>
             {!collapsed && <span className="menu-label">Home</span>}
           </button>
           <button
             type="button"
             className="menu-item"
             onClick={onOpenQuickSwitcher}
-            title={collapsed ? "Search (Ctrl+K)" : undefined}
+            title={collapsed ? "Quick Switcher (Ctrl+K)" : "Quick Switcher (Ctrl+K)"}
           >
-            <span className="menu-icon">🔍</span>
+            <span className="menu-icon">
+              <Icon name="search" size={15} />
+            </span>
             {!collapsed && <span className="menu-label">Quick Switcher</span>}
           </button>
         </div>
 
-        {/* KNOWLEDGE SECTION */}
         <div className="menu-group">
           <div className="menu-group-header">
             <button
@@ -103,14 +111,18 @@ export default function SidebarNav({
               className={`menu-item ${activeSection === "knowledge" ? "active" : ""}`}
               onClick={() => {
                 onSelectSection("knowledge");
-                setKnowledgeExpanded((prev) => !prev);
+                if (!collapsed) setKnowledgeExpanded((prev) => !prev);
               }}
-              title={collapsed ? "Knowledge Vault" : undefined}
+              title={collapsed ? "Knowledge vault" : undefined}
             >
-              <span className="menu-icon">📚</span>
+              <span className="menu-icon">
+                <Icon name="book" size={15} />
+              </span>
               {!collapsed && <span className="menu-label">Knowledge</span>}
               {!collapsed && (
-                <span className="arrow-icon">{knowledgeExpanded ? "▾" : "▸"}</span>
+                <span className="arrow-icon" style={{ transform: knowledgeExpanded ? "none" : "rotate(-90deg)" }}>
+                  <Icon name="chevron-down" size={12} />
+                </span>
               )}
             </button>
           </div>
@@ -139,29 +151,12 @@ export default function SidebarNav({
                 className={`sub-item ${knowledgeSubTab === "tags" ? "active" : ""}`}
                 onClick={() => onSelectKnowledgeSubTab("tags")}
               >
-                <span>Tags & Index</span>
+                <span>Tags &amp; Index</span>
               </button>
             </div>
           )}
         </div>
 
-        {/* WORK SECTION */}
-        <div className="menu-group">
-          <button
-            type="button"
-            className={`menu-item ${activeSection === "work" ? "active" : ""}`}
-            onClick={() => {
-              onSelectSection("work");
-              onOpenGrounding();
-            }}
-            title={collapsed ? "Work & Context Grounding" : undefined}
-          >
-            <span className="menu-icon">⚡</span>
-            {!collapsed && <span className="menu-label">Work & Context</span>}
-          </button>
-        </div>
-
-        {/* AI SECTION */}
         <div className="menu-group">
           <button
             type="button"
@@ -169,56 +164,66 @@ export default function SidebarNav({
             onClick={() => onSelectSection("ai")}
             title={collapsed ? "AI Copilot" : undefined}
           >
-            <span className="menu-icon">✦</span>
+            <span className="menu-icon">
+              <Icon name="spark" size={15} />
+            </span>
             {!collapsed && <span className="menu-label">AI Copilot</span>}
           </button>
         </div>
 
-        {/* PERSONAL SECTION */}
         <div className="menu-group">
+          {!collapsed && <div className="menu-group-label">Tools</div>}
           <button
             type="button"
-            className={`menu-item ${activeSection === "personal" ? "active" : ""}`}
-            onClick={() => {
-              onSelectSection("personal");
-              onOpenJournal();
-            }}
-            title={collapsed ? "Personal Journal" : undefined}
+            className="menu-item"
+            onClick={onOpenGrounding}
+            title={collapsed ? "Grounding assembler (Ctrl+Shift+G)" : "Grounding assembler (Ctrl+Shift+G)"}
           >
-            <span className="menu-icon">✎</span>
+            <span className="menu-icon">
+              <Icon name="layers" size={15} />
+            </span>
+            {!collapsed && <span className="menu-label">Grounding</span>}
+          </button>
+          <button
+            type="button"
+            className="menu-item"
+            onClick={onOpenJournal}
+            title={collapsed ? "Quick journal capture (Ctrl+J)" : "Quick journal capture (Ctrl+J)"}
+          >
+            <span className="menu-icon">
+              <Icon name="pen" size={15} />
+            </span>
             {!collapsed && <span className="menu-label">Journal</span>}
           </button>
         </div>
 
-        {/* SYSTEM SECTION */}
         <div className="menu-group">
           <button
             type="button"
-            className={`menu-item ${activeSection === "system" ? "active" : ""}`}
-            onClick={() => {
-              onSelectSection("system");
-              onOpenAISettings();
-            }}
-            title={collapsed ? "System Settings" : undefined}
+            className="menu-item"
+            onClick={onOpenAISettings}
+            title={collapsed ? "AI settings" : "AI settings"}
           >
-            <span className="menu-icon">⚙</span>
-            {!collapsed && <span className="menu-label">Settings</span>}
+            <span className="menu-icon">
+              <Icon name="gear" size={15} />
+            </span>
+            {!collapsed && <span className="menu-label">AI Settings</span>}
           </button>
         </div>
       </nav>
 
-      {/* Footer Info */}
       <div className="sidebar-footer">
-        {!collapsed ? (
-          <div className="git-indicator">
-            <span className={`status-dot ${gitStatus?.is_clean ? "clean" : "dirty"}`} />
-            <span className="git-branch">{gitStatus ? gitStatus.branch : "Git Ready"}</span>
-          </div>
-        ) : (
-          <div
-            className={`status-dot ${gitStatus?.is_clean ? "clean" : "dirty"}`}
-            title={`Git: ${gitStatus?.branch ?? "Ready"}`}
+        {collapsed ? (
+          <span
+            className={`status-dot ${gitStatus && !gitStatus.is_clean ? "dirty" : ""}`}
+            title={`Git: ${gitStatus?.branch ?? "unavailable"}`}
           />
+        ) : (
+          <div className="git-indicator" title={gitStatus ? `${gitStatus.branch} · ${gitStatus.is_clean ? "clean" : "has changes"}` : "Git unavailable"}>
+            <Icon name="git-branch" size={12} />
+            <span className="git-branch">{gitStatus ? gitStatus.branch : "git…"}</span>
+            <span className={`status-dot ${gitStatus && !gitStatus.is_clean ? "dirty" : ""}`} />
+          </div>
         )}
       </div>
     </aside>

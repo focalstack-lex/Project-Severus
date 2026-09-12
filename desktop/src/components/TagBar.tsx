@@ -1,3 +1,5 @@
+import Icon from "./Icon";
+
 interface Props {
   tags: string[];
   colors: Record<string, string>;
@@ -12,7 +14,7 @@ export default function TagBar({ tags, colors, active, onToggle, onReset }: Prop
   const hasFiltered = tags.some((t) => !active.has(t));
 
   return (
-    <div className="tagbar" role="toolbar" aria-label="Knowledge Tag Filters">
+    <div className="tagbar" role="toolbar" aria-label="Knowledge tag filters">
       {hasFiltered && onReset && (
         <button
           type="button"
@@ -20,14 +22,16 @@ export default function TagBar({ tags, colors, active, onToggle, onReset }: Prop
           onClick={onReset}
           title="Reset all tag filters to visible"
         >
-          <span className="tag-reset-icon">↺</span>
+          <span className="tag-reset-icon">
+            <Icon name="reset" size={11} />
+          </span>
           <span>ALL</span>
         </button>
       )}
 
       {tags.map((tag) => {
         const isActive = active.has(tag);
-        const dotColor = colors[tag] ?? "#9aa4b2";
+        const dotColor = colors[tag] ?? "#8f98a3";
 
         return (
           <button
@@ -35,17 +39,11 @@ export default function TagBar({ tags, colors, active, onToggle, onReset }: Prop
             type="button"
             className={`tag-chip ${isActive ? "active" : "off"}`}
             onClick={() => onToggle(tag)}
-            title={
-              isActive
-                ? `Click to filter out #${tag}`
-                : `Click to show #${tag}`
-            }
+            title={isActive ? `Filter out #${tag}` : `Show #${tag}`}
           >
             <span
               className="tag-dot"
-              style={{
-                backgroundColor: isActive ? dotColor : "rgba(255, 255, 255, 0.2)",
-              }}
+              style={{ backgroundColor: isActive ? dotColor : "rgba(255, 255, 255, 0.22)" }}
             />
             <span className="tag-text">#{tag.toLowerCase()}</span>
           </button>
