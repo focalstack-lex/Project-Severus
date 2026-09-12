@@ -4,6 +4,9 @@ import GraphView, { type VisNode } from "./components/GraphView";
 import TagBar from "./components/TagBar";
 import NoteEditor from "./components/NoteEditor";
 import JournalCapture from "./components/JournalCapture";
+import AISettingsModal from "./components/AISettingsModal";
+import AICopilot from "./components/AICopilot";
+import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import {
   appendJournal,
   getGraphData,
@@ -25,6 +28,9 @@ export default function App() {
   const [note, setNote] = useState<NoteContent | null>(null);
   const [editorOpen, setEditorOpen] = useState(true);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
+  const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -164,6 +170,10 @@ export default function App() {
         event.preventDefault();
         setJournalOpen(true);
       }
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        setCopilotOpen((open) => !open);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -190,6 +200,14 @@ export default function App() {
             <span className="live-dot" />
             <span>KNOWLEDGE ENGINE</span>
           </div>
+          <div
+            className="badge-pill ai-nav-pill"
+            onClick={() => setAiSettingsOpen(true)}
+            title="Click to configure custom AI Provider & Model"
+          >
+            <span className="live-dot" />
+            <span>AI: {aiConfig.model}</span>
+          </div>
         </div>
 
         <div className="topbar-center">
@@ -199,6 +217,19 @@ export default function App() {
         </div>
 
         <div className="topbar-actions">
+          <button
+            className={copilotOpen ? "accent" : ""}
+            onClick={() => setCopilotOpen((open) => !open)}
+            title="Toggle Knowledge Copilot (Ctrl+Shift+A)"
+          >
+            ✦ COPILOT
+          </button>
+          <button
+            onClick={() => setAiSettingsOpen(true)}
+            title="Configure AI Provider & Model"
+          >
+            ⚙ AI BRAIN
+          </button>
           <button onClick={() => setJournalOpen(true)} title="Quick capture (Ctrl+J)">
             + JOURNAL [CTRL+J]
           </button>
@@ -235,6 +266,15 @@ export default function App() {
             onClose={() => setEditorOpen(false)}
           />
         )}
+        {copilotOpen && (
+          <AICopilot
+            open={copilotOpen}
+            config={aiConfig}
+            activeNote={note}
+            onOpenSettings={() => setAiSettingsOpen(true)}
+            onClose={() => setCopilotOpen(false)}
+          />
+        )}
       </main>
 
       <footer className="status-bar">
@@ -248,6 +288,9 @@ export default function App() {
           </div>
         </div>
         <div className="status-bar-right">
+          <div className="status-item">
+            <span>AI MODEL:</span> <span className="highlight">{aiConfig.model}</span>
+          </div>
           <div className="status-item">
             <span>FILTER:</span>{" "}
             <span className="highlight">
@@ -264,6 +307,17 @@ export default function App() {
         open={journalOpen}
         onClose={() => setJournalOpen(false)}
         onSubmit={handleJournal}
+      />
+
+      <AISettingsModal
+        open={aiSettingsOpen}
+        config={aiConfig}
+        onSave={(newCfg) => {
+          setAiConfig(newCfg);
+          saveAIConfig(newCfg);
+          showToast(`Active AI Model set to ${newCfg.model}`);
+        }}
+        onClose={() => setAiSettingsOpen(false)}
       />
 
       {loadError && <div className="toast error">Backend error: {loadError}</div>}
