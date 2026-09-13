@@ -1,0 +1,38 @@
+[
+  {
+    "id": "dec-001",
+    "category": "decisions",
+    "content": "Severus Architecture: Selected Tauri v2 (Rust backend + React frontend) for local speed, native OS window controls, zero bloat, and low latency over web-only or heavy Electron.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "dec-002",
+    "category": "decisions",
+    "content": "Brand Transition: Evolved from 'Leavian Visuals' to 'Code x Create' / 'Focal Stack' to integrate software engineering and creative technology under one umbrella.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Code x Create",
+    "importance": "high"
+  },
+  {
+    "id": "dec-003",
+    "category": "decisions",
+    "content": "Relational Data Layer: Adopted PostgreSQL and Supabase over NoSQL alternatives for structured schemas, relational integrity, and robust Row Level Security.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

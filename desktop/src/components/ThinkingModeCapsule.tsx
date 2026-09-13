@@ -9,7 +9,7 @@ import {
   isEchoOfSeverus,
   formatReplyWithSir,
 } from "../lib/voice";
-import { appendJournal } from "../lib/tauri";
+import { appendJournal, getMemorySummary } from "../lib/tauri";
 import Icon from "./Icon";
 
 export interface ThinkingModeCapsuleProps {
@@ -37,22 +37,31 @@ export function ThinkingModeCapsule({
   onShowToast,
 }: ThinkingModeCapsuleProps) {
   const [orbState, setOrbState] = useState<OrbState>("listening");
-  const [statusText, setStatusText] = useState("Listening…");
   const [liveTranscript, setLiveTranscript] = useState("");
-  const [lastSpeechPreview, setLastSpeechPreview] = useState("");
+  const [statusText, setStatusText] = useState("Listening…");
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
+  const [lastSpeechPreview, setLastSpeechPreview] = useState<string>("");
 
+  const recognitionRef = useRef<any>(null);
   const isMountedRef = useRef(true);
   const openRef = useRef(open);
   const isMicMutedRef = useRef(isMicMuted);
-  const recognitionRef = useRef<any>(null);
   const silenceTimerRef = useRef<number | null>(null);
   const restartTimerRef = useRef<number | null>(null);
   const cooldownTimerRef = useRef<number | null>(null);
   const currentQueryRef = useRef("");
   const isProcessingRef = useRef(false);
   const lastSpokenTextRef = useRef("");
+  const memorySummaryRef = useRef("");
+
+  useEffect(() => {
+    if (open) {
+      void getMemorySummary().then((summary) => {
+        memorySummaryRef.current = summary;
+      });
+    }
+  }, [open]);
 
   openRef.current = open;
   isMicMutedRef.current = isMicMuted;
@@ -137,7 +146,10 @@ export function ThinkingModeCapsule({
         lower === "fullscreen" ||
         lower.includes("open workstation") ||
         lower.includes("expand workstation") ||
-        lower.includes("back to workstation");
+        lower.includes("back to workstation") ||
+        lower.includes("full screen") ||
+        lower.includes("fullscreen") ||
+        lower.includes("maximize");
 
       if (isExpandCommand) {
         stopRecognition();
@@ -236,6 +248,7 @@ export function ThinkingModeCapsule({
           `- Do NOT output markdown formatting, bullet points, headers, or code blocks.\n` +
           `- Maintain the stoic, perceptive, and brilliant persona of Professor Severus Snape.\n` +
           `- Always address the user with dignity and append ", Sir." at the very end of your response.\n` +
+          (memorySummaryRef.current ? `\n${memorySummaryRef.current}\n\n` : "") +
           `Active Vault Notes for grounding context:\n${topNotesSummary || "No notes in vault."}`;
 
         const messages = [

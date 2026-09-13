@@ -54,7 +54,26 @@ export function moveToMonitor(target: "left" | "right" | "next" | "primary" | st
   return invoke<string>("move_to_monitor", { target });
 }
 
+export function openSoundSettings(): Promise<void> {
+  return invoke<void>("open_sound_settings");
+}
+
+export function toggleMaximize(): Promise<boolean> {
+  return invoke<boolean>("toggle_maximize");
+}
+
+export function maximizeWindow(): Promise<void> {
+  return invoke<void>("maximize_window");
+}
+
+export function toggleFullscreen(): Promise<boolean> {
+  return invoke<boolean>("toggle_fullscreen");
+}
+
 /** Resolves with an unlisten function once the event subscription is registered. */
 export function onNotesChanged(handler: () => void): Promise<() => void> {
   return listen("notes-changed", () => handler());
 }
+
+export * from "./memory";
+export * from "./audioDevices";

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "proj-idea-001",
+    "category": "projects",
+    "content": "Local Whisper AI Transcriber: Lightweight desktop tool for transcribing college lectures and voice notes directly into markdown vault notes.",
+    "status": "uncertain",
+    "confidence": "medium",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "proj-idea-002",
+    "category": "projects",
+    "content": "Smart Hybrid Runner Log: Offline-first tracker combining running shoe mileage, Zone 2 heart rate drift, trail elevation profiles, and strength training logs.",
+    "status": "uncertain",
+    "confidence": "medium",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "proj-idea-003",
+    "category": "projects",
+    "content": "Automated Cinematic B-Roll Sync: Script to auto-detect musical beats and slice camera footage transitions in DaVinci Resolve / Premiere.",
+    "status": "uncertain",
+    "confidence": "medium",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  }
+]

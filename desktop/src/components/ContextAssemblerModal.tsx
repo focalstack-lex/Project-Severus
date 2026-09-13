@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { NoteContent, NoteMeta } from "../types";
 import Icon from "./Icon";
-import { readNote } from "../lib/tauri";
+import { readNote, getMemorySummary, getUserMemories } from "../lib/tauri";
 
 interface Props {
   open: boolean;
@@ -53,6 +54,9 @@ export default function ContextAssemblerModal({
   const [taskInstruction, setTaskInstruction] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [loadedNoteContents, setLoadedNoteContents] = useState<Record<string, string>>({});
+  const [includeUserMemory, setIncludeUserMemory] = useState(true);
+  const [memorySummary, setMemorySummary] = useState("");
+  const [memoryCount, setMemoryCount] = useState(0);
   const [copied, setCopied] = useState(false);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +72,8 @@ export default function ContextAssemblerModal({
       }
       setCopied(false);
       window.setTimeout(() => searchInputRef.current?.focus(), 40);
+      void getMemorySummary().then(setMemorySummary);
+      void getUserMemories().then((items) => setMemoryCount(items.length));
     }
   }, [open, activeNote, notes]);
 
@@ -147,6 +153,10 @@ export default function ContextAssemblerModal({
       knowledgeSections.push(`### Note: ${title} (${id}.md)\n${content}`);
     }
 
+    if (includeUserMemory && memorySummary) {
+      parts.push(`## USER COGNITIVE MEMORY & CONSTRAINTS\n${memorySummary}`);
+    }
+
     if (knowledgeSections.length > 0) {
       parts.push(`## GROUNDING CONTEXT FROM SECOND BRAIN\n${knowledgeSections.join("\n\n---\n\n")}`);
     }
@@ -155,6 +165,8 @@ export default function ContextAssemblerModal({
   }, [
     preset,
     includeDirectives,
+    includeUserMemory,
+    memorySummary,
     includeActiveNote,
     activeNote,
     taskInstruction,
@@ -193,21 +205,32 @@ export default function ContextAssemblerModal({
     );
   }, [notes, searchFilter]);
 
-  if (!open) return null;
-
   return (
-    <div className="overlay grounding-overlay" onClick={onClose}>
-      <div
-        className="grounding-modal"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") onClose();
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            void handleCopy();
-          }
-        }}
-      >
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="overlay grounding-overlay"
+          onClick={onClose}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <motion.div
+            className="grounding-modal"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") onClose();
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                void handleCopy();
+              }
+            }}
+          >
         {/* Modal Header */}
         <div className="grounding-header">
           <div className="grounding-title-wrap">
@@ -273,6 +296,14 @@ export default function ContextAssemblerModal({
                   onChange={(e) => setIncludeDirectives(e.target.checked)}
                 />
                 <span>Include Operating Directives</span>
+              </label>
+              <label className="toggle-check" title="Ground with Lex's structured user memory, hard constraints, and active projects">
+                <input
+                  type="checkbox"
+                  checked={includeUserMemory}
+                  onChange={(e) => setIncludeUserMemory(e.target.checked)}
+                />
+                <span>Include User Memory ({memoryCount > 0 ? `${memoryCount} memories` : "Active Profile"})</span>
               </label>
               {activeNote && (
                 <label className="toggle-check">
@@ -370,7 +401,9 @@ export default function ContextAssemblerModal({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

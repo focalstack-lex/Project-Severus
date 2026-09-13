@@ -3,6 +3,7 @@ import {
   isVoiceInEchoCooldown,
   isEchoOfSeverus,
 } from "./voice";
+import { onMicrophoneChanged, getMicrophoneStream } from "./audioDevices";
 
 // Phonetic spelling variations recognized by Web Speech API for "Severus" (Severus Snape)
 export const SEVERUS_NAME_ALIASES = [
@@ -314,9 +315,15 @@ export class VoiceCommandListener {
   private lastCommandTime = 0;
   private restartTimeout: number | null = null;
   private handlers: VoiceCommandHandlers;
+  private unsubMic: (() => void) | null = null;
 
   constructor(handlers: VoiceCommandHandlers) {
     this.handlers = handlers;
+    this.unsubMic = onMicrophoneChanged(() => {
+      if (this.isListening && !this.isPaused) {
+        this.scheduleRestart(150);
+      }
+    });
   }
 
   public updateHandlers(handlers: VoiceCommandHandlers) {
@@ -399,6 +406,9 @@ export class VoiceCommandListener {
       this.recognition = null;
     }
 
+    // Bind media stream for chosen microphone
+    void getMicrophoneStream().catch(() => {});
+
     try {
       const rec = new SpeechRec();
       rec.continuous = true;
@@ -461,6 +471,10 @@ export class VoiceCommandListener {
   public stop(): void {
     this.isListening = false;
     this.isPaused = false;
+    if (this.unsubMic) {
+      this.unsubMic();
+      this.unsubMic = null;
+    }
     if (this.restartTimeout !== null) {
       window.clearTimeout(this.restartTimeout);
       this.restartTimeout = null;
@@ -716,12 +730,26 @@ export class VoiceCommandListener {
           matchesKeywords(text, [
             "maximize",
             "maximize window",
+            "maximize screen",
             "full screen",
             "fullscreen",
+            "full screen window",
+            "fullscreen window",
+            "go full screen",
+            "enter full screen",
+            "make it full screen",
+            "make full screen",
+            "toggle full screen",
+            "toggle fullscreen",
+            "full screen mode",
+            "fullscreen mode",
             "enlarge",
             "unminimize",
             "restore window",
             "open workstation",
+            "expand window",
+            "expand workstation",
+            "full size",
           ])
         );
       })()

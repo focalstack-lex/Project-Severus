@@ -1,0 +1,98 @@
+[
+  {
+    "id": "hc-001",
+    "category": "hard_constraint",
+    "content": "Do not change my structure: When modifying or fixing existing code, change only what is strictly necessary and preserve Lex's existing file and architecture structure.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "hc-002",
+    "category": "hard_constraint",
+    "content": "Navigation preservation: Never modify existing navigation layouts or routes unless explicitly requested by Lex.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "hc-003",
+    "category": "hard_constraint",
+    "content": "UI element behavior: Grizz is intentionally draggable. Do not freeze or make Grizz static.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "hc-004",
+    "category": "hard_constraint",
+    "content": "Geographic accuracy: Strictly never describe Lex as based in Manila. He is based in the Davao Region / Digos City, Davao del Sur.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "hc-005",
+    "category": "hard_constraint",
+    "content": "Persona and honorific: Address Lex with dignity and append ', Sir.' at the conclusion of assistant responses in voice / assistant mode.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "hc-006",
+    "category": "hard_constraint",
+    "content": "Title accuracy: Do not describe Lex as a 'professional photographer' unless explicitly requested.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "hc-007",
+    "category": "hard_constraint",
+    "content": "Coffee Box client constraint: Strictly avoid the phrase 'golden hour' in copy for Coffee Box unless explicitly requested.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Coffee Box",
+    "importance": "medium"
+  },
+  {
+    "id": "hc-008",
+    "category": "hard_constraint",
+    "content": "Defensive programming: No silent error swallowing; no bare except: pass. Validate inputs at every system boundary.",
+    "status": "hard_constraint",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  }
+]

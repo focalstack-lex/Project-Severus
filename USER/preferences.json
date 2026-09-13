@@ -1,0 +1,50 @@
+[
+  {
+    "id": "pref-001",
+    "category": "preferences",
+    "content": "Systems over motivation: Prefers actionable daily habits, feedback loops, and automated systems (Atomic Habits) over generic motivational speeches.",
+    "status": "preference",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "pref-002",
+    "category": "preferences",
+    "content": "Aesthetics: Demands human-crafted, intentional design. Rejects generic 'AI slop', over-saturated gradients, and generic templates. Prefers restrained palettes, strong typography, and purposeful motion.",
+    "status": "preference",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "pref-003",
+    "category": "preferences",
+    "content": "Engineering workflow: Practical, lightweight, cost-effective tech stack suitable for a student builder (local models, open-source engines, Supabase, Vercel).",
+    "status": "preference",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "pref-004",
+    "category": "preferences",
+    "content": "Audio & Music: Indie Filipino artists (Ben&Ben, Munimuni), uplifting indie folk ('Riptide' energy), acoustic textures that evoke nostalgia and emotional resonance.",
+    "status": "preference",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  }
+]

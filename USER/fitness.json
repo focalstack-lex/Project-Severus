@@ -1,0 +1,38 @@
+[
+  {
+    "id": "fit-001",
+    "category": "fitness",
+    "content": "Hybrid athlete philosophy: Merging high-volume aerobic endurance with compound resistance training.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "fit-002",
+    "category": "fitness",
+    "content": "Training distribution: 80% easy Zone 2 runs to build cardiovascular mitochondria and prevent burnout; 20% tempo/speedwork.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "fit-003",
+    "category": "fitness",
+    "content": "Injury prevention protocol: Regular tibialis raises, calf eccentrics, single-leg glute bridges, foam rolling, and adequate sleep.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  }
+]

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "rout-001",
+    "category": "routines",
+    "content": "Morning Routine: Early wake-up, hydration, Zone 2 endurance run or mobility activation, post-run shower, coffee, high-protein meal.",
+    "status": "routine",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "rout-002",
+    "category": "routines",
+    "content": "Engineering Deep Work: Dedicated 90-120 minute blocks of high-focus programming with zero phone distractions.",
+    "status": "routine",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "rout-003",
+    "category": "routines",
+    "content": "Evening Wind-Down: Strength training, reflection in daily journal, reviewing Second Brain notes, and setting tomorrow's priorities.",
+    "status": "routine",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "rout-004",
+    "category": "routines",
+    "content": "Weekly System Calibration: Sunday evening git review, note graph inspection, training volume review, and shoe mileage check.",
+    "status": "routine",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

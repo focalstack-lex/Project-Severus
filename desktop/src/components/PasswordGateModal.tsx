@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Icon from "./Icon";
 
 interface Props {
@@ -37,8 +38,6 @@ export default function PasswordGateModal({
     }
   }, [open]);
 
-  if (!open) return null;
-
   const mismatch = isNewPassword && confirmPassword.length > 0 && password !== confirmPassword;
   const canSubmit = !busy && password.length > 0 && (!isNewPassword || (!mismatch && confirmPassword.length > 0));
 
@@ -47,65 +46,85 @@ export default function PasswordGateModal({
   };
 
   return (
-    <div className="overlay gate-overlay" onClick={onCancel}>
-      <div className="gate-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="gate-header">
-          <span className="gate-title">
-            <Icon name="lock" size={15} />
-            {isNewPassword ? "Set Control Password" : "Control Password"}
-          </span>
-          <button className="close-btn" onClick={onCancel} title="Cancel (Esc)" aria-label="Cancel (Esc)">
-            <Icon name="close" size={13} />
-          </button>
-        </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="gate-overlay"
+          className="overlay gate-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          onClick={onCancel}
+        >
+          <motion.div
+            key="gate-modal"
+            className="gate-modal"
+            initial={{ opacity: 0, scale: 0.96, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -10 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="gate-header">
+              <span className="gate-title">
+                <Icon name="lock" size={15} />
+                {isNewPassword ? "Set Control Password" : "Control Password"}
+              </span>
+              <button className="close-btn" onClick={onCancel} title="Cancel (Esc)" aria-label="Cancel (Esc)">
+                <Icon name="close" size={13} />
+              </button>
+            </div>
 
-        <p className="gate-description">{description}</p>
-        <p className="gate-sub">
-          {isNewPassword
-            ? "Choose a password for destructive system actions (locking the PC, closing windows)."
-            : "Enter your control password to allow this action."}
-        </p>
+            <p className="gate-description">{description}</p>
+            <p className="gate-sub">
+              {isNewPassword
+                ? "Choose a password for destructive system actions (locking the PC, closing windows)."
+                : "Enter your control password to allow this action."}
+            </p>
 
-        <input
-          ref={inputRef}
-          type="password"
-          className="gate-input"
-          value={password}
-          placeholder="Password"
-          disabled={busy}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") onCancel();
-            if (e.key === "Enter" && !isNewPassword) submit();
-            if (e.key === "Enter" && isNewPassword && !mismatch && confirmPassword) submit();
-          }}
-        />
-        {isNewPassword && (
-          <input
-            type="password"
-            className="gate-input"
-            value={confirmPassword}
-            placeholder="Confirm password"
-            disabled={busy}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && canSubmit) submit();
-              if (e.key === "Escape") onCancel();
-            }}
-          />
-        )}
-        {mismatch && <div className="gate-error">Passwords do not match.</div>}
-        {error && <div className="gate-error">{error}</div>}
+            <input
+              ref={inputRef}
+              type="password"
+              className="gate-input"
+              value={password}
+              placeholder="Password"
+              disabled={busy}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onCancel();
+                if (e.key === "Enter" && !isNewPassword) submit();
+                if (e.key === "Enter" && isNewPassword && !mismatch && confirmPassword) submit();
+              }}
+            />
+            {isNewPassword && (
+              <input
+                type="password"
+                className="gate-input"
+                value={confirmPassword}
+                placeholder="Confirm password"
+                disabled={busy}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && canSubmit) submit();
+                  if (e.key === "Escape") onCancel();
+                }}
+              />
+            )}
+            {mismatch && <div className="gate-error">Passwords do not match.</div>}
+            {error && <div className="gate-error">{error}</div>}
 
-        <div className="gate-actions">
-          <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>
-            Cancel
-          </button>
-          <button type="button" className="accent" onClick={submit} disabled={!canSubmit}>
-            {busy ? "Working…" : isNewPassword ? "Set & Allow" : "Allow"}
-          </button>
-        </div>
-      </div>
-    </div>
+            <div className="gate-actions">
+              <button type="button" className="btn-secondary" onClick={onCancel} disabled={busy}>
+                Cancel
+              </button>
+              <button type="button" className="accent" onClick={submit} disabled={!canSubmit}>
+                {busy ? "Working…" : isNewPassword ? "Set & Allow" : "Allow"}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

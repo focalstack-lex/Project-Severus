@@ -31,9 +31,11 @@ export type IconName =
   | "layers"
   | "list"
   | "lock"
+  | "maximize"
   | "message"
   | "mic"
   | "mic-off"
+  | "minimize"
   | "monitor"
   | "pen"
   | "plus"
@@ -177,6 +179,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 14.5v2.5" />
     </>
   ),
+  maximize: (
+    <>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2" />
+      <path d="M3.5 8.5h17" opacity="0.35" />
+    </>
+  ),
   message: <path d="M21 14.5a2 2 0 0 1-2 2H8l-4.5 4V5a2 2 0 0 1 2-2H19a2 2 0 0 1 2 2v9.5z" />,
   mic: (
     <>
@@ -190,6 +198,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M9 5.5a3 3 0 0 1 6 0V11M12 14a3 3 0 0 1-3-3v-2" />
       <path d="M18.5 11a6.5 6.5 0 0 1-1.2 3.8M12 17.5V21.5" />
       <path d="m3.5 3.5 17 17" />
+    </>
+  ),
+  minimize: (
+    <>
+      <rect x="5.5" y="5.5" width="13" height="13" rx="1.5" />
+      <path d="M5.5 9.5h13" opacity="0.35" />
     </>
   ),
   monitor: (

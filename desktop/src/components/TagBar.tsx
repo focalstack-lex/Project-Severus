@@ -39,13 +39,19 @@ export default function TagBar({ tags, colors, active, onToggle, onReset }: Prop
             type="button"
             className={`tag-chip ${isActive ? "active" : "off"}`}
             onClick={() => onToggle(tag)}
-            title={isActive ? `Filter out #${tag}` : `Show #${tag}`}
+            title={isActive ? `Hide #${tag}` : `Show #${tag}`}
           >
             <span
               className="tag-dot"
-              style={{ backgroundColor: isActive ? dotColor : "rgba(255, 255, 255, 0.22)" }}
+              style={{
+                backgroundColor: isActive ? dotColor : "rgba(255, 255, 255, 0.18)",
+                boxShadow: isActive ? `0 0 6px ${dotColor}90` : "none",
+              }}
             />
-            <span className="tag-text">#{tag.toLowerCase()}</span>
+            <span className="tag-text">
+              <span className="tag-hash">#</span>
+              {tag.toLowerCase()}
+            </span>
           </button>
         );
       })}

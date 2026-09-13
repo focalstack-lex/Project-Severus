@@ -1,0 +1,38 @@
+[
+  {
+    "id": "hist-001",
+    "category": "historical_context",
+    "content": "High School: Completed studies at Holy Cross of Malita, Inc., establishing early roots in research and multimedia production.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  },
+  {
+    "id": "hist-002",
+    "category": "historical_context",
+    "content": "UST Aspirations: Early college research explored UST Manila; current confirmed path is thriving at Cor Jesu College of Digos.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  },
+  {
+    "id": "hist-003",
+    "category": "historical_context",
+    "content": "Evolution of Camera Gear: Began with basic kit lenses on Nikon D3200, mastered 50mm f/1.8 prime portraiture, and progressively added Ronin-SC stabilization.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  }
+]

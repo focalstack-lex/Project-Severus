@@ -1,0 +1,38 @@
+[
+  {
+    "id": "goal-fit-001",
+    "category": "goals",
+    "content": "Complete official half-marathon (21.1k) and regional mountain trail races injury-free.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "goal-fit-002",
+    "category": "goals",
+    "content": "Build and maintain a sub-5:00/km 5K baseline while preserving hybrid athlete strength and aesthetic physique.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "goal-fit-003",
+    "category": "goals",
+    "content": "Develop unbreakable lower-leg durability (tibia, calves, plantar fascia) to eliminate shin splints under heavy mileage.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  }
+]

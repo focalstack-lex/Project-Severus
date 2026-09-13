@@ -1,0 +1,38 @@
+[
+  {
+    "id": "proj-comp-001",
+    "category": "projects",
+    "content": "Holy Cross of Malita Institutional Research: Academic software and research paper for secondary school.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  },
+  {
+    "id": "proj-comp-002",
+    "category": "projects",
+    "content": "Java Desktop Point of Sale Prototype: Java Swing / NetBeans / MySQL desktop application for retail transactions.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  },
+  {
+    "id": "proj-comp-003",
+    "category": "projects",
+    "content": "Client Portrait & Event Shoots: Professional photography coverage for weddings, graduations, pre-debuts, and school publications.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

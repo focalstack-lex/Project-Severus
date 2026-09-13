@@ -1,0 +1,50 @@
+[
+  {
+    "id": "ident-001",
+    "category": "identity",
+    "content": "Preferred name: Lex Matondo (short name: Lex). Born December 27, 2005 (age 20 as of 2026).",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "ident-002",
+    "category": "identity",
+    "content": "Geographic location: Philippines, Davao Region, Digos City, Davao del Sur. CRITICAL: Strictly never describe Lex as based in Manila.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "ident-003",
+    "category": "identity",
+    "content": "Academic identity: Computer Engineering student pursuing Bachelor of Science in Computer Engineering (BSCpE) at Cor Jesu College of Digos.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "ident-004",
+    "category": "identity",
+    "content": "Holistic identity: Technologist who creates. Combines computer engineering, software systems, AI, and UI/UX with photography, cinematography, filmmaking, graphic design, and hybrid endurance athletics.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  }
+]

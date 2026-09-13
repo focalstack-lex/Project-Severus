@@ -65,3 +65,23 @@ export interface ChatSession {
   }>;
 }
 
+export interface MemoryItem {
+  id: string;
+  category: string;
+  content: string;
+  status: "current" | "historical" | "preference" | "hard_constraint" | "project" | "goal" | "routine" | "uncertain" | "deprecated" | string;
+  confidence: "high" | "medium" | "low" | string;
+  created_at: string;
+  updated_at: string;
+  source: string;
+  related_project?: string | null;
+  importance: "high" | "medium" | "low" | string;
+}
+
+export interface MemoryFilter {
+  category?: string;
+  status?: string;
+  importance?: string;
+  search?: string;
+}
+

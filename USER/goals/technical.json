@@ -1,0 +1,38 @@
+[
+  {
+    "id": "goal-tech-001",
+    "category": "goals",
+    "content": "Graduate with BSCpE honors from Cor Jesu College of Digos with strong hardware-software portfolio.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "goal-tech-002",
+    "category": "goals",
+    "content": "Master agentic software engineering and local AI cognitive systems embedded in desktop workflows.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "goal-tech-003",
+    "category": "goals",
+    "content": "Build scalable, production-grade cloud architectures utilizing Supabase, Rust, and modern React frameworks.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

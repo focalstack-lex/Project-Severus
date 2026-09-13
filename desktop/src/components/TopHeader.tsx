@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Icon from "./Icon";
 import type { AIConfig } from "../lib/ai";
 import type { GitStatusData } from "../types";
+import { toggleMaximize } from "../lib/tauri";
 
 export type NavSection = "home" | "knowledge" | "ai";
 export type KnowledgeSubTab = "notes" | "graph" | "tags";
@@ -34,6 +36,8 @@ interface Props {
   listeningActive?: boolean;
   onToggleListening?: () => void;
   onToggleFloatingMode?: () => void;
+  onToggleMaximize?: () => void;
+  isMaximized?: boolean;
   onEnterThinkingMode?: () => void;
   onHideToTray?: () => void;
   onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
@@ -67,6 +71,8 @@ export default function TopHeader({
   listeningActive = true,
   onToggleListening,
   onToggleFloatingMode,
+  onToggleMaximize,
+  isMaximized,
   onEnterThinkingMode,
   onHideToTray,
   onMoveMonitor,
@@ -93,10 +99,10 @@ export default function TopHeader({
     if (target?.closest("button, input, select, textarea, a, .system-popover, [data-no-drag]")) {
       return;
     }
-    try {
-      void getCurrentWindow().toggleMaximize();
-    } catch {
-      // Not running in Tauri runtime
+    if (onToggleMaximize) {
+      onToggleMaximize();
+    } else {
+      void toggleMaximize();
     }
   };
 
@@ -107,8 +113,9 @@ export default function TopHeader({
       onMouseDown={handleStartDrag}
       onDoubleClick={handleDoubleClickHeader}
     >
+      {/* ISLAND 1: Primary Workspace, Views & Capture */}
       <div
-        className="framer-top-nav-capsule"
+        className="framer-top-island framer-island-primary"
         data-tauri-drag-region
         onMouseDown={handleStartDrag}
       >
@@ -125,118 +132,114 @@ export default function TopHeader({
 
         <span className="nav-divider" />
 
-        {/* Primary views */}
-        <nav className="nav-links-cluster">
+        {/* Segmented Primary views */}
+        <nav className="nav-segmented-deck" aria-label="Workspace views">
           <button
             type="button"
-            className={`nav-pill-item ${activeSection === "home" ? "active" : ""}`}
+            className={`nav-segmented-item ${activeSection === "home" ? "active" : ""}`}
             onClick={() => onSelectSection?.("home")}
           >
-            <span className="nav-pill-icon">
-              <Icon name="home" size={14} />
-            </span>
+            <Icon name="home" size={13} />
             <span>Home</span>
           </button>
 
           <button
             type="button"
-            className={`nav-pill-item ${activeSection === "knowledge" && knowledgeSubTab === "graph" ? "active" : ""}`}
+            className={`nav-segmented-item ${activeSection === "knowledge" && knowledgeSubTab === "graph" ? "active" : ""}`}
             onClick={() => {
               onSelectSection?.("knowledge");
               onSelectKnowledgeSubTab?.("graph");
             }}
           >
-            <span className="nav-pill-icon">
-              <Icon name="graph" size={14} />
-            </span>
+            <Icon name="graph" size={13} />
             <span>Graph</span>
           </button>
 
           <button
             type="button"
-            className={`nav-pill-item ${activeSection === "knowledge" && knowledgeSubTab === "notes" ? "active" : ""}`}
+            className={`nav-segmented-item ${activeSection === "knowledge" && knowledgeSubTab === "notes" ? "active" : ""}`}
             onClick={() => {
               onSelectSection?.("knowledge");
               onSelectKnowledgeSubTab?.("notes");
               onToggleNotesDrawer?.();
             }}
           >
-            <span className="nav-pill-icon">
-              <Icon name="book" size={14} />
-            </span>
+            <Icon name="book" size={13} />
             <span>Notes</span>
           </button>
 
           <button
             type="button"
-            className={`nav-pill-item ${copilotActive ? "active" : ""}`}
+            className={`nav-segmented-item ${copilotActive ? "active" : ""}`}
             onClick={onToggleCopilot}
           >
-            <span className="nav-pill-icon">
-              <Icon name="spark" size={14} />
-            </span>
+            <Icon name="spark" size={13} />
             <span>Copilot</span>
           </button>
         </nav>
 
         <span className="nav-divider" />
 
-        {/* Center Search Trigger */}
+        {/* Omnibar Search Trigger */}
         <button
           type="button"
-          className="nav-pill-item search-trigger"
+          className="nav-omnibar-trigger"
           onClick={onOpenQuickSearch}
           title={`Search notes and commands (${MOD_KEY}+K)`}
         >
-          <span className="nav-pill-icon">
-            <Icon name="search" size={14} />
-          </span>
-          <span className="search-text">Search</span>
+          <Icon name="search" size={13} />
+          <span className="search-text">Search vault…</span>
           <kbd className="nav-kbd">{MOD_KEY}K</kbd>
         </button>
 
         <span className="nav-divider" />
 
-        {/* Quick actions & system popover */}
-        <div className="nav-actions-cluster">
+        {/* Quick Actions / Capture */}
+        <div className="nav-capture-cluster">
           <button
             type="button"
             className="nav-action-btn accent"
             onClick={onOpenNewNote}
             title={`Create New Note (${MOD_KEY}+Alt+N)`}
           >
-            <Icon name="plus" size={13} />
+            <Icon name="plus" size={12} />
             <span>Note</span>
           </button>
 
           {onOpenJournal && (
             <button
               type="button"
-              className="nav-action-btn"
+              className="nav-icon-action-btn"
               onClick={onOpenJournal}
               title={`Capture Daily Journal (${MOD_KEY}+J)`}
             >
               <Icon name="pen" size={13} />
-              <span>Journal</span>
             </button>
           )}
 
           <button
             type="button"
-            className="nav-action-btn"
+            className="nav-icon-action-btn"
             onClick={onOpenGrounding}
             title={`Assemble agent grounding context (${MOD_KEY}+Shift+G)`}
           >
             <Icon name="layers" size={13} />
-            <span>Grounding</span>
           </button>
+        </div>
+      </div>
 
-          <span className="nav-divider" />
-
+      {/* ISLAND 2: Intelligence Pod, System Status & Window Controls */}
+      <div
+        className="framer-top-island framer-island-system"
+        data-tauri-drag-region
+        onMouseDown={handleStartDrag}
+      >
+        {/* Assistant Acoustic & Thinking Pod */}
+        <div className="assistant-pod">
           {onToggleListening && (
             <button
               type="button"
-              className={`nav-action-btn ${listeningActive ? "" : "paused"}`}
+              className={`assistant-listening-btn ${listeningActive ? "active" : "paused"}`}
               onClick={onToggleListening}
               title={
                 listeningActive
@@ -244,15 +247,15 @@ export default function TopHeader({
                   : `Listening Paused (Say "Start listening" / ${MOD_KEY}+Shift+M)`
               }
             >
-              <Icon name="mic" size={13} />
-              <span>{listeningActive ? "Listening" : "Muted"}</span>
+              <Icon name={listeningActive ? "mic" : "mic-off"} size={12} />
+              <span className="listening-label">{listeningActive ? "Listening" : "Muted"}</span>
             </button>
           )}
 
           {onEnterThinkingMode && (
             <button
               type="button"
-              className="nav-action-btn"
+              className="assistant-thinking-btn"
               onClick={onEnterThinkingMode}
               title="Enter Thinking Mode (live hands-free voice chat with Severus)"
             >
@@ -260,48 +263,34 @@ export default function TopHeader({
               <span>Thinking</span>
             </button>
           )}
+        </div>
 
-          <span className="nav-divider" />
+        <span className="nav-divider" />
 
-          {onToggleFloatingMode && (
-            <button
-              type="button"
-              className="nav-action-btn window-ctrl-btn"
-              onClick={onToggleFloatingMode}
-              title="Switch to Desktop Floating Companion Pill"
-            >
-              <Icon name="external" size={12} />
-              <span>Float</span>
-            </button>
-          )}
+        {/* System Status & Popover */}
+        <div className="popover-wrapper">
+          <button
+            type="button"
+            className={`nav-action-btn status-btn ${systemPopoverOpen ? "active" : ""}`}
+            onClick={() => setSystemPopoverOpen((prev) => !prev)}
+            title="System status and voice settings"
+          >
+            <span
+              className={`status-dot ${!listeningActive ? "paused" : voiceMuted ? "muted" : ""}`}
+            />
+            <span>Status</span>
+            <Icon name="chevron-down" size={10} />
+          </button>
 
-          {onHideToTray && (
-            <button
-              type="button"
-              className="nav-action-btn window-ctrl-btn"
-              onClick={onHideToTray}
-              title="Minimize to System Tray (actively listening in background)"
-            >
-              <Icon name="close" size={12} />
-              <span>Tray</span>
-            </button>
-          )}
-
-          <div className="popover-wrapper">
-            <button
-              type="button"
-              className={`nav-action-btn status-btn ${systemPopoverOpen ? "active" : ""}`}
-              onClick={() => setSystemPopoverOpen((prev) => !prev)}
-              title="System status and voice settings"
-            >
-              <span
-                className={`status-dot ${!listeningActive ? "paused" : voiceMuted ? "muted" : ""}`}
-              />
-              <span>Status</span>
-            </button>
-
+          <AnimatePresence>
             {systemPopoverOpen && (
-              <div className="system-popover">
+              <motion.div
+                className="system-popover"
+                initial={{ opacity: 0, scale: 0.96, y: -6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: -6 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+              >
                 <div className="popover-header">
                   <span className="popover-title">System</span>
                   <button
@@ -339,13 +328,13 @@ export default function TopHeader({
                   <div className="popover-item" onClick={onToggleVoiceMuted}>
                     <div className="popover-item-text">
                       <span className="item-label">
-                        <Icon name="waveform" size={13} />
-                        Voice Audio
+                        <Icon name="activity" size={13} />
+                        Neural Voice
                       </span>
-                      <span className="item-sub">Spoken response sound effects</span>
+                      <span className="item-sub">ElevenLabs TTS</span>
                     </div>
                     <span className={`toggle-pill ${voiceMuted ? "off" : "on"}`}>
-                      {voiceMuted ? "Muted" : "On"}
+                      {voiceMuted ? "Muted" : "Active"}
                     </span>
                   </div>
 
@@ -353,9 +342,9 @@ export default function TopHeader({
                     <div className="popover-item-text">
                       <span className="item-label">
                         <Icon name="waveform" size={13} />
-                        Double-Clap Wake
+                        Clap Detection
                       </span>
-                      <span className="item-sub">Clap twice to restore & greet</span>
+                      <span className="item-sub">Double-clap to restore</span>
                     </div>
                     <span className={`toggle-pill ${clapEnabled ? "on" : "off"}`}>
                       {clapEnabled ? "On" : "Off"}
@@ -441,9 +430,47 @@ export default function TopHeader({
                     </div>
                   )}
                 </div>
-              </div>
+              </motion.div>
             )}
-          </div>
+          </AnimatePresence>
+        </div>
+
+        <span className="nav-divider" />
+
+        {/* Window Controls: Icon Flank */}
+        <div className="nav-window-controls">
+          {onToggleFloatingMode && (
+            <button
+              type="button"
+              className="nav-icon-window-btn"
+              onClick={onToggleFloatingMode}
+              title="Switch to Desktop Floating Companion Pill"
+            >
+              <Icon name="external" size={12} />
+            </button>
+          )}
+
+          {onToggleMaximize && (
+            <button
+              type="button"
+              className="nav-icon-window-btn"
+              onClick={onToggleMaximize}
+              title={isMaximized ? "Restore window size" : "Maximize to full screen"}
+            >
+              <Icon name={isMaximized ? "minimize" : "maximize"} size={12} />
+            </button>
+          )}
+
+          {onHideToTray && (
+            <button
+              type="button"
+              className="nav-icon-window-btn close-tray-btn"
+              onClick={onHideToTray}
+              title="Minimize to System Tray (actively listening in background)"
+            >
+              <Icon name="close" size={12} />
+            </button>
+          )}
         </div>
       </div>
     </header>

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "proj-act-001",
+    "category": "projects",
+    "content": "Project Severus: Personal JARVIS cognitive operating system and desktop Second Brain (Tauri v2 + Rust backend, React + TypeScript frontend, voice commands, knowledge graph, system control).",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "proj-act-002",
+    "category": "projects",
+    "content": "Smart Trash Bin: Computer Engineering embedded IoT hardware/software system with automatic sorting, ultrasonic sensors, and MCU control.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Smart Trash Bin",
+    "importance": "high"
+  },
+  {
+    "id": "proj-act-003",
+    "category": "projects",
+    "content": "Coffee Box System: Web ordering, point-of-sale, inventory tracking, and client marketing system for local cafe client.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Coffee Box",
+    "importance": "high"
+  },
+  {
+    "id": "proj-act-004",
+    "category": "projects",
+    "content": "Code x Create Portfolio: Personal portfolio uniting software engineering projects with photography/cinematography galleries under a unified minimalist brand.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Code x Create",
+    "importance": "medium"
+  }
+]

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph3D from "3d-force-graph";
+import * as THREE from "three";
 import Icon from "./Icon";
 import { NeuralNoise } from "@/components/ui/neural-noise";
 import type { GraphLink } from "../types";
@@ -29,6 +30,76 @@ type GraphInstance = any;
 interface Point {
   x: number;
   y: number;
+}
+
+function parseThreeColor(colorStr?: string): THREE.Color {
+  if (!colorStr) return new THREE.Color("#94a3b8");
+  try {
+    return new THREE.Color(colorStr);
+  } catch {
+    return new THREE.Color("#94a3b8");
+  }
+}
+
+/**
+ * Holographic Synapse: Luminous Crystalline Core + Subtle Geodesic Wireframe Aura
+ */
+function createHolographicNode(node: VisNode, isSelected: boolean): THREE.Group {
+  const group = new THREE.Group();
+  const baseRadius = Math.max(3.6, Math.min(12, (node.size || 3.5) * 1.35));
+  const threeColor = parseThreeColor(node.color);
+
+  // 1. Luminous Crystalline Core Sphere
+  const coreGeo = new THREE.SphereGeometry(baseRadius, 32, 32);
+  const coreMat = new THREE.MeshStandardMaterial({
+    color: isSelected ? 0xffffff : threeColor,
+    emissive: threeColor,
+    emissiveIntensity: isSelected ? 0.95 : 0.45,
+    roughness: 0.16,
+    metalness: 0.82,
+    transparent: true,
+    opacity: isSelected ? 1.0 : 0.94,
+  });
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
+  group.add(coreMesh);
+
+  // 2. Geodesic Wireframe Aura
+  const auraRadius = baseRadius * 1.5;
+  const auraGeo = new THREE.IcosahedronGeometry(auraRadius, 1);
+  const auraMat = new THREE.MeshBasicMaterial({
+    color: isSelected ? 0xffffff : threeColor,
+    wireframe: true,
+    transparent: true,
+    opacity: isSelected ? 0.7 : 0.22,
+  });
+  const auraMesh = new THREE.Mesh(auraGeo, auraMat);
+  group.add(auraMesh);
+
+  // 3. Selection Accents: Equatorial Glowing Ring & Secondary Halo
+  if (isSelected) {
+    const ringGeo = new THREE.RingGeometry(baseRadius * 1.85, baseRadius * 2.15, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = Math.PI / 2;
+    group.add(ringMesh);
+
+    const haloGeo = new THREE.IcosahedronGeometry(baseRadius * 2.35, 1);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0x93c5fd,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.35,
+    });
+    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    group.add(haloMesh);
+  }
+
+  return group;
 }
 
 /**
@@ -232,20 +303,30 @@ export default function GraphView({
     let ro: ResizeObserver | null = null;
 
     try {
-      const fg = new ForceGraph3D(container);
+      const fg = new ForceGraph3D(container, { controlType: "orbit" });
       fg.backgroundColor("rgba(0,0,0,0)")
         .showNavInfo(false)
-        .nodeRelSize(3)
-        .nodeColor((node: unknown) => {
+        .nodeThreeObjectExtend(false)
+        .nodeThreeObject((node: unknown) => {
           const n = node as VisNode;
           const isSelected =
             Boolean(selectedRef.current) &&
             n.id?.toLowerCase() === selectedRef.current?.toLowerCase();
-          return isSelected ? "#ffffff" : n.color || "#8f98a3";
+          return createHolographicNode(n, isSelected);
         })
-        .nodeVal((node: unknown) => Math.max(3, Math.min(10, ((node as VisNode).size || 3) * 1.2)))
-        .linkColor(() => "rgba(255, 255, 255, 0.15)")
-        .linkWidth(0.8)
+        .nodeVisibility((node: unknown) => nodeVisible((node as VisNode).id ?? ""))
+        .nodeLabel((node: unknown) => {
+          const n = node as VisNode;
+          const tagList = n.tags && n.tags.length > 0 ? `#${n.tags.join(" #")}` : "";
+          const excerptText = n.excerpt
+            ? `<div style="font-size:10px; color:rgba(255,255,255,0.65); margin-top:3px; max-width:220px; line-height:1.35;">${n.excerpt.slice(0, 90)}…</div>`
+            : "";
+          return `<div class="node-label"><strong>${n.title ?? ""}</strong><span>${tagList}</span>${excerptText}</div>`;
+        })
+        .onNodeClick((node: unknown) => {
+          const id = (node as VisNode).id;
+          if (typeof id === "string") selectRef.current(id);
+        })
         .onNodeHover((node: unknown) => {
           const n = node as VisNode | null;
           setHoveredNodeId(n?.id ?? null);
@@ -253,22 +334,48 @@ export default function GraphView({
             container.style.cursor = n ? "pointer" : "default";
           }
         })
-        .nodeLabel((node: unknown) => {
-          const n = node as VisNode;
-          const tagList = n.tags && n.tags.length > 0 ? `#${n.tags.join(" #")}` : "";
-          return `<div class="node-label"><strong>${n.title ?? ""}</strong><span>${tagList}</span></div>`;
-        })
-        .onNodeClick((node: unknown) => {
-          const id = (node as VisNode).id;
-          if (typeof id === "string") selectRef.current(id);
-        })
+        .linkCurvature(0.12)
+        .linkDirectionalParticles(2)
+        .linkDirectionalParticleSpeed(0.0055)
+        .linkDirectionalParticleWidth(1.8)
+        .linkDirectionalParticleColor(() => "rgba(255, 255, 255, 0.88)")
         .linkVisibility((link: unknown) => linkVisible(link as { source: unknown; target: unknown }))
-        .linkOpacity(0.22);
+        .linkColor(() => "rgba(255, 255, 255, 0.16)")
+        .linkWidth(0.85)
+        .linkOpacity(0.35);
+
+      // Custom scene lighting for metallic & crystal specular brilliance
+      fg.lights([
+        new THREE.AmbientLight(0xffffff, 1.2),
+        new THREE.DirectionalLight(0xffffff, 2.2),
+        new THREE.DirectionalLight(0x88bbff, 1.4),
+        new THREE.DirectionalLight(0xffffff, 0.8),
+      ]);
 
       const charge = (fg as unknown as { d3Force?: (key: string) => unknown }).d3Force?.(
         "charge",
       ) as { strength?: (value: number) => unknown } | undefined;
-      charge?.strength?.(-350);
+      charge?.strength?.(-480);
+
+      const linkForce = (fg as unknown as { d3Force?: (key: string) => unknown }).d3Force?.(
+        "link",
+      ) as { distance?: (value: number) => unknown } | undefined;
+      linkForce?.distance?.(130);
+
+      // Setup smooth cinematic auto-orbit drift
+      const controls = fg.controls() as {
+        autoRotate?: boolean;
+        autoRotateSpeed?: number;
+        enableDamping?: boolean;
+        dampingFactor?: number;
+      } | undefined;
+
+      if (controls) {
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = 0.45;
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+      }
 
       fg.onEngineStop(() => fg.zoomToFit(500, 100));
       instance = fg;
@@ -302,6 +409,15 @@ export default function GraphView({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graphMode]);
+
+  useEffect(() => {
+    if (graphMode !== "3d" || !fgRef.current) return;
+    try {
+      fgRef.current.refresh();
+    } catch {
+      // Ignored
+    }
+  }, [selectedId, activeTags, graphMode]);
 
   useEffect(() => {
     if (graphMode !== "3d" || !fgRef.current) return;
@@ -506,6 +622,10 @@ export default function GraphView({
   const handleResetCamera = () => {
     if (graphMode === "3d" && fgRef.current) {
       fgRef.current.zoomToFit(500, 100);
+      const controls = fgRef.current.controls() as { autoRotate?: boolean } | undefined;
+      if (controls) {
+        controls.autoRotate = true;
+      }
     }
   };
 

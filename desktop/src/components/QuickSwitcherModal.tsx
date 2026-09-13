@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { NoteMeta } from "../types";
 import Icon from "./Icon";
 
@@ -150,8 +151,6 @@ export default function QuickSwitcherModal({
     setSelectedIndex(0);
   }, [filteredItems.length]);
 
-  if (!open) return null;
-
   const handleSelect = (item: ListItem) => {
     if (item.type === "action") {
       item.execute();
@@ -182,66 +181,86 @@ export default function QuickSwitcherModal({
   };
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="switcher-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="switcher-input-wrap">
-          <span className="switcher-icon">
-            <Icon name="search" size={15} />
-          </span>
-          <input
-            ref={inputRef}
-            className="switcher-input"
-            value={query}
-            placeholder="Jump to a note or command…"
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <kbd className="switcher-kbd">ESC</kbd>
-        </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="switcher-overlay"
+          className="overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          onClick={onClose}
+        >
+          <motion.div
+            key="switcher-modal"
+            className="switcher-modal"
+            initial={{ opacity: 0, scale: 0.96, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -10 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="switcher-input-wrap">
+              <span className="switcher-icon">
+                <Icon name="search" size={15} />
+              </span>
+              <input
+                ref={inputRef}
+                className="switcher-input"
+                value={query}
+                placeholder="Jump to a note or command…"
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+              <kbd className="switcher-kbd">ESC</kbd>
+            </div>
 
-        <div className="switcher-list" ref={listRef}>
-          {filteredItems.length === 0 ? (
-            <div className="switcher-empty">No matching notes or actions found.</div>
-          ) : (
-            filteredItems.map((item, idx) => {
-              const isSelected = idx === selectedIndex;
-              return (
-                <div
-                  key={item.id}
-                  className={`switcher-item ${item.type} ${isSelected ? "selected" : ""}`}
-                  onClick={() => handleSelect(item)}
-                  onMouseEnter={() => setSelectedIndex(idx)}
-                >
-                  <div className="switcher-item-left">
-                    <span className="switcher-item-badge">
-                      {item.type === "action" ? "ACTION" : "NOTE"}
-                    </span>
-                    <div className="switcher-item-info">
-                      <div className="switcher-item-title">{item.title}</div>
-                      <div className="switcher-item-sub">{item.sub}</div>
+            <div className="switcher-list" ref={listRef}>
+              {filteredItems.length === 0 ? (
+                <div className="switcher-empty">No matching notes or actions found.</div>
+              ) : (
+                filteredItems.map((item, idx) => {
+                  const isSelected = idx === selectedIndex;
+                  return (
+                    <div
+                      key={item.id}
+                      className={`switcher-item ${item.type} ${isSelected ? "selected" : ""}`}
+                      onClick={() => handleSelect(item)}
+                      onMouseEnter={() => setSelectedIndex(idx)}
+                    >
+                      <div className="switcher-item-left">
+                        <span className="switcher-item-badge">
+                          {item.type === "action" ? "ACTION" : "NOTE"}
+                        </span>
+                        <div className="switcher-item-info">
+                          <div className="switcher-item-title">{item.title}</div>
+                          <div className="switcher-item-sub">{item.sub}</div>
+                        </div>
+                      </div>
+                      {item.type === "action" && (
+                        <kbd className="switcher-item-shortcut">{item.shortcut}</kbd>
+                      )}
+                      {item.type === "note" && (
+                        <span className="switcher-enter-hint">Jump →</span>
+                      )}
                     </div>
-                  </div>
-                  {item.type === "action" && (
-                    <kbd className="switcher-item-shortcut">{item.shortcut}</kbd>
-                  )}
-                  {item.type === "note" && (
-                    <span className="switcher-enter-hint">Jump →</span>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
+                  );
+                })
+              )}
+            </div>
 
-        <div className="switcher-footer">
-          <div className="switcher-footer-hint">
-            <span><strong>↑↓</strong> Navigate</span>
-            <span><strong>↵</strong> Select</span>
-            <span><strong>ESC</strong> Close</span>
-          </div>
-          <span className="switcher-count">{notes.length} total notes in Second Brain</span>
-        </div>
-      </div>
-    </div>
+            <div className="switcher-footer">
+              <div className="switcher-footer-hint">
+                <span><strong>↑↓</strong> Navigate</span>
+                <span><strong>↵</strong> Select</span>
+                <span><strong>ESC</strong> Close</span>
+              </div>
+              <span className="switcher-count">{notes.length} total notes in Second Brain</span>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

@@ -1,0 +1,50 @@
+[
+  {
+    "id": "edu-001",
+    "category": "education",
+    "content": "Currently studying Bachelor of Science in Computer Engineering (BSCpE) at Cor Jesu College of Digos, Davao del Sur.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "edu-002",
+    "category": "education",
+    "content": "Educational philosophy: Project-first learning. Learns by building real-world software and hardware prototypes rather than passive theoretical absorption.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "edu-003",
+    "category": "education",
+    "content": "Secondary education: Graduated from Holy Cross of Malita, Inc., conducting institutional research during his studies.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  },
+  {
+    "id": "edu-004",
+    "category": "education",
+    "content": "University of Santo Tomas (UST) was an older aspirational target; do not treat UST as current or attended education.",
+    "status": "historical",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  }
+]

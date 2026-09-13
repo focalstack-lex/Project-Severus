@@ -1,4 +1,5 @@
 import { isVoiceSpeaking, isVoiceInEchoCooldown } from "./voice";
+import { getSelectedMicrophoneId, onMicrophoneChanged } from "./audioDevices";
 
 /**
  * Acoustic Double-Clap Detector using Web Audio API.
@@ -43,6 +44,7 @@ export class ClapDetector {
   private lastClapTime = 0;
   private animFrameId: number | null = null;
   private startTime = 0;
+  private unsubMic: (() => void) | null = null;
 
   private threshold: number;
   private minIntervalMs: number;
@@ -57,6 +59,13 @@ export class ClapDetector {
     this.maxIntervalMs = options.maxIntervalMs ?? 750;
     this.onDoubleClap = options.onDoubleClap;
     this.onClapSingle = options.onClapSingle;
+
+    this.unsubMic = onMicrophoneChanged(() => {
+      if (this.isListening) {
+        this.stop();
+        void this.start();
+      }
+    });
   }
 
   public async start(): Promise<boolean> {
@@ -64,8 +73,10 @@ export class ClapDetector {
     if (!getClapEnabled()) return false;
 
     try {
+      const selectedMicId = getSelectedMicrophoneId();
       this.micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          deviceId: selectedMicId ? { exact: selectedMicId } : undefined,
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false,
@@ -106,6 +117,14 @@ export class ClapDetector {
       this.audioContext = null;
     }
     this.isListening = false;
+  }
+
+  public destroy(): void {
+    this.stop();
+    if (this.unsubMic) {
+      this.unsubMic();
+      this.unsubMic = null;
+    }
   }
 
   private loop = () => {

@@ -5,6 +5,7 @@
 //! Severus workspace (`SEVERUS_ROOT` overrides, else `%USERPROFILE%\Documents\Severus`).
 
 mod graph;
+mod memory;
 mod notes;
 mod system_control;
 mod watcher;
@@ -40,6 +41,10 @@ impl Paths {
 
     pub fn voices_dir(&self) -> PathBuf {
         self.root.join("Voices")
+    }
+
+    pub fn user_dir(&self) -> PathBuf {
+        self.root.join("USER")
     }
 }
 
@@ -117,6 +122,7 @@ fn hide_to_tray(window: tauri::Window) -> Result<(), String> {
 #[tauri::command]
 fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String> {
     if floating {
+        let _ = window.set_fullscreen(false);
         let _ = window.unmaximize();
         let _ = window.set_size(tauri::LogicalSize::new(720.0, 110.0));
         let _ = window.set_always_on_top(true);
@@ -125,9 +131,39 @@ fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String
         let _ = window.set_always_on_top(false);
         let _ = window.set_size(tauri::LogicalSize::new(1360.0, 860.0));
         let _ = window.center();
+        let _ = window.maximize();
         let _ = window.set_focus();
     }
     Ok(())
+}
+
+#[tauri::command]
+fn toggle_maximize(window: tauri::Window) -> Result<bool, String> {
+    let is_max = window.is_maximized().unwrap_or(false);
+    if is_max {
+        let _ = window.unmaximize();
+        Ok(false)
+    } else {
+        let _ = window.maximize();
+        Ok(true)
+    }
+}
+
+#[tauri::command]
+fn maximize_window(window: tauri::Window) -> Result<(), String> {
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.maximize();
+    let _ = window.set_focus();
+    Ok(())
+}
+
+#[tauri::command]
+fn toggle_fullscreen(window: tauri::Window) -> Result<bool, String> {
+    let is_fs = window.is_fullscreen().unwrap_or(false);
+    let next = !is_fs;
+    let _ = window.set_fullscreen(next);
+    Ok(next)
 }
 
 #[tauri::command]
@@ -235,6 +271,22 @@ fn system_list_windows() -> Result<Vec<system_control::WindowInfo>, String> {
     system_control::list_windows()
 }
 
+#[tauri::command]
+fn open_sound_settings() -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", "ms-settings:sound"])
+            .spawn()
+            .map_err(|e| format!("Could not open sound settings: {e}"))?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(())
+    }
+}
+
 fn base64_encode(data: &[u8]) -> String {
     const ENGINE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut buf = String::with_capacity((data.len() + 2) / 3 * 4);
@@ -284,7 +336,16 @@ pub fn run() {
             move_to_monitor,
             system_resolve_command,
             system_execute,
-            system_list_windows
+            system_list_windows,
+            memory::get_user_memories,
+            memory::get_grounding_memories,
+            memory::get_memory_summary,
+            memory::save_user_memory,
+            memory::delete_user_memory,
+            open_sound_settings,
+            toggle_maximize,
+            maximize_window,
+            toggle_fullscreen
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

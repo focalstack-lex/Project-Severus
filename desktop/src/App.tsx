@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import Icon from "./components/Icon";
@@ -37,11 +38,13 @@ import {
   onNotesChanged,
   openInEditor,
   readNote,
-  restoreWindow,
   hideToTray,
   saveNote,
   setFloatingMode,
   moveToMonitor,
+  toggleMaximize,
+  maximizeWindow,
+  toggleFullscreen,
 } from "./lib/tauri";
 import { fade, freshnessOpacity, tagColors } from "./lib/colors";
 import type { GitStatusData, GraphData, GraphNode, NoteContent, NoteMeta } from "./types";
@@ -88,6 +91,7 @@ export default function App() {
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [inspectorTab, setInspectorTab] = useState<"note" | "node" | "copilot">("note");
   const [zenMode, setZenMode] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   // Voice & Acoustic Settings
   const [voiceMuted, setVoiceMutedState] = useState<boolean>(getVoiceMuted);
@@ -231,14 +235,24 @@ export default function App() {
   }, []);
 
   const ensureWorkstation = useCallback(async () => {
-    try {
-      await restoreWindow();
-    } catch {
-      // ignore
-    }
     setIsFloatingMode(false);
     try {
       await setFloatingMode(false);
+    } catch {
+      // ignore
+    }
+    try {
+      await maximizeWindow();
+      setIsMaximized(true);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleToggleMaximize = useCallback(async () => {
+    try {
+      const max = await toggleMaximize();
+      setIsMaximized(max);
     } catch {
       // ignore
     }
@@ -558,7 +572,11 @@ export default function App() {
     },
     onZenMode: () => {
       void ensureWorkstation();
-      setZenMode((prev) => !prev);
+      setZenMode((prev) => {
+        const next = !prev;
+        void toggleFullscreen();
+        return next;
+      });
       void playVoice("nav_zen_on.mp3");
     },
     onMaximize: () => {
@@ -577,6 +595,9 @@ export default function App() {
         newNoteModalOpen ||
         zenMode
       ) {
+        if (zenMode) {
+          void toggleFullscreen();
+        }
         setJournalOpen(false);
         setAiSettingsOpen(false);
         setQuickSwitcherOpen(false);
@@ -801,6 +822,10 @@ export default function App() {
       } else if (event.key === "Escape" && zenMode) {
         event.preventDefault();
         setZenMode(false);
+        void toggleFullscreen();
+      } else if (event.key === "F11") {
+        event.preventDefault();
+        void toggleFullscreen();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -868,88 +893,105 @@ export default function App() {
         }}
       >
         <div className="floating-companion-cluster">
-          {isThinkingMode ? (
-            <ThinkingModeCapsule
-              open={isThinkingMode}
-              onClose={() => setIsThinkingMode(false)}
-              onExpandWorkstation={() => {
-                setIsThinkingMode(false);
-                void ensureWorkstation();
-              }}
-              onOpenSettings={() => setAiSettingsOpen(true)}
-              config={aiConfig}
-              vaultNotes={notesList}
-              onShowToast={showToast}
-            />
-          ) : (
-            <div className="floating-companion-row">
-              <PillBase
-                theme="dark"
-                items={[
-                  { label: "Severus", id: "home" },
-                  { label: "Thinking", id: "thinking" },
-                  { label: "Knowledge", id: "graph" },
-                  { label: "Notes", id: "notes" },
-                  { label: "Copilot", id: "copilot" },
-                ]}
-                onChange={(id) => {
-                  if (id === "thinking") {
-                    setIsThinkingMode(true);
-                    void playVoice("action_copilot_ready.mp3");
-                    showToast("Severus: Thinking Mode activated");
-                    return;
-                  }
-                  handleSectionSelect(id);
-                }}
-              />
-              <button
-                type="button"
-                className={`floating-mic-toggle ${listeningActive ? "active" : "paused"}`}
-                onClick={() => handleToggleListening(undefined, true)}
-                title={
-                  listeningActive
-                    ? `Listening Mode Active (Click or say "Stop listening" / ${MOD_KEY}+Shift+M)`
-                    : `Listening Mode Paused (Click or say "Start listening" / ${MOD_KEY}+Shift+M)`
-                }
-                aria-label={listeningActive ? "Mute listening mode" : "Resume listening mode"}
+          <AnimatePresence mode="wait">
+            {isThinkingMode ? (
+              <motion.div
+                key="thinking-capsule-wrap"
+                initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
               >
-                {listeningActive ? (
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
-                ) : (
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          )}
+                <ThinkingModeCapsule
+                  open={isThinkingMode}
+                  onClose={() => setIsThinkingMode(false)}
+                  onExpandWorkstation={() => {
+                    setIsThinkingMode(false);
+                    void ensureWorkstation();
+                  }}
+                  onOpenSettings={() => setAiSettingsOpen(true)}
+                  config={aiConfig}
+                  vaultNotes={notesList}
+                  onShowToast={showToast}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="floating-row-wrap"
+                initial={{ opacity: 0, scale: 0.95, y: 4 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 4 }}
+                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                className="floating-companion-row"
+              >
+                <PillBase
+                  theme="dark"
+                  items={[
+                    { label: "Severus", id: "home" },
+                    { label: "Thinking", id: "thinking" },
+                    { label: "Knowledge", id: "graph" },
+                    { label: "Notes", id: "notes" },
+                    { label: "Copilot", id: "copilot" },
+                  ]}
+                  onChange={(id) => {
+                    if (id === "thinking") {
+                      setIsThinkingMode(true);
+                      void playVoice("action_copilot_ready.mp3");
+                      showToast("Severus: Thinking Mode activated");
+                      return;
+                    }
+                    handleSectionSelect(id);
+                  }}
+                />
+                <button
+                  type="button"
+                  className={`floating-mic-toggle ${listeningActive ? "active" : "paused"}`}
+                  onClick={() => handleToggleListening(undefined, true)}
+                  title={
+                    listeningActive
+                      ? `Listening Mode Active (Click or say "Stop listening" / ${MOD_KEY}+Shift+M)`
+                      : `Listening Mode Paused (Click or say "Start listening" / ${MOD_KEY}+Shift+M)`
+                  }
+                  aria-label={listeningActive ? "Mute listening mode" : "Resume listening mode"}
+                >
+                  {listeningActive ? (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                      <line x1="8" y1="23" x2="16" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
+                      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
+                      <line x1="12" y1="19" x2="12" y2="23" />
+                      <line x1="8" y1="23" x2="16" y2="23" />
+                    </svg>
+                  )}
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {quickSwitcherOpen && (
@@ -1016,304 +1058,387 @@ export default function App() {
 
   return (
     <div className={`app workstation ${zenMode ? "zen-mode" : ""}`}>
-      {!zenMode && (
-        <TopHeader
-          activeSection={activeSection}
-          onSelectSection={setActiveSection}
-          knowledgeSubTab={knowledgeSubTab}
-          onSelectKnowledgeSubTab={setKnowledgeSubTab}
-          onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
-          onOpenQuickSearch={() => {
-            void playVoice("nav_quick_switcher.mp3");
-            setQuickSwitcherOpen(true);
-          }}
-          onToggleCopilot={() => {
-            if (inspectorOpen && inspectorTab === "copilot") {
-              setInspectorOpen(false);
-            } else {
-              setInspectorOpen(true);
-              setInspectorTab("copilot");
-            }
-          }}
-          onOpenGrounding={() => setGroundingOpen(true)}
-          onOpenNewNote={handleNewNote}
-          onOpenAISettings={() => setAiSettingsOpen(true)}
-          aiConfig={aiConfig}
-          voiceMuted={voiceMuted}
-          onToggleVoiceMuted={() => {
-            const next = !voiceMuted;
-            setVoiceMutedState(next);
-            setVoiceMuted(next);
-          }}
-          clapEnabled={clapEnabled}
-          onToggleClapEnabled={() => {
-            const next = !clapEnabled;
-            setClapEnabledState(next);
-            setClapEnabled(next);
-          }}
-          voiceCmdEnabled={voiceCmdEnabled}
-          onToggleVoiceCmdEnabled={() => {
-            const next = !voiceCmdEnabled;
-            setVoiceCmdEnabledState(next);
-            setVoiceCmdEnabled(next);
-          }}
-          listeningActive={listeningActive}
-          onToggleListening={() => handleToggleListening(undefined, true)}
-          gitStatus={gitStatus}
-          copilotActive={inspectorOpen && inspectorTab === "copilot"}
-          onToggleFloatingMode={handleEnterFloatingMode}
-          onEnterThinkingMode={() => {
-            void handleEnterFloatingMode();
-            setIsThinkingMode(true);
-            void playVoice("action_copilot_ready.mp3");
-          }}
-          onHideToTray={handleHideToTray}
-          onMoveMonitor={handleMoveMonitor}
-          onOpenJournal={() => setJournalOpen(true)}
-        />
-      )}
+      <AnimatePresence>
+        {!zenMode && (
+          <motion.div
+            key="topheader-wrap"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            style={{ width: "100%", zIndex: 60 }}
+          >
+            <TopHeader
+              activeSection={activeSection}
+              onSelectSection={setActiveSection}
+              knowledgeSubTab={knowledgeSubTab}
+              onSelectKnowledgeSubTab={setKnowledgeSubTab}
+              onToggleNotesDrawer={() => setNotesDrawerOpen((prev) => !prev)}
+              onOpenQuickSearch={() => {
+                void playVoice("nav_quick_switcher.mp3");
+                setQuickSwitcherOpen(true);
+              }}
+              onToggleCopilot={() => {
+                if (inspectorOpen && inspectorTab === "copilot") {
+                  setInspectorOpen(false);
+                } else {
+                  setInspectorOpen(true);
+                  setInspectorTab("copilot");
+                }
+              }}
+              onOpenGrounding={() => setGroundingOpen(true)}
+              onOpenNewNote={handleNewNote}
+              onOpenAISettings={() => setAiSettingsOpen(true)}
+              aiConfig={aiConfig}
+              voiceMuted={voiceMuted}
+              onToggleVoiceMuted={() => {
+                const next = !voiceMuted;
+                setVoiceMutedState(next);
+                setVoiceMuted(next);
+              }}
+              clapEnabled={clapEnabled}
+              onToggleClapEnabled={() => {
+                const next = !clapEnabled;
+                setClapEnabledState(next);
+                setClapEnabled(next);
+              }}
+              voiceCmdEnabled={voiceCmdEnabled}
+              onToggleVoiceCmdEnabled={() => {
+                const next = !voiceCmdEnabled;
+                setVoiceCmdEnabledState(next);
+                setVoiceCmdEnabled(next);
+              }}
+              listeningActive={listeningActive}
+              onToggleListening={() => handleToggleListening(undefined, true)}
+              gitStatus={gitStatus}
+              copilotActive={inspectorOpen && inspectorTab === "copilot"}
+              onToggleFloatingMode={handleEnterFloatingMode}
+              onToggleMaximize={handleToggleMaximize}
+              isMaximized={isMaximized}
+              onEnterThinkingMode={() => {
+                void handleEnterFloatingMode();
+                setIsThinkingMode(true);
+                void playVoice("action_copilot_ready.mp3");
+              }}
+              onHideToTray={handleHideToTray}
+              onMoveMonitor={handleMoveMonitor}
+              onOpenJournal={() => setJournalOpen(true)}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="main workstation-main">
-        {!zenMode && (notesDrawerOpen || (activeSection === "knowledge" && knowledgeSubTab === "notes")) && (
-          <NotesDrawer
-            open={true}
-            notes={notesList}
-            selectedId={selectedId}
-            onSelectNote={(id) => void openNote(id)}
-            onNewNote={() => void handleNewNote()}
-            onClose={() => {
-              setNotesDrawerOpen(false);
-              if (knowledgeSubTab === "notes") {
-                setKnowledgeSubTab("graph");
-              }
-            }}
-          />
-        )}
+        <AnimatePresence>
+          {!zenMode && (notesDrawerOpen || (activeSection === "knowledge" && knowledgeSubTab === "notes")) && (
+            <motion.div
+              key="notes-drawer-wrap"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "auto", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              style={{ overflow: "hidden", display: "flex", flexShrink: 0 }}
+            >
+              <NotesDrawer
+                open={true}
+                notes={notesList}
+                selectedId={selectedId}
+                onSelectNote={(id) => void openNote(id)}
+                onNewNote={() => void handleNewNote()}
+                onClose={() => {
+                  setNotesDrawerOpen(false);
+                  if (knowledgeSubTab === "notes") {
+                    setKnowledgeSubTab("graph");
+                  }
+                }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <div className="graph-pane center-stage">
           {zenMode && (
             <button
               type="button"
               className="zen-exit-btn"
-              onClick={() => setZenMode(false)}
+              onClick={() => {
+                setZenMode(false);
+                void toggleFullscreen();
+              }}
               title="Exit Zen fullscreen (Esc)"
             >
               <Icon name="close" size={12} /> Exit Zen (Esc)
             </button>
           )}
 
-          {activeSection === "home" ? (
-            <div className="home-view">
-              <div className="home-view-inner">
-                <h1 className="home-greeting">{greeting}</h1>
-                <p className="home-lede">
-                  Start with a question in the Copilot, pick up a hub note below, or capture
-                  something new before it slips away.
-                </p>
+          <AnimatePresence mode="wait">
+            {activeSection === "home" ? (
+              <motion.div
+                key="home-view"
+                className="home-view"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+              >
+                <div className="home-view-inner">
+                  <h1 className="home-greeting">{greeting}</h1>
+                  <p className="home-lede">
+                    Start with a question in the Copilot, pick up a hub note below, or capture
+                    something new before it slips away.
+                  </p>
 
-                <div className="home-stats">
-                  <span>
-                    <strong>{graph.nodes.length}</strong> notes
-                  </span>
-                  <span className="sep">/</span>
-                  <span>
-                    <strong>{graph.links.length}</strong> links
-                  </span>
-                  <span className="sep">/</span>
-                  <span>
-                    <strong>{graph.tags.length}</strong> tags
-                  </span>
-                  <span className="sep">/</span>
-                  <span>
-                    model <strong>{aiConfig.model}</strong>
-                  </span>
+                  <div className="home-stats">
+                    <span>
+                      <strong>{graph.nodes.length}</strong> notes
+                    </span>
+                    <span className="sep">/</span>
+                    <span>
+                      <strong>{graph.links.length}</strong> links
+                    </span>
+                    <span className="sep">/</span>
+                    <span>
+                      <strong>{graph.tags.length}</strong> tags
+                    </span>
+                    <span className="sep">/</span>
+                    <span>
+                      model <strong>{aiConfig.model}</strong>
+                    </span>
+                  </div>
+
+                  <div className="home-columns">
+                    <section>
+                      <div className="home-section-title">Hub notes · PageRank</div>
+                      <div className="home-list">
+                        {hubNodes.map((node) => (
+                          <button
+                            key={node.id}
+                            type="button"
+                            className="home-row"
+                            onClick={() => void openNote(node.id)}
+                          >
+                            <span>{node.title}</span>
+                            <span className="home-row-meta">{node.importance.toFixed(1)}%</span>
+                          </button>
+                        ))}
+                        {hubNodes.length === 0 && (
+                          <span className="home-row-meta">Vault is empty — create a note.</span>
+                        )}
+                      </div>
+                    </section>
+
+                    <section>
+                      <div className="home-section-title">Freshest notes</div>
+                      <div className="home-list">
+                        {freshNotes.map((node) => (
+                          <button
+                            key={node.id}
+                            type="button"
+                            className="home-row"
+                            onClick={() => void openNote(node.id)}
+                          >
+                            <span>{node.title}</span>
+                            <span className="home-row-meta">
+                              {node.ageDays === 0 ? "today" : `${node.ageDays}d ago`}
+                            </span>
+                          </button>
+                        ))}
+                        {freshNotes.length === 0 && (
+                          <span className="home-row-meta">Nothing indexed yet.</span>
+                        )}
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="home-actions">
+                    <button type="button" className="accent" onClick={handleNewNote}>
+                      <Icon name="plus" size={13} /> New Note
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveSection("knowledge");
+                        setKnowledgeSubTab("graph");
+                      }}
+                    >
+                      <Icon name="graph" size={13} /> Knowledge Map
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInspectorOpen(true);
+                        setInspectorTab("copilot");
+                      }}
+                    >
+                      <Icon name="spark" size={13} /> Ask Copilot
+                    </button>
+                    <button type="button" onClick={() => setGroundingOpen(true)}>
+                      <Icon name="layers" size={13} /> Grounding
+                    </button>
+                    <button type="button" onClick={() => setSystemConsoleOpen(true)}>
+                      <Icon name="keyboard" size={13} /> System Console
+                    </button>
+                  </div>
                 </div>
-
-                <div className="home-columns">
-                  <section>
-                    <div className="home-section-title">Hub notes · PageRank</div>
-                    <div className="home-list">
-                      {hubNodes.map((node) => (
-                        <button
-                          key={node.id}
-                          type="button"
-                          className="home-row"
-                          onClick={() => void openNote(node.id)}
-                        >
-                          <span>{node.title}</span>
-                          <span className="home-row-meta">{node.importance.toFixed(1)}%</span>
-                        </button>
-                      ))}
-                      {hubNodes.length === 0 && (
-                        <span className="home-row-meta">Vault is empty — create a note.</span>
-                      )}
-                    </div>
-                  </section>
-
-                  <section>
-                    <div className="home-section-title">Freshest notes</div>
-                    <div className="home-list">
-                      {freshNotes.map((node) => (
-                        <button
-                          key={node.id}
-                          type="button"
-                          className="home-row"
-                          onClick={() => void openNote(node.id)}
-                        >
-                          <span>{node.title}</span>
-                          <span className="home-row-meta">
-                            {node.ageDays === 0 ? "today" : `${node.ageDays}d ago`}
-                          </span>
-                        </button>
-                      ))}
-                      {freshNotes.length === 0 && (
-                        <span className="home-row-meta">Nothing indexed yet.</span>
-                      )}
-                    </div>
-                  </section>
-                </div>
-
-                <div className="home-actions">
-                  <button type="button" className="accent" onClick={handleNewNote}>
-                    <Icon name="plus" size={13} /> New Note
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setActiveSection("knowledge");
-                      setKnowledgeSubTab("graph");
-                    }}
-                  >
-                    <Icon name="graph" size={13} /> Knowledge Map
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setInspectorOpen(true);
-                      setInspectorTab("copilot");
-                    }}
-                  >
-                    <Icon name="spark" size={13} /> Ask Copilot
-                  </button>
-                  <button type="button" onClick={() => setGroundingOpen(true)}>
-                    <Icon name="layers" size={13} /> Grounding
-                  </button>
-                  <button type="button" onClick={() => setSystemConsoleOpen(true)}>
-                    <Icon name="keyboard" size={13} /> System Console
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : activeSection === "knowledge" && knowledgeSubTab === "tags" ? (
-            <TagsIndexView
-              graph={graph}
-              tagColors={colors}
-              onSelectNote={(id) => void openNote(id)}
-              onToggleTag={toggleTag}
-            />
-          ) : booting ? (
-            <div className="boot-loading">
-              <span>Indexing vault…</span>
-              <div className="boot-loading-bar" />
-            </div>
-          ) : (
-            <>
-              <ErrorBoundary label="Knowledge graph">
-                <GraphView
-                  nodes={visNodes}
-                  links={graph.links}
-                  activeTags={activeTags}
-                  selectedId={selectedId}
-                  onSelectNote={(id) => {
-                    const node = graph.nodes.find((n) => n.id.toLowerCase() === id.toLowerCase());
-                    if (node) setSelectedNode(node);
-                    void openNote(id);
-                  }}
+              </motion.div>
+            ) : activeSection === "knowledge" && knowledgeSubTab === "tags" ? (
+              <motion.div
+                key="tags-view"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                style={{ width: "100%", height: "100%" }}
+              >
+                <TagsIndexView
+                  graph={graph}
+                  tagColors={colors}
+                  onSelectNote={(id) => void openNote(id)}
+                  onToggleTag={toggleTag}
                 />
-              </ErrorBoundary>
-              <TagBar
-                tags={graph.tags}
-                colors={colors}
-                active={activeTags}
-                onToggle={toggleTag}
-                onReset={() => setActiveTags(new Set(graph.tags))}
-              />
-            </>
-          )}
+              </motion.div>
+            ) : booting ? (
+              <motion.div
+                key="booting-view"
+                className="boot-loading"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15 }}
+              >
+                <span>Indexing vault…</span>
+                <div className="boot-loading-bar" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="graph-view"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  position: "relative",
+                }}
+              >
+                <ErrorBoundary label="Knowledge graph">
+                  <GraphView
+                    nodes={visNodes}
+                    links={graph.links}
+                    activeTags={activeTags}
+                    selectedId={selectedId}
+                    onSelectNote={(id) => {
+                      const node = graph.nodes.find((n) => n.id.toLowerCase() === id.toLowerCase());
+                      if (node) setSelectedNode(node);
+                      void openNote(id);
+                    }}
+                  />
+                </ErrorBoundary>
+                <TagBar
+                  tags={graph.tags}
+                  colors={colors}
+                  active={activeTags}
+                  onToggle={toggleTag}
+                  onReset={() => setActiveTags(new Set(graph.tags))}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
-        {!zenMode && inspectorOpen && (
-          <ErrorBoundary label="Context inspector">
-            <ContextInspector
-              open={inspectorOpen}
-              onClose={() => setInspectorOpen(false)}
-              activeTab={inspectorTab}
-              onSelectTab={setInspectorTab}
-              note={note}
-              notesList={notesList}
-              onSaveNote={handleSave}
-              onOpenLink={(name) => void handleOpenLink(name)}
-              onToggleTag={toggleTag}
-              onOpenInEditor={handleOpenInEditor}
-              onNewNote={handleNewNote}
-              onOpenJournal={() => setJournalOpen(true)}
-              onOpenGrounding={() => setGroundingOpen(true)}
-              onOpenNote={(id) => void openNote(id)}
-              selectedNode={selectedNode}
-              graphData={graph}
-              aiConfig={aiConfig}
-              onOpenAISettings={() => setAiSettingsOpen(true)}
-              onSaveAsNote={async (title, content) => {
-                await saveNote(title, content);
-                await loadNotesList();
-                await loadGraph();
-              }}
-              onShowToast={showToast}
-            />
-          </ErrorBoundary>
-        )}
+        <AnimatePresence>
+          {!zenMode && inspectorOpen && (
+            <motion.div
+              key="context-inspector-wrap"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "auto", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              style={{ overflow: "hidden", display: "flex", flexShrink: 0 }}
+            >
+              <ErrorBoundary label="Context inspector">
+                <ContextInspector
+                  open={inspectorOpen}
+                  onClose={() => setInspectorOpen(false)}
+                  activeTab={inspectorTab}
+                  onSelectTab={setInspectorTab}
+                  note={note}
+                  notesList={notesList}
+                  onSaveNote={handleSave}
+                  onOpenLink={(name) => void handleOpenLink(name)}
+                  onToggleTag={toggleTag}
+                  onOpenInEditor={handleOpenInEditor}
+                  onNewNote={handleNewNote}
+                  onOpenJournal={() => setJournalOpen(true)}
+                  onOpenGrounding={() => setGroundingOpen(true)}
+                  onOpenNote={(id) => void openNote(id)}
+                  selectedNode={selectedNode}
+                  graphData={graph}
+                  aiConfig={aiConfig}
+                  onOpenAISettings={() => setAiSettingsOpen(true)}
+                  onSaveAsNote={async (title, content) => {
+                    await saveNote(title, content);
+                    await loadNotesList();
+                    await loadGraph();
+                  }}
+                  onShowToast={showToast}
+                />
+              </ErrorBoundary>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
 
-      {!zenMode && (
-        <footer
-          className="status-bar"
-          data-tauri-drag-region
-          onMouseDown={(e) => {
-            if (e.button !== 0) return;
-            const target = e.target as HTMLElement | null;
-            if (target?.closest("button, input, select, textarea, a, [data-no-drag]")) return;
-            try {
-              void getCurrentWindow().startDragging();
-            } catch {
-              // ignore
-            }
-          }}
-        >
-          <div className="status-bar-left">
-            <span className="footer-item">
-              Workspace: <strong className="val">Severus</strong>
-            </span>
-            <span className="footer-item">
-              Active:{" "}
-              <strong className="val">{selectedId ? `${selectedId}.md` : "None"}</strong>
-            </span>
-          </div>
-          <div className="status-bar-right">
-            <span className="footer-item">
-              Model: <strong className="val">{aiConfig.model}</strong>
-            </span>
-            <span className="footer-item">
-              Graph:{" "}
-              <strong className="val">
-                {graph.nodes.length} nodes · {graph.links.length} links
-              </strong>
-            </span>
-            <span className="footer-item keyhint">
-              <kbd>{MOD_KEY}K</kbd> Search
-            </span>
-          </div>
-        </footer>
-      )}
+      <AnimatePresence>
+        {!zenMode && (
+          <motion.footer
+            key="status-bar-wrap"
+            className="status-bar"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            data-tauri-drag-region
+            onMouseDown={(e) => {
+              if (e.button !== 0) return;
+              const target = e.target as HTMLElement | null;
+              if (target?.closest("button, input, select, textarea, a, [data-no-drag]")) return;
+              try {
+                void getCurrentWindow().startDragging();
+              } catch {
+                // ignore
+              }
+            }}
+          >
+            <div className="status-bar-left">
+              <span className="footer-item">
+                Workspace: <strong className="val">Severus</strong>
+              </span>
+              <span className="footer-item">
+                Active:{" "}
+                <strong className="val">{selectedId ? `${selectedId}.md` : "None"}</strong>
+              </span>
+            </div>
+            <div className="status-bar-right">
+              <span className="footer-item">
+                Model: <strong className="val">{aiConfig.model}</strong>
+              </span>
+              <span className="footer-item">
+                Graph:{" "}
+                <strong className="val">
+                  {graph.nodes.length} nodes · {graph.links.length} links
+                </strong>
+              </span>
+              <span className="footer-item keyhint">
+                <kbd>{MOD_KEY}K</kbd> Search
+              </span>
+            </div>
+          </motion.footer>
+        )}
+      </AnimatePresence>
 
       <QuickSwitcherModal
         open={quickSwitcherOpen}

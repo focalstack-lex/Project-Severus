@@ -1,0 +1,26 @@
+[
+  {
+    "id": "goal-pers-001",
+    "category": "goals",
+    "content": "Achieve full financial self-reliance through software engineering, systems consulting, and selective client work.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "goal-pers-002",
+    "category": "goals",
+    "content": "Operate by Atomic Habits: Prioritize daily routine execution over fleeting emotional motivation.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "id": "proj-arch-001",
+    "category": "projects",
+    "content": "Leavian Visuals: Former media brand name, currently transitioned toward the unified 'Code x Create' / 'Focal Stack' identity.",
+    "status": "deprecated",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  }
+]

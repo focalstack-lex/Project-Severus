@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { type AIConfig, testAIConnection } from "../lib/ai";
 import {
   loadElevenLabsConfig,
@@ -9,6 +10,14 @@ import {
   type ElevenLabsConfig,
   type VoicePreset,
 } from "../lib/voice";
+import {
+  getMicrophoneDevices,
+  getSelectedMicrophoneId,
+  setSelectedMicrophone,
+  getMicrophoneStream,
+  type AudioDevice,
+} from "../lib/audioDevices";
+import { openSoundSettings } from "../lib/tauri";
 import Icon from "./Icon";
 
 interface Props {
@@ -86,7 +95,7 @@ const PRESETS: Array<{ label: string; config: Partial<AIConfig> }> = [
 ];
 
 export default function AISettingsModal({ open, config, onSave, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<"llm" | "voice">("llm");
+  const [activeTab, setActiveTab] = useState<"llm" | "voice" | "mic">("llm");
   const [form, setForm] = useState<AIConfig>({ ...config });
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -100,7 +109,124 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
   const [voices, setVoices] = useState<VoicePreset[]>(FREE_PREMADE_VOICES);
   const [fetchingVoices, setFetchingVoices] = useState(false);
 
-  if (!open) return null;
+  // Microphone Devices & Level State
+  const [devices, setDevices] = useState<AudioDevice[]>([]);
+  const [selectedMicId, setSelectedMicId] = useState<string>(getSelectedMicrophoneId());
+  const [scanningMics, setScanningMics] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+  const [testListening, setTestListening] = useState(false);
+  const [testTranscript, setTestTranscript] = useState("");
+  const vuAnimationRef = useRef<number | null>(null);
+  const vuStreamRef = useRef<MediaStream | null>(null);
+  const vuAudioCtxRef = useRef<AudioContext | null>(null);
+  const testRecognitionRef = useRef<any>(null);
+
+  const refreshDevices = useCallback(async () => {
+    setScanningMics(true);
+    try {
+      const list = await getMicrophoneDevices();
+      setDevices(list);
+    } finally {
+      setScanningMics(false);
+    }
+  }, []);
+
+  // Monitor live volume energy when Microphone tab is open
+  useEffect(() => {
+    if (!open || activeTab !== "mic") {
+      if (vuAnimationRef.current) {
+        cancelAnimationFrame(vuAnimationRef.current);
+        vuAnimationRef.current = null;
+      }
+      if (vuStreamRef.current) {
+        vuStreamRef.current.getTracks().forEach((t) => t.stop());
+        vuStreamRef.current = null;
+      }
+      if (vuAudioCtxRef.current && vuAudioCtxRef.current.state !== "closed") {
+        void vuAudioCtxRef.current.close();
+        vuAudioCtxRef.current = null;
+      }
+      setMicLevel(0);
+      return;
+    }
+
+    void refreshDevices();
+
+    let isCancelled = false;
+    async function startMeter() {
+      try {
+        const stream = await getMicrophoneStream(selectedMicId);
+        if (isCancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        vuStreamRef.current = stream;
+
+        const AudioCtx =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AudioCtx();
+        vuAudioCtxRef.current = ctx;
+
+        const src = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.2;
+        src.connect(analyser);
+
+        const data = new Uint8Array(analyser.frequencyBinCount);
+        const tick = () => {
+          if (isCancelled) return;
+          analyser.getByteFrequencyData(data);
+          let sum = 0;
+          for (let i = 0; i < data.length; i++) {
+            sum += data[i];
+          }
+          const avg = sum / data.length;
+          // Normalize energy curve to human voice range
+          const normalized = Math.min(1, Math.max(0, (avg - 8) / 70));
+          setMicLevel(normalized);
+          vuAnimationRef.current = requestAnimationFrame(tick);
+        };
+        vuAnimationRef.current = requestAnimationFrame(tick);
+      } catch (err) {
+        console.warn("Could not start VU meter:", err);
+      }
+    }
+
+    void startMeter();
+
+    return () => {
+      isCancelled = true;
+      if (vuAnimationRef.current) {
+        cancelAnimationFrame(vuAnimationRef.current);
+        vuAnimationRef.current = null;
+      }
+      if (vuStreamRef.current) {
+        vuStreamRef.current.getTracks().forEach((t) => t.stop());
+        vuStreamRef.current = null;
+      }
+      if (vuAudioCtxRef.current && vuAudioCtxRef.current.state !== "closed") {
+        void vuAudioCtxRef.current.close();
+        vuAudioCtxRef.current = null;
+      }
+      setMicLevel(0);
+    };
+  }, [open, activeTab, selectedMicId, refreshDevices]);
+
+  // Clean up recognition on unmount or tab change
+  useEffect(() => {
+    return () => {
+      if (testRecognitionRef.current) {
+        try {
+          testRecognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+        testRecognitionRef.current = null;
+      }
+    };
+  }, [activeTab]);
 
   const handleFetchVoices = async () => {
     if (!elevenForm.apiKey) return;
@@ -157,18 +283,96 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
     }
   };
 
+  const handleTestRecognition = () => {
+    const SpeechRec =
+      (window as unknown as { webkitSpeechRecognition?: any; SpeechRecognition?: any })
+        .webkitSpeechRecognition ||
+      (window as unknown as { SpeechRecognition?: any }).SpeechRecognition;
+    if (!SpeechRec) {
+      setTestTranscript("Speech Recognition not supported in this window.");
+      return;
+    }
+
+    if (testListening) {
+      testRecognitionRef.current?.abort();
+      setTestListening(false);
+      return;
+    }
+
+    try {
+      const rec = new SpeechRec();
+      rec.continuous = false;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+
+      setTestListening(true);
+      setTestTranscript("Listening… speak now into your microphone.");
+
+      rec.onresult = (e: any) => {
+        const transcript = Array.from(e.results)
+          .map((r: any) => r[0].transcript)
+          .join(" ");
+        setTestTranscript(`“${transcript}”`);
+      };
+
+      rec.onerror = (e: any) => {
+        setTestTranscript(`Recognition error: ${e.error || "No speech detected"}`);
+        setTestListening(false);
+      };
+
+      rec.onend = () => {
+        setTestListening(false);
+      };
+
+      rec.start();
+      testRecognitionRef.current = rec;
+    } catch (err) {
+      setTestTranscript(`Failed to start test: ${String(err)}`);
+      setTestListening(false);
+    }
+  };
+
+  const handleOpenSoundSettings = async () => {
+    try {
+      await openSoundSettings();
+    } catch (err) {
+      console.warn("Could not launch sound settings:", err);
+    }
+  };
+
   const handleSave = () => {
+    const activeDevice = devices.find((d) => d.deviceId === selectedMicId);
+    setSelectedMicrophone(
+      selectedMicId,
+      activeDevice?.label ?? (selectedMicId ? "Selected Microphone" : "System Default Microphone")
+    );
     saveElevenLabsConfig(elevenForm);
     onSave(form);
     onClose();
   };
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div className="ai-settings-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="ai-modal-header">
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="overlay"
+          onClick={onClose}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+        >
+          <motion.div
+            className="ai-settings-modal"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="ai-modal-header">
           <div className="ai-modal-title-wrap">
-            <h2 className="ai-modal-title">Intelligence &amp; Voice Settings</h2>
+            <h2 className="ai-modal-title">Intelligence, Voice &amp; Microphone Settings</h2>
           </div>
           <button className="close-btn" onClick={onClose} title="Close settings" aria-label="Close settings">
             <Icon name="close" size={13} />
@@ -190,12 +394,20 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             className={`ai-tab-btn ${activeTab === "voice" ? "active" : ""}`}
             onClick={() => setActiveTab("voice")}
           >
-            <Icon name="mic" size={13} />
+            <Icon name="spark" size={13} />
             <span>ElevenLabs Voice</span>
+          </button>
+          <button
+            type="button"
+            className={`ai-tab-btn ${activeTab === "mic" ? "active" : ""}`}
+            onClick={() => setActiveTab("mic")}
+          >
+            <Icon name="mic" size={13} />
+            <span>Microphone Input</span>
           </button>
         </div>
 
-        {activeTab === "llm" ? (
+        {activeTab === "llm" && (
           <>
             {/* Preset Quick Select */}
             <div className="ai-presets-wrap">
@@ -260,9 +472,23 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 <input
                   type={showKey ? "text" : "password"}
                   className="ai-input"
-                  value={form.apiKey}
-                  placeholder="sk-... or blank for local models"
+                  value={form.apiKey || ""}
+                  placeholder="sk-... (leave blank if local / not required)"
                   onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                />
+              </div>
+
+              {/* System Prompt Customizer */}
+              <div className="ai-form-group">
+                <label className="ai-field-label">
+                  SYSTEM PROMPT OVERRIDE <span className="dim">(Optional)</span>
+                </label>
+                <textarea
+                  className="ai-input ai-textarea"
+                  rows={3}
+                  value={form.systemPrompt || ""}
+                  placeholder="Leave empty to use Severus Second Brain defaults..."
+                  onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })}
                 />
               </div>
 
@@ -279,73 +505,46 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
               )}
             </div>
           </>
-        ) : (
-          /* ElevenLabs Voice Tab */
-          <div className="ai-form-body">
-            {/* Enable Toggle */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "6px 0",
-              }}
-            >
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-primary)" }}>
-                  Use ElevenLabs Neural Voice
-                </div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                  Speaks in your cloned Severus Snape voice in Thinking Mode (falls back to local voice if offline)
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={elevenForm.enabled !== false}
-                onChange={(e) => setElevenForm({ ...elevenForm, enabled: e.target.checked })}
-                style={{ width: 18, height: 18, cursor: "pointer", accentColor: "#c084fc" }}
-              />
-            </div>
+        )}
 
-            {/* Voice Presets */}
+        {activeTab === "voice" && (
+          <div className="ai-form-body">
+            {/* Free Presets Quick Select */}
             <div className="ai-presets-wrap">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="ai-field-label">FREE TIER PREMADE VOICES (NO UPGRADE NEEDED):</span>
-                {elevenForm.apiKey && (
-                  <button
-                    type="button"
-                    className="ai-text-toggle"
-                    disabled={fetchingVoices}
-                    onClick={handleFetchVoices}
-                    title="Load voices from your ElevenLabs account"
-                  >
-                    {fetchingVoices ? "FETCHING…" : "SYNC ACCOUNT VOICES"}
-                  </button>
-                )}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 4 }}>
+                <span className="ai-field-label">VOICE SELECTOR (FREE PREMADES &amp; ACCOUNT):</span>
+                <button
+                  type="button"
+                  className="ai-text-toggle"
+                  onClick={handleFetchVoices}
+                  disabled={fetchingVoices || !elevenForm.apiKey}
+                >
+                  {fetchingVoices ? "FETCHING…" : "SYNC ACCOUNT VOICES"}
+                </button>
               </div>
               <div className="ai-presets-list">
-                {voices.map((v) => {
-                  const isSelected = elevenForm.voiceId === v.id;
-                  return (
-                    <button
-                      key={v.id}
-                      type="button"
-                      className={`ai-preset-btn ${isSelected ? "active" : ""}`}
-                      onClick={() => {
-                        setElevenForm({ ...elevenForm, voiceId: v.id });
-                        setElevenTestResult(null);
-                      }}
-                      title={v.description}
-                    >
-                      {v.name} {v.accent ? `(${v.accent})` : ""}
-                    </button>
-                  );
-                })}
+                {voices.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    className={`ai-preset-btn ${
+                      elevenForm.voiceId === v.id ? "active" : ""
+                    }`}
+                    onClick={() =>
+                      setElevenForm((prev) => ({
+                        ...prev,
+                        voiceId: v.id,
+                      }))
+                    }
+                    title={v.description}
+                  >
+                    {v.name}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Free Tier vs Paid Explanation */}
-            <div className="ai-tip-box" style={{ lineHeight: 1.55 }}>
+            <div className="ai-tip-box" style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
                 ElevenLabs Free Tier vs. Custom Clones:
               </div>
@@ -421,6 +620,113 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
           </div>
         )}
 
+        {activeTab === "mic" && (
+          <div className="ai-form-body">
+            <div className="ai-tip-box" style={{ background: "rgba(59, 130, 246, 0.06)", borderColor: "rgba(59, 130, 246, 0.18)", marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, color: "#93c5fd", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+                <Icon name="mic" size={13} />
+                Hardware Microphone Selection:
+              </div>
+              <div>
+                Choose the physical microphone Severus should listen to for hands-free voice commands, double-claps, and conversational thinking mode.
+              </div>
+            </div>
+
+            {/* Microphone Selector */}
+            <div className="ai-form-group">
+              <label className="ai-field-label">
+                ACTIVE MICROPHONE DEVICE ({devices.length} DETECTED)
+              </label>
+              <div className="mic-selector-row">
+                <select
+                  className="ai-input mic-select"
+                  value={selectedMicId}
+                  onChange={(e) => setSelectedMicId(e.target.value)}
+                >
+                  <option value="">Default System Microphone</option>
+                  {devices
+                    .filter((d) => d.deviceId && d.deviceId !== "default")
+                    .map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  type="button"
+                  className="mic-refresh-btn"
+                  onClick={refreshDevices}
+                  disabled={scanningMics}
+                  title="Rescan connected audio devices"
+                >
+                  <Icon name="reset" size={12} />
+                  <span>{scanningMics ? "Scanning…" : "Rescan"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Live Volume VU Meter */}
+            <div className="ai-form-group">
+              <label className="ai-field-label">LIVE INPUT LEVEL (SPEAK TO TEST)</label>
+              <div className="mic-vu-panel">
+                <div className="mic-vu-header">
+                  <span>SIGNAL ENERGY</span>
+                  <span className="mic-vu-val">{Math.round(micLevel * 100)}%</span>
+                </div>
+                <div className="mic-vu-track">
+                  <div
+                    className="mic-vu-bar"
+                    style={{
+                      width: `${Math.max(2, Math.min(100, micLevel * 100))}%`,
+                    }}
+                  />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)" }}>
+                  <span>{micLevel > 0.06 ? "🟢 Voice signal detected" : "⚪ Ambient noise / Silent"}</span>
+                  <span style={{ maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {devices.find((d) => d.deviceId === selectedMicId)?.label || "Default System Mic"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Speech Recognition Test */}
+            <div className="ai-form-group">
+              <div className="ai-field-header">
+                <label className="ai-field-label">SPEECH RECOGNITION TEST</label>
+                <button
+                  type="button"
+                  className="ai-btn-secondary"
+                  style={{ padding: "3px 10px", fontSize: "11px" }}
+                  onClick={handleTestRecognition}
+                >
+                  <Icon name={testListening ? "close" : "mic"} size={11} />
+                  <span>{testListening ? "Stop Test" : "Start 5s Test"}</span>
+                </button>
+              </div>
+              <div className="mic-test-rec-box">
+                <div className="mic-rec-transcript">
+                  {testTranscript || 'Click "Start 5s Test" and speak a phrase (e.g. "Hey Severus, open copilot") to verify recognition.'}
+                </div>
+              </div>
+            </div>
+
+            {/* Windows System Sound Settings Link */}
+            <div className="ai-form-group" style={{ marginTop: 2 }}>
+              <button
+                type="button"
+                className="ai-btn-secondary"
+                style={{ width: "100%", justifyContent: "center", gap: 8, padding: "8px 14px" }}
+                onClick={handleOpenSoundSettings}
+                title="Open Windows Sound Settings to set this mic as default for the whole PC"
+              >
+                <Icon name="external" size={12} />
+                <span>Open Windows Sound Settings (ms-settings:sound)</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Footer Actions */}
         <div className="ai-modal-footer">
           {activeTab === "llm" ? (
@@ -438,7 +744,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 </>
               )}
             </button>
-          ) : (
+          ) : activeTab === "voice" ? (
             <button
               type="button"
               className="ai-btn-secondary"
@@ -453,6 +759,15 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 </>
               )}
             </button>
+          ) : (
+            <button
+              type="button"
+              className="ai-btn-secondary"
+              onClick={handleTestRecognition}
+            >
+              <Icon name={testListening ? "close" : "mic"} size={12} />
+              <span>{testListening ? "Listening…" : "Test Speech Recognition"}</span>
+            </button>
           )}
 
           <div className="ai-footer-right">
@@ -464,7 +779,9 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             </button>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

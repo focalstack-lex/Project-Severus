@@ -1,0 +1,38 @@
+[
+  {
+    "id": "flow-001",
+    "category": "workflows",
+    "content": "Agentic Coding Workflow: Thorough inspection -> Implementation plan -> Defensive coding -> Local automated verification -> Daily journal log -> Git commit.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "flow-002",
+    "category": "workflows",
+    "content": "Second Brain Maintenance: Capture observation -> Tag with inline #tags -> Link with [[wiki-links]] -> Rebuild PageRank graph -> Review freshness.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "flow-003",
+    "category": "workflows",
+    "content": "Endurance Running Workflow: Dynamic mobility warmup -> GPS recording -> Hydration with electrolytes -> Cool-down walk -> Foam roll and stretch.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

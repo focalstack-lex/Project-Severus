@@ -1,0 +1,38 @@
+[
+  {
+    "id": "creat-001",
+    "category": "creative_work",
+    "content": "Visual theme: Grounded, emotional, authentic, and nostalgic. Captures real human emotion rather than sterile artificial setups.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "creat-002",
+    "category": "creative_work",
+    "content": "Subject interests: School memories, youth transition, graduation, personal perseverance, friendship, and quiet introspective moments.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "creat-003",
+    "category": "creative_work",
+    "content": "Post-production standard: High attention to color grade, 24fps cinematic pacing, natural skin tones, and narrative-first sound design.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

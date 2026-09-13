@@ -1,0 +1,50 @@
+[
+  {
+    "id": "eq-001",
+    "category": "equipment",
+    "content": "Cameras & Lenses: Nikon D3200 DSLR (reliable workhorse), Yongnuo 50mm f/1.8 prime lens, kit lenses; interest/access to Sony ZV-E10, Canon M50, and GoPro.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "eq-002",
+    "category": "equipment",
+    "content": "Camera Support: DJI Ronin-SC 3-axis gimbal stabilizer, sturdy tripods, high-speed SD cards, and external storage drives.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  },
+  {
+    "id": "eq-003",
+    "category": "equipment",
+    "content": "Engineering Station: Windows 11 workstation running VS Code, PowerShell, Node.js, Rust toolchain, Cursor/Antigravity, and Tauri v2 dev environment.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "eq-004",
+    "category": "equipment",
+    "content": "Running Gear: Cushioned road daily trainers, trail shoes, GPS running watch, running belt, and anti-chafe gear.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "low"
+  }
+]

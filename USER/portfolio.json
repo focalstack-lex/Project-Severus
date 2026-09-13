@@ -1,0 +1,26 @@
+[
+  {
+    "id": "port-001",
+    "category": "portfolio",
+    "content": "Portfolio structure: Dual-axis presentation distinguishing 'Tech / Code' from 'Create / Media' while presenting a cohesive builder identity.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Code x Create",
+    "importance": "high"
+  },
+  {
+    "id": "port-002",
+    "category": "portfolio",
+    "content": "Portfolio design criteria: Minimalist black-and-white aesthetic, crisp typography, responsive layout, blazing-fast load times, and authentic proof-of-work.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Code x Create",
+    "importance": "medium"
+  }
+]

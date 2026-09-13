@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Icon from "./Icon";
 
 interface Props {
@@ -53,8 +54,6 @@ export default function NewNoteModal({
     }
   }, [open]);
 
-  if (!open) return null;
-
   const handleSubmit = async () => {
     if (!cleanId) {
       setError("Please enter a note title or slug.");
@@ -82,106 +81,123 @@ export default function NewNoteModal({
   };
 
   return (
-    <div className="overlay" onClick={onClose}>
-      <div
-        className="modal-container new-note-modal"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-header">
-          <div className="modal-title">
-            <strong>Create New Note</strong>
-          </div>
-          <button className="modal-close" onClick={onClose} title="Cancel (Esc)" aria-label="Cancel (Esc)">
-            <Icon name="close" size={13} />
-          </button>
-        </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="new-note-overlay"
+          className="overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          onClick={onClose}
+        >
+          <motion.div
+            key="new-note-modal"
+            className="modal-container new-note-modal"
+            initial={{ opacity: 0, scale: 0.96, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -10 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title">
+                <strong>Create New Note</strong>
+              </div>
+              <button className="modal-close" onClick={onClose} title="Cancel (Esc)" aria-label="Cancel (Esc)">
+                <Icon name="close" size={13} />
+              </button>
+            </div>
 
-        <div className="modal-body">
-          <div className="input-group">
-            <label className="input-label" htmlFor="new-note-title">
-              NOTE TITLE OR SLUG
-            </label>
-            <input
-              id="new-note-title"
-              ref={inputRef}
-              className="modal-input"
-              value={name}
-              placeholder="e.g. quantum_state_telemetry or Agent Grounding"
-              onChange={(e) => {
-                setName(e.target.value);
-                setError(null);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") onClose();
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSubmit();
-                }
-              }}
-              disabled={submitting}
-            />
-          </div>
+            <div className="modal-body">
+              <div className="input-group">
+                <label className="input-label" htmlFor="new-note-title">
+                  NOTE TITLE OR SLUG
+                </label>
+                <input
+                  id="new-note-title"
+                  ref={inputRef}
+                  className="modal-input"
+                  value={name}
+                  placeholder="e.g. quantum_state_telemetry or Agent Grounding"
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    setError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") onClose();
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      void handleSubmit();
+                    }
+                  }}
+                  disabled={submitting}
+                />
+              </div>
 
-          {/* Real-time Path Resolution Preview */}
-          <div className="path-preview">
-            <span className="path-label">RESOLVED TARGET:</span>
-            <code className="path-code">
-              second-brain/notes/{cleanId ? `${cleanId}.md` : "[title].md"}
-            </code>
-          </div>
+              {/* Real-time Path Resolution Preview */}
+              <div className="path-preview">
+                <span className="path-label">RESOLVED TARGET:</span>
+                <code className="path-code">
+                  second-brain/notes/{cleanId ? `${cleanId}.md` : "[title].md"}
+                </code>
+              </div>
 
-          {/* Template / Category Archetype */}
-          <div className="template-picker">
-            <label className="input-label">NOTE ARCHETYPE</label>
-            <div className="template-chips">
-              {TEMPLATES.map((tmpl) => (
+              {/* Template / Category Archetype */}
+              <div className="template-picker">
+                <label className="input-label">NOTE ARCHETYPE</label>
+                <div className="template-chips">
+                  {TEMPLATES.map((tmpl) => (
+                    <button
+                      key={tmpl.id}
+                      type="button"
+                      className={`template-chip ${selectedTemplate === tmpl.id ? "active" : ""}`}
+                      onClick={() => setSelectedTemplate(tmpl.id)}
+                    >
+                      <span className="tmpl-label">{tmpl.label}</span>
+                      <span className="tmpl-tag">{tmpl.tag}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {collision && (
+                <div className="modal-warning">
+                  <Icon name="alert" size={13} />
+                  <span>Note already exists. Creating will open the existing note.</span>
+                </div>
+              )}
+
+              {error && <div className="modal-error">{error}</div>}
+            </div>
+
+            <div className="modal-footer">
+              <div className="modal-footer-hint">
+                <kbd>ESC</kbd> Cancel &nbsp;·&nbsp; <kbd>ENTER ↵</kbd> Create Note
+              </div>
+              <div className="modal-footer-actions">
                 <button
-                  key={tmpl.id}
                   type="button"
-                  className={`template-chip ${selectedTemplate === tmpl.id ? "active" : ""}`}
-                  onClick={() => setSelectedTemplate(tmpl.id)}
+                  className="btn-secondary"
+                  onClick={onClose}
+                  disabled={submitting}
                 >
-                  <span className="tmpl-label">{tmpl.label}</span>
-                  <span className="tmpl-tag">{tmpl.tag}</span>
+                  CANCEL
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className="accent"
+                  onClick={() => void handleSubmit()}
+                  disabled={submitting || !cleanId || collision}
+                >
+                  {submitting ? "Initializing…" : "Create Note"}
+                </button>
+              </div>
             </div>
-          </div>
-
-          {collision && (
-            <div className="modal-warning">
-              <Icon name="alert" size={13} />
-              <span>Note already exists. Creating will open the existing note.</span>
-            </div>
-          )}
-
-          {error && <div className="modal-error">{error}</div>}
-        </div>
-
-        <div className="modal-footer">
-          <div className="modal-footer-hint">
-            <kbd>ESC</kbd> Cancel &nbsp;·&nbsp; <kbd>ENTER ↵</kbd> Create Note
-          </div>
-          <div className="modal-footer-actions">
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={onClose}
-              disabled={submitting}
-            >
-              CANCEL
-            </button>
-            <button
-              type="button"
-              className="accent"
-              onClick={() => void handleSubmit()}
-              disabled={submitting || !cleanId || collision}
-            >
-              {submitting ? "Initializing…" : "Create Note"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

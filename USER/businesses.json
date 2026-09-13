@@ -1,0 +1,26 @@
+[
+  {
+    "id": "biz-001",
+    "category": "businesses",
+    "content": "Coffee Box: Active client engagement. Building customized POS / online ordering system and creative collateral. Strictly no 'golden hour' in copy.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Coffee Box",
+    "importance": "high"
+  },
+  {
+    "id": "biz-002",
+    "category": "businesses",
+    "content": "Freelance Media Production: Event and portrait photography, graduation video edits, and branding campaigns across Davao del Sur.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

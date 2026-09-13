@@ -1,0 +1,38 @@
+[
+  {
+    "id": "goal-creat-001",
+    "category": "goals",
+    "content": "Direct and produce emotionally resonant short films addressing youth, student struggles, and nostalgia.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "goal-creat-002",
+    "category": "goals",
+    "content": "Establish a recognized personal creative brand ('Code x Create') demonstrating both technical mastery and visual artistry.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Code x Create",
+    "importance": "medium"
+  },
+  {
+    "id": "goal-creat-003",
+    "category": "goals",
+    "content": "Long-term ambition: Own and operate a dedicated photography/cinematography studio when financially stable.",
+    "status": "goal",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { type AIConfig, type ChatMessage, sendAIChat } from "../lib/ai";
-import { getWorkspaceContext } from "../lib/tauri";
+import { getWorkspaceContext, getMemorySummary } from "../lib/tauri";
 import { formatReplyWithSir } from "../lib/voice";
 import type { NoteContent, WorkspaceContext, ChatSession } from "../types";
 import Icon from "./Icon";
@@ -112,9 +112,11 @@ function formatRelativeTime(timestamp: number): string {
   if (days < 7) return `${days}d ago`;
   const d = new Date(timestamp);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
-function buildDynamicContext(ctx: WorkspaceContext | null, activeNote: NoteContent | null): string {
+}function buildDynamicContext(
+  ctx: WorkspaceContext | null,
+  activeNote: NoteContent | null,
+  memorySummary?: string
+): string {
   const parts: string[] = [
     "=== LIVE SYSTEM & WORKSPACE TELEMETRY ===",
     `• Active Workspace: ${ctx?.workspace_name ?? "Project Severus"} (${ctx?.workspace_path ?? "c:\\Users\\User\\Documents\\Severus"})`,
@@ -138,6 +140,11 @@ function buildDynamicContext(ctx: WorkspaceContext | null, activeNote: NoteConte
     parts.push(
       `• Today's Action Log & Current Tasks (${new Date().toISOString().slice(0, 10)}):\n${ctx.today_journal}`
     );
+  }
+
+  if (memorySummary) {
+    parts.push("=========================================");
+    parts.push(memorySummary);
   }
 
   parts.push("=========================================");
@@ -177,6 +184,7 @@ export default function AICopilot({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [workspaceContext, setWorkspaceContext] = useState<WorkspaceContext | null>(null);
+  const [memorySummary, setMemorySummary] = useState<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeSession = useMemo(() => {
@@ -199,6 +207,12 @@ export default function AICopilot({
     try {
       const data = await getWorkspaceContext();
       setWorkspaceContext(data);
+    } catch {
+      // ignore
+    }
+    try {
+      const mem = await getMemorySummary();
+      setMemorySummary(mem);
     } catch {
       // ignore
     }
@@ -344,7 +358,7 @@ export default function AICopilot({
         ...activeSession.messages,
         { role: "user", content: enrichedContent },
       ];
-      const dynamicContext = buildDynamicContext(workspaceContext, activeNote);
+      const dynamicContext = buildDynamicContext(workspaceContext, activeNote, memorySummary);
       const reply = await sendAIChat(config, apiMsgs, dynamicContext);
 
       const assistantMessage: ChatMessage = { role: "assistant", content: formatReplyWithSir(reply) };

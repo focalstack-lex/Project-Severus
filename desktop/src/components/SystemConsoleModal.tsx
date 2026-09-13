@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Icon from "./Icon";
 import { listSystemWindows, type WindowInfo } from "../lib/systemControl";
 
@@ -105,8 +106,6 @@ export default function SystemConsoleModal({ open, onClose, onRunCommand }: Prop
     historyRef.current?.scrollTo({ top: 0 });
   }, [history]);
 
-  if (!open) return null;
-
   const run = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -130,116 +129,162 @@ export default function SystemConsoleModal({ open, onClose, onRunCommand }: Prop
   };
 
   return (
-    <div className="overlay console-overlay" onClick={onClose}>
-      <div className="console-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="console-header">
-          <div className="console-title">
-            <Icon name="keyboard" size={15} />
-            System Console
-          </div>
-          <div className="console-header-right">
-            <kbd>Ctrl+Shift+K</kbd>
-            <button className="close-btn" onClick={onClose} title="Close (Esc)" aria-label="Close (Esc)">
-              <Icon name="close" size={13} />
-            </button>
-          </div>
-        </div>
-
-        <div className="console-input-wrap">
-          <span className="console-input-icon">
-            <Icon name="send" size={13} />
-          </span>
-          <input
-            ref={inputRef}
-            className="console-input"
-            value={input}
-            placeholder="Type a command — “open chrome”, “volume down”, “snap left”…"
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void run(input);
-              if (e.key === "Escape") onClose();
-            }}
-          />
-        </div>
-
-        {history.length > 0 && (
-          <div className="console-history" ref={historyRef}>
-            {history.map((entry) => (
-              <div key={entry.id} className={`console-history-item ${entry.ok === false ? "error" : ""}`}>
-                <span className="console-history-icon">
-                  <Icon name={entry.ok === false ? "alert" : entry.ok === null ? "clock" : "check"} size={12} />
-                </span>
-                <span className="console-history-text">
-                  <strong>{entry.text}</strong>
-                  <span>{entry.message}</span>
-                </span>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="console-overlay"
+          className="overlay console-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+          onClick={onClose}
+        >
+          <motion.div
+            key="console-modal"
+            className="console-modal"
+            initial={{ opacity: 0, scale: 0.96, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -10 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="console-header">
+              <div className="console-title">
+                <Icon name="keyboard" size={15} />
+                System Console
               </div>
-            ))}
-          </div>
-        )}
-
-        <div className="console-body">
-          <div className="console-cheats">
-            {CHEAT_SHEET.map((section) => (
-              <div key={section.category} className="console-section">
-                <div className="console-section-title">
-                  <Icon name={section.icon} size={12} />
-                  {section.category}
-                </div>
-                <div className="console-phrases">
-                  {section.phrases.map(([phrase, hint]) => (
-                    <button
-                      key={phrase}
-                      type="button"
-                      className="console-phrase"
-                      onClick={() => void run(phrase)}
-                      title={`Run “${phrase}”`}
-                    >
-                      <span className="console-phrase-text">{phrase}</span>
-                      <span className="console-phrase-hint">{hint}</span>
-                    </button>
-                  ))}
-                </div>
+              <div className="console-header-right">
+                <kbd>Ctrl+Shift+K</kbd>
+                <button className="close-btn" onClick={onClose} title="Close (Esc)" aria-label="Close (Esc)">
+                  <Icon name="close" size={13} />
+                </button>
               </div>
-            ))}
-          </div>
-
-          <div className="console-windows">
-            <div className="console-section-title">
-              <Icon name="list" size={12} />
-              Open windows
             </div>
-            {windowsError && <div className="console-windows-error">{windowsError}</div>}
-            {!windowsError && windows === null && <div className="console-windows-loading">Loading…</div>}
-            {windows !== null && windows.length === 0 && (
-              <div className="console-windows-loading">No open windows found.</div>
-            )}
-            {windows !== null && windows.length > 0 && (
-              <div className="console-window-list">
-                {windows.map((win) => (
-                  <button
-                    key={win.hwnd}
-                    type="button"
-                    className="console-window-row"
-                    onClick={() => void run(`focus ${win.exe.replace(/\.(exe|EXE)$/, "")}`)}
-                    title={`Bring “${win.title}” to the front`}
-                  >
-                    <span className="console-window-exe">{win.exe}</span>
-                    <span className="console-window-title">{win.title}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
 
-        <div className="console-footer">
-          <span>
-            Destructive actions (lock, close window) ask for your control password. Unknown phrases are
-            mapped by your configured model.
-          </span>
-        </div>
-      </div>
-    </div>
+            <form
+              className="console-input-row"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void run(input);
+              }}
+            >
+              <input
+                ref={inputRef}
+                type="text"
+                className="console-input"
+                value={input}
+                placeholder="Type a system command (e.g. 'snap chrome left', 'volume 50', 'mute', 'list windows')…"
+                onChange={(e) => setInput(e.target.value)}
+              />
+              <button type="submit" className="accent">
+                Run
+              </button>
+            </form>
+
+            <div className="console-body">
+              {/* Left: command history log */}
+              <div className="console-history" ref={historyRef}>
+                <div className="history-head">
+                  <span>Recent Commands</span>
+                  {history.length > 0 && (
+                    <button type="button" className="text-btn" onClick={() => setHistory([])}>
+                      Clear
+                    </button>
+                  )}
+                </div>
+                {history.length === 0 ? (
+                  <div className="history-empty">
+                    No commands run yet. Type a command above or pick a cheat-sheet phrase on the right.
+                  </div>
+                ) : (
+                  history.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className={`history-item ${
+                        entry.ok === null ? "running" : entry.ok ? "success" : "error"
+                      }`}
+                    >
+                      <div className="history-command">
+                        <span className="history-status-dot" />
+                        <code>{entry.text}</code>
+                      </div>
+                      <div className="history-message">{entry.message}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Right: cheat sheet / window list */}
+              <div className="console-cheat-sheet">
+                <div className="cheat-head">Examples &amp; Open Windows</div>
+
+                {CHEAT_SHEET.map((sec) => (
+                  <div key={sec.category} className="cheat-section">
+                    <div className="cheat-sec-title">
+                      <Icon name={sec.icon} size={12} />
+                      {sec.category}
+                    </div>
+                    <div className="cheat-phrases">
+                      {sec.phrases.map(([phrase, note]) => (
+                        <button
+                          key={phrase}
+                          type="button"
+                          className="cheat-pill"
+                          onClick={() => {
+                            setInput(phrase);
+                            inputRef.current?.focus();
+                          }}
+                          title={note}
+                        >
+                          <code>{phrase}</code>
+                          <span className="cheat-note">{note}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {windows && windows.length > 0 && (
+                  <div className="cheat-section">
+                    <div className="cheat-sec-title">
+                      <Icon name="monitor" size={12} />
+                      Open Windows ({windows.length})
+                    </div>
+                    <div className="windows-list">
+                      {windows.slice(0, 10).map((w) => (
+                        <div
+                          key={w.hwnd}
+                          className="window-item"
+                          onClick={() => {
+                            setInput(`switch to ${w.exe.replace(/\.(exe|EXE)$/, "")}`);
+                            inputRef.current?.focus();
+                          }}
+                          title={`Click to target "${w.title}"`}
+                        >
+                          <span className="window-proc">{w.exe}</span>
+                          <span className="window-title">{w.title}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {windowsError && (
+                  <div className="windows-error">Could not enumerate windows: {windowsError}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="console-footer">
+              <span>
+                Destructive actions (lock, close window) ask for your control password. Unknown phrases are
+                mapped by your configured model.
+              </span>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

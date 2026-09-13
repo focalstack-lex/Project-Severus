@@ -1,0 +1,62 @@
+[
+  {
+    "id": "skill-001",
+    "category": "skills",
+    "content": "Systems & Programming: Java (Swing, JavaFX, FXML, JDBC), Web (TypeScript, React, Node.js, Express, HTML/CSS, Tailwind), Python, Rust, SQL (PostgreSQL, Supabase, MySQL), Git/GitHub.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "skill-002",
+    "category": "skills",
+    "content": "AI & Agentic Architectures: Local LLM orchestration (Ollama, Qwen2.5-Coder), Claude, Codex, agentic coding workflows, prompt engineering, and autonomous multi-tool integration.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Project Severus",
+    "importance": "high"
+  },
+  {
+    "id": "skill-003",
+    "category": "skills",
+    "content": "UI/UX & Design: Figma, design token systems, typography hierarchy, responsive layouts, micro-animations, component architecture, and clean dark-mode interfaces.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "high"
+  },
+  {
+    "id": "skill-004",
+    "category": "skills",
+    "content": "Media & Cinematography: Adobe Photoshop, Lightroom, Premiere Pro, DaVinci Resolve, After Effects, gimbal camera operation (Ronin-SC), color grading, and narrative editing.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": "Code x Create",
+    "importance": "medium"
+  },
+  {
+    "id": "skill-005",
+    "category": "skills",
+    "content": "Endurance & Hybrid Athletics: Zone 2 aerobic base building, half-marathon pacing, trail elevation management, functional strength, and injury resilience routines.",
+    "status": "current",
+    "confidence": "high",
+    "created_at": "2026-09-13T20:00:00+08:00",
+    "updated_at": "2026-09-13T20:00:00+08:00",
+    "source": "USER_KNOWLEDGE_BASE.md",
+    "related_project": null,
+    "importance": "medium"
+  }
+]
