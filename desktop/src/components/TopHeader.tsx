@@ -41,6 +41,10 @@ interface Props {
   isMaximized?: boolean;
   onEnterThinkingMode?: () => void;
   onOpenRunningMode?: () => void;
+  mailConnected?: boolean;
+  mailUnread?: number | null;
+  hubSummary?: string | null;
+  onOpenInbox?: () => void;
   onHideToTray?: () => void;
   onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
   onOpenJournal?: () => void;
@@ -77,6 +81,10 @@ export default function TopHeader({
   isMaximized,
   onEnterThinkingMode,
   onOpenRunningMode,
+  mailConnected = false,
+  mailUnread = null,
+  hubSummary = null,
+  onOpenInbox,
   onHideToTray,
   onMoveMonitor,
   onOpenJournal,
@@ -288,6 +296,21 @@ export default function TopHeader({
               <span>Running</span>
             </button>
           )}
+
+          {onOpenInbox && mailConnected && (
+            <button
+              type="button"
+              className="assistant-mail-btn"
+              onClick={onOpenInbox}
+              title="School Hub — mail and Classroom updates"
+            >
+              <Icon name="school" size={13} />
+              <span>Hub</span>
+              {typeof mailUnread === "number" && mailUnread > 0 && (
+                <span className="mail-badge">{mailUnread > 9 ? "9+" : mailUnread}</span>
+              )}
+            </button>
+          )}
         </div>
 
         <span className="nav-divider" />
@@ -366,6 +389,29 @@ export default function TopHeader({
                         {stravaStats
                           ? `${stravaStats.weeklyMileageKm.toFixed(1)} km this week (${stravaStats.weeklyRunCount} runs)`
                           : "Connect Strava Telemetry"}
+                      </span>
+                    </div>
+                    <span className="item-arrow">
+                      <Icon name="chevron-right" size={13} />
+                    </span>
+                  </div>
+
+                  <div
+                    className="popover-item"
+                    onClick={() => {
+                      setSystemPopoverOpen(false);
+                      onOpenInbox?.();
+                    }}
+                  >
+                    <div className="popover-item-text">
+                      <span className="item-label">
+                        <Icon name="school" size={13} />
+                        School Hub
+                      </span>
+                      <span className="item-value">
+                        {mailConnected
+                          ? hubSummary ?? (typeof mailUnread === "number" && mailUnread > 0 ? `${mailUnread} unread from school` : "All caught up, Sir")
+                          : "Connect Gmail in Settings"}
                       </span>
                     </div>
                     <span className="item-arrow">

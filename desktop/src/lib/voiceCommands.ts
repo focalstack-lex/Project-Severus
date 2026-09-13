@@ -250,6 +250,8 @@ export interface VoiceCommandHandlers {
   onThinkingMode?: () => void;
   onStravaStatus?: () => void;
   onOpenRunningMode?: () => void;
+  onCheckEmail?: () => void;
+  onCheckClassroom?: () => void;
   onSystemCommand?: (transcript: string) => void;
   onHeard?: (transcript: string, matchedAction?: string) => void;
 }
@@ -657,6 +659,23 @@ export class VoiceCommandListener {
     }
 
     if (
+      (() => {
+        // Web search phrasing ("search cats on youtube") names a non-vault
+        // target → belongs to the system grammar. Vault phrasing stays here.
+        const webSearch = /^(search|google|youtube|bing|duckduckgo|ddg|wikipedia|wiki|github|look up)\s+(for\s+)?(\S.*)$/.exec(text);
+        if (!webSearch) return false;
+        const target = webSearch[3].trim().toLowerCase();
+        const vaultVocab = ["note", "notes", "my notes", "the vault", "vault", "graph"];
+        return !vaultVocab.some((vocab) => target.startsWith(vocab));
+      })()
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "web search");
+      this.handlers.onSystemCommand?.(text);
+      return;
+    }
+
+    if (
       matchesKeywords(text, [
         "search",
         "find note",
@@ -672,6 +691,52 @@ export class VoiceCommandListener {
       this.lastCommandTime = now;
       this.handlers.onHeard?.(text, "search");
       this.handlers.onOpenSearch?.();
+      return;
+    }
+
+    if (
+      matchesKeywords(text, [
+        "check my email",
+        "check email",
+        "any new emails",
+        "any new email",
+        "new school email",
+        "school mail",
+        "read my email",
+        "check my school mail",
+        "check school mail",
+        "email updates",
+      ])
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "check email");
+      this.handlers.onCheckEmail?.();
+      return;
+    }
+
+    if (
+      matchesKeywords(text, [
+        "whats due",
+        "what is due",
+        "due this week",
+        "due soon",
+        "assignments due",
+        "assignment due",
+        "missing work",
+        "missing assignments",
+        "am i missing",
+        "any announcements",
+        "classroom updates",
+        "check my classroom",
+        "check classroom",
+        "my classes",
+        "my courses",
+        "what classes",
+      ])
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "classroom");
+      this.handlers.onCheckClassroom?.();
       return;
     }
 

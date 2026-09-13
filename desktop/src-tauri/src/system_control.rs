@@ -111,6 +111,10 @@ fn app_alias(raw: &str) -> Option<&'static str> {
         ("telegram", "telegram"),
         ("whatsapp", "whatsapp"),
         ("obsidian", "obsidian"),
+        ("gmail", "https://mail.google.com"),
+        ("classroom", "https://classroom.google.com"),
+        ("reddit", "https://www.reddit.com"),
+        ("stackoverflow", "https://stackoverflow.com"),
     ];
     ALIASES.iter().find(|(name, _)| *name == raw).map(|(_, target)| *target)
 }

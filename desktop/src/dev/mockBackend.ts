@@ -192,6 +192,8 @@ function silentWavDataUrl(): string {
 
 const SILENT_AUDIO = silentWavDataUrl();
 
+const credentials: Record<string, string> = {};
+
 /**
  * Small mirror of the Rust grammar — harness-only, so the Command Console and
  * password flow are demonstrable in a plain browser. The real grammar lives in
@@ -309,6 +311,27 @@ const HANDLERS: Record<string, (args: Record<string, unknown>) => unknown> = {
   hide_to_tray: () => null,
   set_floating_mode: () => null,
   move_to_monitor: () => "Moved Severus to Display 1 (mock)",
+  secure_store: (args) => {
+    credentials[String(args.key)] = String(args.value);
+    return null;
+  },
+  secure_load: (args) => {
+    const value = credentials[String(args.key)];
+    if (value === undefined) throw new Error(`credential '${String(args.key)}' not found`);
+    return value;
+  },
+  secure_delete: (args) => {
+    delete credentials[String(args.key)];
+    return null;
+  },
+  gmail_begin_auth: () => {
+    // Browser harness cannot do real OAuth — return a fake consent URL and
+    // emit the code immediately so the connect flow can be demoed.
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("severus-mock-gmail-code", { detail: "mock-auth-code" }));
+    }, 300);
+    return "https://accounts.google.com/o/oauth2/v2/auth?client_id=mock (harness)";
+  },
   system_list_windows: () => [
     { hwnd: 101, title: "system_control.rs — severus-desktop", exe: "Code.exe" },
     { hwnd: 102, title: "New Tab — Google Chrome", exe: "chrome.exe" },

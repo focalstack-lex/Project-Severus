@@ -4,6 +4,7 @@
 //! watcher emits `notes-changed` so the UI stays live. All file IO is rooted at the
 //! Severus workspace (`SEVERUS_ROOT` overrides, else `%USERPROFILE%\Documents\Severus`).
 
+mod gmail_auth;
 mod graph;
 mod memory;
 mod notes;
@@ -358,7 +359,11 @@ pub fn run() {
             toggle_maximize,
             maximize_window,
             toggle_fullscreen,
-            set_floating_dimensions
+            set_floating_dimensions,
+            gmail_auth::gmail_begin_auth,
+            gmail_auth::secure_store,
+            gmail_auth::secure_load,
+            gmail_auth::secure_delete
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

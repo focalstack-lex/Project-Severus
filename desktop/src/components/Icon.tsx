@@ -31,6 +31,7 @@ export type IconName =
   | "layers"
   | "list"
   | "lock"
+  | "mail"
   | "maximize"
   | "message"
   | "mic"
@@ -40,6 +41,7 @@ export type IconName =
   | "pen"
   | "plus"
   | "reset"
+  | "school"
   | "save"
   | "search"
   | "send"
@@ -185,6 +187,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M3.5 8.5h17" opacity="0.35" />
     </>
   ),
+  mail: (
+    <>
+      <rect x="3" y="5.5" width="18" height="13" rx="1.5" />
+      <path d="m3.5 7 8.5 6 8.5-6" />
+    </>
+  ),
   message: <path d="M21 14.5a2 2 0 0 1-2 2H8l-4.5 4V5a2 2 0 0 1 2-2H19a2 2 0 0 1 2 2v9.5z" />,
   mic: (
     <>
@@ -235,6 +243,13 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M5 3h11l4 4v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
       <path d="M8 3v5h7V3" />
       <path d="M7 21v-7h10v7" />
+    </>
+  ),
+  school: (
+    <>
+      <path d="m12 4 10 5-10 5L2 9l10-5z" />
+      <path d="M6.5 11.5V16c0 1.2 2.5 2.5 5.5 2.5s5.5-1.3 5.5-2.5v-4.5" />
+      <path d="M22 9v5" />
     </>
   ),
   search: (

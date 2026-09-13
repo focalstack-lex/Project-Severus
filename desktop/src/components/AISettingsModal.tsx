@@ -28,6 +28,18 @@ import {
   type StravaConfig,
   type StravaAthleteStats,
 } from "../lib/strava";
+import {
+  beginGmailConsent,
+  checkMailNow,
+  completeGmailConnect,
+  disconnectGmail,
+  formatMailSummary,
+  isGmailConnected,
+  loadGmailConfig,
+  saveGmailConfig,
+  startGmailPolling,
+  type GmailConfig,
+} from "../lib/gmail";
 import Icon from "./Icon";
 
 interface Props {
@@ -105,7 +117,7 @@ const PRESETS: Array<{ label: string; config: Partial<AIConfig> }> = [
 ];
 
 export default function AISettingsModal({ open, config, onSave, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<"llm" | "voice" | "mic" | "strava">("llm");
+  const [activeTab, setActiveTab] = useState<"llm" | "voice" | "mic" | "strava" | "gmail">("llm");
   const [form, setForm] = useState<AIConfig>({ ...config });
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -139,6 +151,82 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
   const [stravaResult, setStravaResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [authCodeInput, setAuthCodeInput] = useState("");
   const [exchangingCode, setExchangingCode] = useState(false);
+
+  // Gmail School Updates State
+  const initialGmail = loadGmailConfig();
+  const [gmailForm, setGmailForm] = useState({
+    clientId: initialGmail.clientId,
+    domain: initialGmail.domain,
+    pollMinutes: initialGmail.pollMinutes,
+  });
+  const [gmailSecret, setGmailSecret] = useState("");
+  const [gmailConnected, setGmailConnected] = useState(initialGmail.connected);
+  const [gmailLastSync, setGmailLastSync] = useState<number | null>(initialGmail.lastSyncAt);
+  const [connectingGmail, setConnectingGmail] = useState(false);
+  const [gmailResult, setGmailResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleGmailConnect = async () => {
+    setConnectingGmail(true);
+    setGmailResult(null);
+    try {
+      if (!gmailForm.clientId.trim() || !gmailSecret.trim() || !gmailForm.domain.trim()) {
+        throw new Error("Client ID, client secret, and school domain are all required.");
+      }
+      const code = await beginGmailConsent(gmailForm.clientId);
+      const cfg = await completeGmailConnect(code, gmailForm.clientId, gmailSecret);
+      setGmailConnected(true);
+      setGmailLastSync(cfg.lastSyncAt);
+      setGmailResult({ ok: true, message: "Connected — school mail polling is live, Sir." });
+      startGmailPolling();
+    } catch (err) {
+      setGmailResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setConnectingGmail(false);
+    }
+  };
+
+  const handleGmailDisconnect = async () => {
+    setConnectingGmail(true);
+    setGmailResult(null);
+    try {
+      await disconnectGmail();
+      setGmailConnected(false);
+      setGmailSecret("");
+      setGmailResult({ ok: true, message: "Disconnected — token revoked and credentials wiped, Sir." });
+    } catch (err) {
+      setGmailResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setConnectingGmail(false);
+    }
+  };
+
+  const handleGmailCheckNow = async () => {
+    setConnectingGmail(true);
+    setGmailResult(null);
+    try {
+      const result = await checkMailNow();
+      setGmailLastSync(loadGmailConfig().lastSyncAt);
+      setGmailResult({ ok: true, message: formatMailSummary(result) });
+    } catch (err) {
+      setGmailResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setConnectingGmail(false);
+    }
+  };
+
+  const persistGmailForm = () => {
+    const cfg = loadGmailConfig();
+    const next: GmailConfig = {
+      ...cfg,
+      clientId: gmailForm.clientId.trim() || cfg.clientId,
+      domain: gmailForm.domain.trim(),
+      pollMinutes: Math.max(1, Number(gmailForm.pollMinutes) || cfg.pollMinutes),
+    };
+    saveGmailConfig(next);
+    if (isGmailConnected(next)) {
+      startGmailPolling(); // restart with the new interval/domain
+    }
+  };
 
   const refreshDevices = useCallback(async () => {
     setScanningMics(true);
@@ -451,6 +539,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
     );
     saveElevenLabsConfig(elevenForm);
     saveStravaConfig(stravaForm);
+    persistGmailForm();
     onSave(form);
     onClose();
   };
@@ -516,6 +605,14 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
           >
             <Icon name="activity" size={13} />
             <span>Strava Telemetry</span>
+          </button>
+          <button
+            type="button"
+            className={`ai-tab-btn ${activeTab === "gmail" ? "active" : ""}`}
+            onClick={() => setActiveTab("gmail")}
+          >
+            <Icon name="mail" size={13} />
+            <span>Gmail School Mail</span>
           </button>
         </div>
 
@@ -1058,6 +1155,132 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
           </div>
         )}
 
+        {activeTab === "gmail" && (
+          <>
+            <div className="ai-status-line">
+              <span className={`ai-test-pill ${gmailConnected ? "ai-test-ok" : "ai-test-err"}`}>
+                <span className="dot" />
+                <span>
+                  {gmailConnected
+                    ? `Connected${gmailLastSync ? ` · last sync ${new Date(gmailLastSync).toLocaleTimeString()}` : ""}`
+                    : "Not connected"}
+                </span>
+              </span>
+            </div>
+
+            <div className="ai-form-body">
+              <div className="ai-form-group">
+                <label className="ai-field-label">
+                  OAUTH CLIENT ID <span className="dim">(Desktop-type client)</span>
+                </label>
+                <input
+                  type="text"
+                  className="ai-input"
+                  value={gmailForm.clientId}
+                  placeholder="1234567890-abc123.apps.googleusercontent.com"
+                  onChange={(e) => setGmailForm({ ...gmailForm, clientId: e.target.value })}
+                />
+              </div>
+
+              <div className="ai-form-group">
+                <div className="ai-field-header">
+                  <label className="ai-field-label">
+                    OAUTH CLIENT SECRET <span className="dim">(stored in Windows Credential Manager)</span>
+                  </label>
+                </div>
+                <input
+                  type="password"
+                  className="ai-input"
+                  value={gmailSecret}
+                  placeholder={gmailConnected ? "•••••••• stored — leave blank to keep" : "GOCSPX-…"}
+                  onChange={(e) => setGmailSecret(e.target.value)}
+                />
+              </div>
+
+              <div className="ai-form-group">
+                <label className="ai-field-label">
+                  SCHOOL DOMAIN <span className="dim">(updates come from this sender domain)</span>
+                </label>
+                <input
+                  type="text"
+                  className="ai-input"
+                  value={gmailForm.domain}
+                  placeholder="e.g. davao.cjc.edu.ph — without the @"
+                  onChange={(e) => setGmailForm({ ...gmailForm, domain: e.target.value })}
+                />
+              </div>
+
+              <div className="ai-form-group">
+                <label className="ai-field-label">POLL INTERVAL</label>
+                <select
+                  className="ai-input"
+                  value={gmailForm.pollMinutes}
+                  onChange={(e) => setGmailForm({ ...gmailForm, pollMinutes: Number(e.target.value) })}
+                >
+                  {[1, 2, 3, 5, 10, 15].map((minutes) => (
+                    <option key={minutes} value={minutes}>
+                      every {minutes} minute{minutes === 1 ? "" : "s"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {gmailResult && (
+                <div className={`ai-test-pill ${gmailResult.ok ? "ai-test-ok" : "ai-test-err"}`}>
+                  <span className="dot" />
+                  <span>{gmailResult.message}</span>
+                </div>
+              )}
+
+              <p className="gmail-privacy-note">
+                Read-only scopes (gmail.readonly + Classroom) — Severus can never send or delete
+                anything. Only sender, subject, and date headers are fetched; bodies stay in Gmail,
+                and Classroom supplies due dates and announcements directly. Tokens live in Windows
+                Credential Manager. Testing-mode consents expire weekly — reconnect when the badge
+                stops updating.
+              </p>
+            </div>
+
+            <div className="gmail-actions">
+              {!gmailConnected ? (
+                <button
+                  type="button"
+                  className="accent gmail-connect-btn"
+                  disabled={connectingGmail || !gmailForm.clientId.trim() || !gmailSecret.trim() || !gmailForm.domain.trim()}
+                  onClick={() => void handleGmailConnect()}
+                >
+                  {connectingGmail ? (
+                    "Waiting for consent…"
+                  ) : (
+                    <>
+                      <Icon name="mail" size={12} /> Connect School Gmail
+                    </>
+                  )}
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="ai-btn-secondary"
+                    disabled={connectingGmail}
+                    onClick={() => void handleGmailCheckNow()}
+                  >
+                    <Icon name="reset" size={12} /> Check Now
+                  </button>
+                  <button
+                    type="button"
+                    className="ai-btn-secondary gmail-disconnect-btn"
+                    disabled={connectingGmail}
+                    onClick={() => void handleGmailDisconnect()}
+                  >
+                    <Icon name="close" size={12} /> Disconnect &amp; Revoke
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
+
         {/* Footer Actions */}
         <div className="ai-modal-footer">
           {activeTab === "llm" ? (
@@ -1098,6 +1321,16 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             >
               <Icon name={testListening ? "close" : "mic"} size={12} />
               <span>{testListening ? "Listening…" : "Test Speech Recognition"}</span>
+            </button>
+          ) : activeTab === "gmail" ? (
+            <button
+              type="button"
+              className="ai-btn-secondary"
+              disabled={connectingGmail || !gmailConnected}
+              onClick={() => void handleGmailCheckNow()}
+            >
+              <Icon name="mail" size={12} />
+              <span>{connectingGmail ? "Checking…" : "Check School Mail Now"}</span>
             </button>
           ) : (
             <button

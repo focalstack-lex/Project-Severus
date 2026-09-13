@@ -9,7 +9,7 @@ import TagBar from "./components/TagBar";
 import TagsIndexView from "./components/TagsIndexView";
 import { type KnowledgeSubTab, type NavSection } from "./components/SidebarNav";
 import TopHeader from "./components/TopHeader";
-import ContextInspector from "./components/ContextInspector";
+import ContextInspector, { type InspectorTab } from "./components/ContextInspector";
 import NotesDrawer from "./components/NotesDrawer";
 import JournalCapture from "./components/JournalCapture";
 import AISettingsModal from "./components/AISettingsModal";
@@ -24,6 +24,21 @@ import RunningModeWindow from "./components/RunningModeWindow";
 import { PillBase } from "@/components/ui/3d-adaptive-navigation-bar";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import { mapTextToIntent } from "./lib/deepseekIntent";
+import {
+  checkMailNow,
+  formatMailSummary,
+  isGmailConnected,
+  loadGmailConfig,
+  startGmailPolling,
+  stopGmailPolling,
+  GMAIL_MAIL_EVENT,
+  GMAIL_CLASSROOM_EVENT,
+  pollClassroom,
+  formatClassroomSummary,
+  type EmailUpdate,
+  type ClassroomSnapshot,
+  type MailPollResult,
+} from "./lib/gmail";
 import {
   executeSystemIntent,
   hasControlPassword,
@@ -55,6 +70,7 @@ import {
   formatReplyWithSir,
   getTimeGreetingData,
   getVoiceMuted,
+  playStartupChime,
   playTimeGreeting,
   playVoice,
   preloadVoice,
@@ -98,6 +114,15 @@ export default function App() {
     return () => window.removeEventListener("severus:strava-stats-updated", handleStravaUpdate);
   }, []);
   const [booting, setBooting] = useState(true);
+  const [isStartupAnimating, setIsStartupAnimating] = useState(true);
+
+  useEffect(() => {
+    playStartupChime();
+    const timer = window.setTimeout(() => {
+      setIsStartupAnimating(false);
+    }, 1100);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   // Navigation & Shell Layout
   const [activeSection, setActiveSection] = useState<NavSection>("knowledge");
@@ -108,7 +133,7 @@ export default function App() {
   // Inspector & Panes
   const [notesDrawerOpen, setNotesDrawerOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [inspectorTab, setInspectorTab] = useState<"note" | "node" | "copilot">("note");
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>("note");
   const [zenMode, setZenMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -143,6 +168,14 @@ export default function App() {
   const [groundingOpen, setGroundingOpen] = useState(false);
   const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
   const [systemConsoleOpen, setSystemConsoleOpen] = useState(false);
+
+  // Gmail school updates
+  const [gmailMeta, setGmailMeta] = useState(() => loadGmailConfig());
+  const [mailUnread, setMailUnread] = useState<number | null>(null);
+  const [inboxEmails, setInboxEmails] = useState<EmailUpdate[] | null>(null);
+  const [classroom, setClassroom] = useState<ClassroomSnapshot | null>(null);
+  const gmailMetaRef = useRef(gmailMeta);
+  gmailMetaRef.current = gmailMeta;
   const [runningModeOpen, setRunningModeOpen] = useState(false);
 
   // System control: destructive intents await the control password here
@@ -412,7 +445,7 @@ export default function App() {
       } else if (isThinkingMode) {
         void setFloatingDimensions(760, 420);
       } else {
-        void setFloatingDimensions(720, 110);
+        void setFloatingDimensions(780, 110);
       }
     }
   }, [isFloatingMode, isThinkingMode, runningModeOpen]);
@@ -441,6 +474,79 @@ export default function App() {
   const lastGreetingTimeRef = useRef<number>(0);
   const startupGreetingPlayedRef = useRef<boolean>(false);
   const startupGreetingTimerRef = useRef<number | null>(null);
+
+  // Gmail school updates: polling lifecycle + mail/classroom event listeners.
+  // gmail.ts dispatches these as DOM CustomEvents on `window` (the Strava
+  // pattern) — Tauri's listen() never sees them, so subscribe on the window.
+  useEffect(() => {
+    if (!isGmailConnected(gmailMeta)) return;
+    const onMail = (event: Event) => {
+      const detail = (event as CustomEvent<MailPollResult>).detail;
+      setMailUnread(detail.count);
+      setInboxEmails(detail.emails);
+      setGmailMeta(loadGmailConfig());
+      if (detail.isNew && detail.emails.length > 0) {
+        speakText(formatMailSummary(detail));
+      }
+    };
+    const onClassroom = (event: Event) => {
+      setClassroom((event as CustomEvent<ClassroomSnapshot>).detail);
+    };
+    // Subscribe before startGmailPolling() — startClassroomPolling() dispatches
+    // its cache-seed snapshot synchronously, before the first poll completes.
+    window.addEventListener(GMAIL_MAIL_EVENT, onMail);
+    window.addEventListener(GMAIL_CLASSROOM_EVENT, onClassroom);
+    startGmailPolling();
+    return () => {
+      window.removeEventListener(GMAIL_MAIL_EVENT, onMail);
+      window.removeEventListener(GMAIL_CLASSROOM_EVENT, onClassroom);
+      stopGmailPolling();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gmailMeta.connected]);
+
+  const refreshGmailMeta = useCallback(() => {
+    const fresh = loadGmailConfig();
+    setGmailMeta(fresh);
+    if (isGmailConnected(fresh)) startGmailPolling();
+  }, []);
+
+  // Pick up connect/disconnect changes made in the Settings modal
+  useEffect(() => {
+    if (!aiSettingsOpen) refreshGmailMeta();
+  }, [aiSettingsOpen, refreshGmailMeta]);
+
+  const handleCheckEmail = useCallback(async () => {
+    const connected = isGmailConnected(gmailMetaRef.current);
+    if (!connected) {
+      speakText("School mail is not connected yet, Sir. Connect it in settings.");
+      return;
+    }
+    try {
+      const result = await checkMailNow();
+      setMailUnread(result.count);
+      if (result.emails.length > 0) setInboxEmails(result.emails);
+      setGmailMeta(loadGmailConfig());
+      speakText(formatMailSummary(result));
+    } catch (err) {
+      speakText(`I could not reach the school mail, Sir. ${err instanceof Error ? err.message : ""}`);
+    }
+  }, []);
+
+  const handleCheckClassroom = useCallback(async () => {
+    const connected = isGmailConnected(gmailMetaRef.current);
+    if (!connected) {
+      speakText("Google Classroom is not connected yet, Sir. Connect it in settings.");
+      return;
+    }
+    try {
+      const snapshot = await pollClassroom();
+      setClassroom(snapshot);
+      speakText(formatClassroomSummary(snapshot));
+    } catch (err) {
+      speakText(`I could not reach Google Classroom, Sir. ${err instanceof Error ? err.message : ""}`);
+    }
+  }, []);
 
   const handlePlayGreeting = useCallback(
     (expand = false) => {
@@ -655,6 +761,12 @@ export default function App() {
     onToggleListening: (active: boolean) => {
       handleToggleListening(active, false);
     },
+    onCheckEmail: () => {
+      void handleCheckEmail();
+    },
+    onCheckClassroom: () => {
+      void handleCheckClassroom();
+    },
     onStravaStatus: async () => {
       try {
         const stats = await fetchStravaAthleteStats();
@@ -706,6 +818,8 @@ export default function App() {
       onStravaStatus: () => voiceHandlersRef.current.onStravaStatus?.(),
       onToggleListening: (active) => voiceHandlersRef.current.onToggleListening?.(active),
       onSystemCommand: (text) => voiceHandlersRef.current.onSystemCommand?.(text),
+      onCheckEmail: () => voiceHandlersRef.current.onCheckEmail?.(),
+      onCheckClassroom: () => voiceHandlersRef.current.onCheckClassroom?.(),
     });
 
     voiceListenerRef.current = listener;
@@ -944,7 +1058,28 @@ export default function App() {
       >
         <div className="floating-companion-cluster">
           <AnimatePresence mode="wait">
-            {isThinkingMode ? (
+            {isStartupAnimating ? (
+              <motion.div
+                key="severus-boot-sequence"
+                initial={{ opacity: 0, scale: 0.86, filter: "blur(8px)", y: 6 }}
+                animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
+                exit={{ opacity: 0, scale: 0.94, filter: "blur(4px)", y: -4 }}
+                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                className="severus-boot-capsule"
+              >
+                <div className="severus-boot-edge" />
+                <div className="severus-boot-glow" />
+                <div className="severus-boot-content">
+                  <span className="severus-boot-pulse">
+                    <span className="severus-boot-dot" />
+                    <span className="severus-boot-ring" />
+                  </span>
+                  <span className="severus-boot-title">SEVERUS</span>
+                  <span className="severus-boot-divider">·</span>
+                  <span className="severus-boot-status">SYSTEMS ONLINE</span>
+                </div>
+              </motion.div>
+            ) : isThinkingMode ? (
               <motion.div
                 key="thinking-capsule-wrap"
                 initial={{ opacity: 0, scale: 0.95, y: -4 }}
@@ -1188,6 +1323,17 @@ export default function App() {
               onHideToTray={handleHideToTray}
               onMoveMonitor={handleMoveMonitor}
               onOpenJournal={() => setJournalOpen(true)}
+              mailConnected={isGmailConnected(gmailMeta)}
+              mailUnread={mailUnread}
+              hubSummary={
+                classroom && !classroom.error
+                  ? `${classroom.dueSoon.length} due · ${classroom.missing.length} missing · ${mailUnread ?? 0} unread`
+                  : null
+              }
+              onOpenInbox={() => {
+                setInspectorOpen(true);
+                setInspectorTab("inbox");
+              }}
             />
           </motion.div>
         )}
@@ -1463,6 +1609,11 @@ export default function App() {
                     await loadGraph();
                   }}
                   onShowToast={showToast}
+                  inboxEmails={inboxEmails}
+                  inboxLastSync={gmailMeta.lastSyncAt}
+                  inboxConnected={isGmailConnected(gmailMeta)}
+                  classroom={classroom}
+                  gmailDomain={gmailMeta.domain}
                 />
               </ErrorBoundary>
             </motion.div>

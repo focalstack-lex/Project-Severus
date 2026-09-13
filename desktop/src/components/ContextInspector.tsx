@@ -1,15 +1,19 @@
 import { motion, AnimatePresence } from "framer-motion";
 import type { AIConfig } from "../lib/ai";
 import type { GraphData, GraphNode, NoteContent, NoteMeta } from "../types";
+import { openExternalUrl } from "../lib/tauri";
+import type { EmailUpdate, ClassroomSnapshot } from "../lib/gmail";
 import Icon from "./Icon";
 import NoteEditor from "./NoteEditor";
 import AICopilot from "./AICopilot";
 
+export type InspectorTab = "note" | "node" | "copilot" | "inbox";
+
 interface Props {
   open: boolean;
   onClose: () => void;
-  activeTab: "note" | "node" | "copilot";
-  onSelectTab: (tab: "note" | "node" | "copilot") => void;
+  activeTab: InspectorTab;
+  onSelectTab: (tab: InspectorTab) => void;
   // Note Inspector
   note: NoteContent | null;
   notesList: NoteMeta[];
@@ -30,6 +34,12 @@ interface Props {
   onSaveAsNote?: (title: string, content: string) => Promise<void>;
   onShowToast?: (msg: string) => void;
   onAskCopilotQuery?: (prompt: string) => void;
+  // Inbox (Gmail school updates)
+  inboxEmails?: EmailUpdate[] | null;
+  inboxLastSync?: number | null;
+  inboxConnected?: boolean;
+  classroom?: ClassroomSnapshot | null;
+  gmailDomain?: string;
 }
 
 export default function ContextInspector({
@@ -54,6 +64,11 @@ export default function ContextInspector({
   onSaveAsNote,
   onShowToast,
   onAskCopilotQuery,
+  inboxEmails = null,
+  inboxLastSync = null,
+  inboxConnected = false,
+  classroom = null,
+  gmailDomain = "",
 }: Props) {
   if (!open) return null;
 
@@ -93,6 +108,13 @@ export default function ContextInspector({
             onClick={() => onSelectTab("copilot")}
           >
             Copilot
+          </button>
+          <button
+            type="button"
+            className={`inspector-tab ${activeTab === "inbox" ? "active" : ""}`}
+            onClick={() => onSelectTab("inbox")}
+          >
+            School Hub
           </button>
         </div>
 
@@ -258,6 +280,125 @@ export default function ContextInspector({
                 onShowToast={onShowToast}
                 onOpenNote={onOpenNote}
               />
+            </motion.div>
+          )}
+
+          {/* MODE 4: INBOX — Gmail school updates (headers only) */}
+          {activeTab === "inbox" && (
+            <motion.div
+              key="inbox-tab"
+              className="inspector-panel inbox-mode"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <div className="inbox-header">
+                <span className="inbox-title">
+                  <Icon name="school" size={14} />
+                  School Hub
+                </span>
+                {inboxLastSync && (
+                  <span className="inbox-sync">synced {new Date(inboxLastSync).toLocaleTimeString()}</span>
+                )}
+              </div>
+
+              {!inboxConnected ? (
+                <div className="inspector-empty">
+                  <span className="empty-icon">
+                    <Icon name="school" size={26} />
+                  </span>
+                  <h4>School Accounts Not Connected</h4>
+                  <p>Connect your school Gmail in Settings to surface mail and Classroom here.</p>
+                  <div className="empty-actions">
+                    <button type="button" className="btn-secondary" onClick={onOpenAISettings}>
+                      <Icon name="gear" size={12} /> Open Settings
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* MAIL */}
+                  <div className="hub-section-title">
+                    Mail · {inboxEmails?.length ?? 0} unread
+                    {gmailDomain ? ` · @${gmailDomain}` : " · domain not set"}
+                  </div>
+                  {(inboxEmails?.length ?? 0) === 0 ? (
+                    <div className="hub-empty">Inbox shows no unread mail from your school domain.</div>
+                  ) : (
+                    <div className="inbox-list">
+                      {(inboxEmails ?? []).map((email) => (
+                        <button
+                          key={email.id}
+                          type="button"
+                          className="inbox-row"
+                          onClick={() => openExternalUrl(`https://mail.google.com/mail/u/0/#inbox/${email.id}`)}
+                          title="Open this message in Gmail"
+                        >
+                          <span className="inbox-row-icon">
+                            <Icon name="mail" size={12} />
+                          </span>
+                          <span className="inbox-row-text">
+                            <span className="inbox-row-from">{email.from}</span>
+                            <span className="inbox-row-subject">{email.subject || "(no subject)"}</span>
+                          </span>
+                          <span className="inbox-row-external">
+                            <Icon name="external" size={11} />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* CLASSROOM */}
+                  <div className="hub-section-title hub-section-gap">Classroom</div>
+                  {classroom?.error ? (
+                    <div className="hub-empty hub-error">
+                      {classroom.error.includes("403")
+                        ? "Classroom access not granted — disconnect and reconnect to grant the new scopes."
+                        : classroom.error}
+                    </div>
+                  ) : classroom === null ? (
+                    <div className="hub-empty">Waiting for the first Classroom sync…</div>
+                  ) : (
+                    <div className="inbox-list">
+                      {classroom.missing.length > 0 && (
+                        <>
+                          <div className="hub-subtitle hub-missing-text">Missing · {classroom.missing.length}</div>
+                          {classroom.missing.map((item) => (
+                            <div key={`m-${item.courseWorkId}`} className="hub-row hub-row-missing">
+                              <span className="hub-row-course">{item.course}</span>
+                              <span className="hub-row-title">{item.title}</span>
+                              <span className="hub-row-due">was due {item.due}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      <div className="hub-subtitle">Due soon · {classroom.dueSoon.length}</div>
+                      {classroom.dueSoon.length === 0 && <div className="hub-empty">Nothing due right now.</div>}
+                      {classroom.dueSoon.slice(0, 8).map((item) => (
+                        <div key={`d-${item.courseWorkId}`} className="hub-row">
+                          <span className="hub-row-course">{item.course}</span>
+                          <span className="hub-row-title">{item.title}</span>
+                          <span className="hub-row-due">{item.due}</span>
+                        </div>
+                      ))}
+                      {classroom.announcements.length > 0 && (
+                        <>
+                          <div className="hub-subtitle">Announcements</div>
+                          {classroom.announcements.map((announcement) => (
+                            <div key={`${announcement.courseId}-${announcement.postedAt}-${announcement.text.slice(0, 8)}`} className="hub-row">
+                              <span className="hub-row-course">{announcement.course}</span>
+                              <span className="hub-row-title">{announcement.text}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      <p className="inbox-note">Read-only · opens in Google Classroom on click</p>
+                    </div>
+                  )}
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

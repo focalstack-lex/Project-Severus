@@ -3,6 +3,16 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ThinkingOrb, type OrbState } from "@/components/ui/thinking-orbs";
 import { type AIConfig, sendAIChat } from "../lib/ai";
 import {
+  isGmailConnected,
+  getLastMailSnapshot,
+  getLastMailSnapshotAt,
+  loadGmailConfig,
+  pollSchoolMail,
+  getLastClassroomSnapshot,
+  getLastClassroomAt,
+  pollClassroom,
+} from "../lib/gmail";
+import {
   speakText,
   stopSpeaking,
   isVoiceSpeaking,
@@ -658,20 +668,82 @@ ${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.t
           ? `TODAY'S ACTION LOG (JOURNAL):\n${todayJournal.slice(-400)}`
           : "";
 
+        // Live school mail (Gmail headers) — refresh if the snapshot is stale
+        const gmailCfg = loadGmailConfig();
+        let schoolMailTelemetry =
+          "LIVE SCHOOL MAIL (GMAIL):\n• School mail is not connected — if asked about email or assignments, tell Lex to connect it in Settings, Gmail School Mail tab.";
+        let classroomTelemetry = "";
+        if (isGmailConnected(gmailCfg)) {
+          const snapshotAt = getLastMailSnapshotAt();
+          if (snapshotAt === null || Date.now() - snapshotAt > 4 * 60 * 1000) {
+            await pollSchoolMail().catch(() => {});
+          }
+          const snapshot = getLastMailSnapshot();
+          if (snapshot && snapshot.emails.length > 0) {
+            schoolMailTelemetry = `LIVE SCHOOL MAIL (GMAIL — ${snapshot.count} unread from @${gmailCfg.domain}, headers only):\n${snapshot.emails
+              .slice(0, 8)
+              .map((mail) => `• From: ${mail.from} | Subject: ${mail.subject || "(no subject)"} | Received: ${mail.date}`)
+              .join("\n")}`;
+          } else {
+            schoolMailTelemetry = "LIVE SCHOOL MAIL (GMAIL):\n• Connected, and the inbox shows no unread mail from the school domain right now.";
+          }
+
+          // Live Classroom — due soon, missing, announcements
+          const classroomAt = getLastClassroomAt();
+          if (classroomAt === null || Date.now() - classroomAt > 6 * 60 * 1000) {
+            await pollClassroom().catch(() => {});
+          }
+          const classroom = getLastClassroomSnapshot();
+          if (classroom) {
+            if (classroom.error) {
+              classroomTelemetry = "LIVE CLASSROOM:\n• Classroom data unavailable — suggest reconnecting Google in Settings.";
+            } else if (
+              classroom.dueSoon.length === 0 &&
+              classroom.missing.length === 0 &&
+              classroom.announcements.length === 0
+            ) {
+              classroomTelemetry = "LIVE CLASSROOM:\n• Connected. No due assignments, nothing missing, no new announcements.";
+            } else {
+              classroomTelemetry =
+                `LIVE CLASSROOM (GOOGLE CLASSROOM — READ-ONLY):\n` +
+                (classroom.dueSoon.length > 0
+                  ? `• Due soon (${classroom.dueSoon.length}):\n${classroom.dueSoon
+                      .slice(0, 6)
+                      .map((item) => `  - ${item.course}: "${item.title}" — due ${item.due}`)
+                      .join("\n")}\n`
+                  : "• No assignments due soon.\n") +
+                (classroom.missing.length > 0
+                  ? `• MISSING (${classroom.missing.length}):\n${classroom.missing
+                      .slice(0, 5)
+                      .map((item) => `  - ${item.course}: "${item.title}" (was due ${item.due})`)
+                      .join("\n")}\n`
+                  : "") +
+                (classroom.announcements.length > 0
+                  ? `• Latest announcements:\n${classroom.announcements
+                      .slice(0, 4)
+                      .map((announcement) => `  - [${announcement.course}] ${announcement.text.slice(0, 120)}`)
+                      .join("\n")}`
+                  : "");
+            }
+          }
+        }
+
         const systemPrompt =
           `${config.systemPrompt || "You are Severus AI, an engineering assistant and academic mentor embedded in Lex Matondo's Second Brain."}\n` +
           `You are speaking directly with Lex Matondo in hands-free live voice conversation mode.\n` +
           `IDENTITY & PROFILE CONTEXT:\n` +
           `Lex Matondo is a 20-year-old Computer Engineering (BSCpE) student at Cor Jesu College of Digos, Davao Region, Philippines. He is an endurance runner and hybrid athlete.\n` +
-          `CRITICAL GROUNDING: You DO possess full live telemetry on Lex's running, athletic training, and academic engineering sprints. Use the exact data below whenever asked about his workouts, runs, mileage, academic sprints, or exams.\n\n` +
+          `CRITICAL GROUNDING: You DO possess full live telemetry on Lex's running, athletic training, academic engineering sprints, his school Gmail inbox (headers: sender, subject, date), AND his Google Classroom (courses, due dates, submission state, announcements). Use the exact data below whenever asked about his workouts, runs, mileage, academic sprints, exams, assignments, deadlines, missing work, classes, or school emails.\n\n` +
           `${athleticTelemetry}\n\n` +
           `${academicTelemetry}\n\n` +
+          `${schoolMailTelemetry}\n\n` +
+          `${classroomTelemetry}${classroomTelemetry ? "\n\n" : ""}` +
           (journalSection ? `${journalSection}\n\n` : "") +
           (memorySummaryRef.current ? `${memorySummaryRef.current}\n\n` : "") +
           `Active Vault Notes for grounding context:\n${topNotesSummary || "No notes in vault."}\n\n` +
           `IMPORTANT RULES FOR VOICE:\n` +
-          `- When asked about his runs, athletic status, mileage, or academic sprints/studies, answer directly using the live telemetry figures above.\n` +
-          `- Never claim you lack or do not possess information on his runs or academics.\n` +
+          `- When asked about his runs, athletic status, mileage, academic sprints/studies, assignments, deadlines, missing work, classes, or school emails, answer directly using the live telemetry figures, the LIVE SCHOOL MAIL headers, and the LIVE CLASSROOM data above — deadlines come from Classroom due dates, not guesses.\n` +
+          `- Never claim you lack or do not possess information on his runs, academics, Gmail inbox, or Classroom. Only if a telemetry block explicitly says NOT CONNECTED or UNAVAILABLE may you say so and direct him to Settings.\n` +
           `- Respond in 1 to 3 natural, concise, spoken sentences suitable for audio synthesis.\n` +
           `- Do NOT output markdown formatting, bullet points, asterisks, headers, or code blocks.\n` +
           `- Maintain the stoic, perceptive, and brilliant persona of Professor Severus Snape.\n` +

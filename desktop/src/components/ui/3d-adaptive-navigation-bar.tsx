@@ -46,7 +46,7 @@ export const PillBase: React.FC<PillBaseProps> = ({
   const pillShift = useSpring(0, { stiffness: 460, damping: 28, mass: 0.7 })
 
   // Calculate expanded width dynamically based on items count
-  const targetExpandedWidth = Math.max(480, navItems.length * 130)
+  const targetExpandedWidth = Math.min(600, Math.max(380, navItems.length * 92 + 36))
 
   // Handle hover expansion
   useEffect(() => {
@@ -318,7 +318,7 @@ export const PillBase: React.FC<PillBaseProps> = ({
       {/* Navigation items container */}
       <div 
         ref={containerRef}
-        className="relative z-10 h-full flex items-center justify-center px-6"
+        className="relative z-10 h-full flex items-center justify-center px-3"
         style={{
           fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro", Poppins, sans-serif',
         }}
@@ -338,7 +338,7 @@ export const PillBase: React.FC<PillBaseProps> = ({
                     ease: [0.4, 0.0, 0.2, 1]
                   }}
                   style={{
-                    fontSize: '15.5px',
+                    fontSize: '15px',
                     fontWeight: 680,
                     color: isDark ? '#f4f4f5' : '#1a1a1a',
                     letterSpacing: '0.45px',
@@ -365,7 +365,7 @@ export const PillBase: React.FC<PillBaseProps> = ({
 
         {/* Expanded state - show all sections with stagger */}
         {expanded && (
-          <div className="flex items-center justify-evenly w-full">
+          <div className="flex items-center justify-evenly w-full gap-0.5">
             {navItems.map((item, index) => {
               const isActive = item.id === activeSection
               
@@ -373,27 +373,27 @@ export const PillBase: React.FC<PillBaseProps> = ({
                 <motion.button
                   key={item.id}
                   type="button"
-                  initial={{ opacity: 0, x: -10 }}
+                  initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
+                  exit={{ opacity: 0, x: -8 }}
                   transition={{ 
-                    delay: index * 0.08,
-                    duration: 0.25,
+                    delay: index * 0.04,
+                    duration: 0.2,
                     ease: 'easeOut'
                   }}
                   onClick={() => handleSectionClick(item.id)}
                   className="relative cursor-pointer transition-all duration-200"
                   style={{
-                    fontSize: isActive ? '15.5px' : '15px',
-                    fontWeight: isActive ? 680 : 510,
+                    fontSize: isActive ? '14px' : '13.5px',
+                    fontWeight: isActive ? 650 : 490,
                     color: isActive 
                       ? (isDark ? '#ffffff' : '#1a1a1a') 
                       : (isDark ? '#888892' : '#656565'),
                     textDecoration: 'none',
-                    letterSpacing: '0.45px',
+                    letterSpacing: '0.35px',
                     background: 'transparent',
                     border: 'none',
-                    padding: '10px 16px',
+                    padding: '8px 12px',
                     outline: 'none',
                     whiteSpace: 'nowrap',
                     fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", Poppins, sans-serif',
