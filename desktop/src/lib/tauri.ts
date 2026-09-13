@@ -22,6 +22,10 @@ export function appendJournal(text: string): Promise<string> {
   return invoke<string>("append_journal", { text });
 }
 
+export function readTodayJournal(): Promise<string> {
+  return invoke<string>("read_today_journal");
+}
+
 export function openInEditor(id: string): Promise<void> {
   return invoke<void>("open_in_editor", { id });
 }
@@ -70,10 +74,25 @@ export function toggleFullscreen(): Promise<boolean> {
   return invoke<boolean>("toggle_fullscreen");
 }
 
+export function setFloatingDimensions(width: number, height: number): Promise<void> {
+  return invoke<void>("set_floating_dimensions", { width, height });
+}
+
 /** Resolves with an unlisten function once the event subscription is registered. */
 export function onNotesChanged(handler: () => void): Promise<() => void> {
   return listen("notes-changed", () => handler());
 }
 
+export async function openExternalUrl(url: string): Promise<void> {
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+  } catch (err) {
+    console.warn("Failed to open via tauri opener, fallback to window.open:", err);
+    window.open(url, "_blank");
+  }
+}
+
 export * from "./memory";
 export * from "./audioDevices";
+

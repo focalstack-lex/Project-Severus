@@ -89,6 +89,15 @@ pub fn append_journal(paths: &Paths, text: &str) -> Result<String, String> {
     Ok(format!("{date} {time}"))
 }
 
+pub fn read_today_journal(paths: &Paths) -> Result<String, String> {
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let path = paths.journal_dir().join(format!("{date}.md"));
+    if !path.exists() {
+        return Ok(String::new());
+    }
+    fs::read_to_string(&path).map_err(|e| format!("cannot read journal: {e}"))
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq, Eq)]
 pub struct GitFileEntry {
     pub status: String,

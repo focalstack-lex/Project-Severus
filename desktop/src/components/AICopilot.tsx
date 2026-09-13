@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { type AIConfig, type ChatMessage, sendAIChat } from "../lib/ai";
 import { getWorkspaceContext, getMemorySummary } from "../lib/tauri";
 import { formatReplyWithSir } from "../lib/voice";
+import { loadCachedStravaStats } from "../lib/strava";
+import { loadAcademicSprints } from "../lib/academicSprints";
 import type { NoteContent, WorkspaceContext, ChatSession } from "../types";
 import Icon from "./Icon";
 import MarkdownPreview from "./MarkdownPreview";
@@ -140,6 +142,39 @@ function formatRelativeTime(timestamp: number): string {
     parts.push(
       `• Today's Action Log & Current Tasks (${new Date().toISOString().slice(0, 10)}):\n${ctx.today_journal}`
     );
+  }
+
+  // Live Strava Running Telemetry
+  const stravaStats = loadCachedStravaStats();
+  const weeklyTarget = typeof window !== "undefined"
+    ? parseFloat(localStorage.getItem("severus_weekly_mileage_target") || "45") || 45
+    : 45;
+  if (stravaStats) {
+    let stravaInfo = `=== LIVE ATHLETIC TELEMETRY (STRAVA RUNNING) ===\n` +
+      `• Weekly Mileage: ${stravaStats.weeklyMileageKm.toFixed(1)} km / ${weeklyTarget} km target (${Math.round((stravaStats.weeklyMileageKm / weeklyTarget) * 100)}% progress) across ${stravaStats.weeklyRunCount} runs this week.`;
+    if (stravaStats.latestRun) {
+      stravaInfo += `\n• Latest Run Activity: "${stravaStats.latestRun.name}" (${stravaStats.latestRun.formattedDate})\n` +
+        `  - Distance: ${stravaStats.latestRun.formattedDistance}\n` +
+        `  - Duration: ${stravaStats.latestRun.formattedDuration}\n` +
+        `  - Average Pace: ${stravaStats.latestRun.formattedPace}\n` +
+        `  - Elevation Gain: +${stravaStats.latestRun.elevationGainM} m\n` +
+        (stravaStats.latestRun.averageHeartrate ? `  - Average HR: ${stravaStats.latestRun.averageHeartrate} bpm\n` : "");
+    }
+    parts.push(stravaInfo);
+  }
+
+  // Live BSCpE Academic Engineering Sprints
+  const sprintsState = loadAcademicSprints();
+  const pendingSprints = sprintsState.sprints.filter((i) => !i.completed);
+  const primarySprint = sprintsState.sprints.find((i) => i.isPrimary && !i.completed);
+  if (pendingSprints.length > 0) {
+    let academicInfo = `=== LIVE BSCPE ACADEMIC ENGINEERING SPRINTS ===\n`;
+    if (primarySprint) {
+      academicInfo += `• PRIMARY HIGH-LEVERAGE SPRINT: [${primarySprint.category.toUpperCase()}] ${primarySprint.title}\n`;
+    }
+    academicInfo += `• Active Milestones & Deliverables (${pendingSprints.length}):\n` +
+      pendingSprints.map((s) => `  - [${s.category.toUpperCase()}] ${s.title} (${s.createdAt ? new Date(s.createdAt).toLocaleDateString() : "Active"})`).join("\n");
+    parts.push(academicInfo);
   }
 
   if (memorySummary) {

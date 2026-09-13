@@ -19,6 +19,8 @@ import NewNoteModal from "./components/NewNoteModal";
 import ThinkingModeCapsule from "./components/ThinkingModeCapsule";
 import SystemConsoleModal, { type CommandOutcome } from "./components/SystemConsoleModal";
 import PasswordGateModal from "./components/PasswordGateModal";
+import DualPacingCockpit from "./components/DualPacingCockpit";
+import RunningModeWindow from "./components/RunningModeWindow";
 import { PillBase } from "@/components/ui/3d-adaptive-navigation-bar";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import { mapTextToIntent } from "./lib/deepseekIntent";
@@ -41,6 +43,7 @@ import {
   hideToTray,
   saveNote,
   setFloatingMode,
+  setFloatingDimensions,
   moveToMonitor,
   toggleMaximize,
   maximizeWindow,
@@ -65,6 +68,12 @@ import {
   getVoiceCmdEnabled,
   setVoiceCmdEnabled,
 } from "./lib/voiceCommands";
+import {
+  fetchStravaAthleteStats,
+  formatStravaVoiceReport,
+  loadCachedStravaStats,
+  type StravaAthleteStats,
+} from "./lib/strava";
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [], tags: [] };
 const IS_MAC =
@@ -78,6 +87,16 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [note, setNote] = useState<NoteContent | null>(null);
+  const [stravaStats, setStravaStats] = useState<StravaAthleteStats | null>(loadCachedStravaStats);
+
+  useEffect(() => {
+    const handleStravaUpdate = (e: Event) => {
+      const custom = e as CustomEvent<StravaAthleteStats>;
+      if (custom.detail) setStravaStats(custom.detail);
+    };
+    window.addEventListener("severus:strava-stats-updated", handleStravaUpdate);
+    return () => window.removeEventListener("severus:strava-stats-updated", handleStravaUpdate);
+  }, []);
   const [booting, setBooting] = useState(true);
 
   // Navigation & Shell Layout
@@ -124,6 +143,7 @@ export default function App() {
   const [groundingOpen, setGroundingOpen] = useState(false);
   const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
   const [systemConsoleOpen, setSystemConsoleOpen] = useState(false);
+  const [runningModeOpen, setRunningModeOpen] = useState(false);
 
   // System control: destructive intents await the control password here
   const [pendingGate, setPendingGate] = useState<{ intent: SystemIntent; description: string } | null>(null);
@@ -386,6 +406,18 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isFloatingMode) {
+      if (runningModeOpen) {
+        void setFloatingDimensions(1160, 760);
+      } else if (isThinkingMode) {
+        void setFloatingDimensions(760, 420);
+      } else {
+        void setFloatingDimensions(720, 110);
+      }
+    }
+  }, [isFloatingMode, isThinkingMode, runningModeOpen]);
+
+  useEffect(() => {
     void loadGraph();
     void loadNotesList();
     void refreshGitStatus();
@@ -616,8 +648,25 @@ export default function App() {
       setIsThinkingMode(true);
       void playVoice("action_copilot_ready.mp3");
     },
+    onOpenRunningMode: () => {
+      setRunningModeOpen(true);
+      void playVoice("action_copilot_ready.mp3");
+    },
     onToggleListening: (active: boolean) => {
       handleToggleListening(active, false);
+    },
+    onStravaStatus: async () => {
+      try {
+        const stats = await fetchStravaAthleteStats();
+        setStravaStats(stats);
+        speakText(formatStravaVoiceReport(stats));
+      } catch {
+        speakText(
+          formatReplyWithSir(
+            "Strava telemetry is not yet connected, Sir. Please enter your credentials in settings."
+          )
+        );
+      }
     },
     onSystemCommand: async (text: string) => {
       const outcome = await handleRunSystemCommand(text);
@@ -654,6 +703,7 @@ export default function App() {
       onClose: () => voiceHandlersRef.current.onClose?.(),
       onMoveMonitor: (target) => voiceHandlersRef.current.onMoveMonitor?.(target),
       onThinkingMode: () => voiceHandlersRef.current.onThinkingMode?.(),
+      onStravaStatus: () => voiceHandlersRef.current.onStravaStatus?.(),
       onToggleListening: (active) => voiceHandlersRef.current.onToggleListening?.(active),
       onSystemCommand: (text) => voiceHandlersRef.current.onSystemCommand?.(text),
     });
@@ -909,6 +959,7 @@ export default function App() {
                     setIsThinkingMode(false);
                     void ensureWorkstation();
                   }}
+                  onOpenRunningMode={() => setRunningModeOpen(true)}
                   onOpenSettings={() => setAiSettingsOpen(true)}
                   config={aiConfig}
                   vaultNotes={notesList}
@@ -929,11 +980,16 @@ export default function App() {
                   items={[
                     { label: "Severus", id: "home" },
                     { label: "Thinking", id: "thinking" },
+                    { label: "Running", id: "running" },
                     { label: "Knowledge", id: "graph" },
                     { label: "Notes", id: "notes" },
                     { label: "Copilot", id: "copilot" },
                   ]}
                   onChange={(id) => {
+                    if (id === "running") {
+                      setRunningModeOpen(true);
+                      return;
+                    }
                     if (id === "thinking") {
                       setIsThinkingMode(true);
                       void playVoice("action_copilot_ready.mp3");
@@ -1051,6 +1107,14 @@ export default function App() {
           />
         )}
 
+        <RunningModeWindow
+          open={runningModeOpen}
+          onClose={() => setRunningModeOpen(false)}
+          onMinimizeToFloating={() => setRunningModeOpen(false)}
+          aiConfig={aiConfig}
+          onShowToast={showToast}
+        />
+
         {systemOverlays}
       </div>
     );
@@ -1120,6 +1184,7 @@ export default function App() {
                 setIsThinkingMode(true);
                 void playVoice("action_copilot_ready.mp3");
               }}
+              onOpenRunningMode={() => setRunningModeOpen(true)}
               onHideToTray={handleHideToTray}
               onMoveMonitor={handleMoveMonitor}
               onOpenJournal={() => setJournalOpen(true)}
@@ -1204,7 +1269,20 @@ export default function App() {
                     <span>
                       model <strong>{aiConfig.model}</strong>
                     </span>
+                    {stravaStats && (
+                      <>
+                        <span className="sep">/</span>
+                        <span className="strava-home-badge" title="Strava Running Mileage This Week">
+                          🏃 <strong>{stravaStats.weeklyMileageKm.toFixed(1)} km</strong> this week
+                        </span>
+                      </>
+                    )}
                   </div>
+
+                  <DualPacingCockpit
+                    onOpenJournalModal={() => setJournalOpen(true)}
+                    onOpenSettings={() => setAiSettingsOpen(true)}
+                  />
 
                   <div className="home-columns">
                     <section>
@@ -1485,6 +1563,17 @@ export default function App() {
           saveAIConfig(newCfg);
         }}
         onClose={() => setAiSettingsOpen(false)}
+      />
+
+      <RunningModeWindow
+        open={runningModeOpen}
+        onClose={() => setRunningModeOpen(false)}
+        onMinimizeToFloating={() => {
+          setRunningModeOpen(false);
+          void handleEnterFloatingMode();
+        }}
+        aiConfig={aiConfig}
+        onShowToast={showToast}
       />
 
       {systemOverlays}

@@ -17,7 +17,17 @@ import {
   getMicrophoneStream,
   type AudioDevice,
 } from "../lib/audioDevices";
-import { openSoundSettings } from "../lib/tauri";
+import { openSoundSettings, openExternalUrl } from "../lib/tauri";
+import {
+  loadStravaConfig,
+  saveStravaConfig,
+  fetchStravaAthleteStats,
+  exchangeAuthorizationCode,
+  buildStravaAuthUrl,
+  loadCachedStravaStats,
+  type StravaConfig,
+  type StravaAthleteStats,
+} from "../lib/strava";
 import Icon from "./Icon";
 
 interface Props {
@@ -95,7 +105,7 @@ const PRESETS: Array<{ label: string; config: Partial<AIConfig> }> = [
 ];
 
 export default function AISettingsModal({ open, config, onSave, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<"llm" | "voice" | "mic">("llm");
+  const [activeTab, setActiveTab] = useState<"llm" | "voice" | "mic" | "strava">("llm");
   const [form, setForm] = useState<AIConfig>({ ...config });
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -120,6 +130,15 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
   const vuStreamRef = useRef<MediaStream | null>(null);
   const vuAudioCtxRef = useRef<AudioContext | null>(null);
   const testRecognitionRef = useRef<any>(null);
+
+  // Strava Telemetry State
+  const [stravaForm, setStravaForm] = useState<StravaConfig>(loadStravaConfig);
+  const [showStravaSecret, setShowStravaSecret] = useState(false);
+  const [stravaStats, setStravaStats] = useState<StravaAthleteStats | null>(loadCachedStravaStats);
+  const [syncingStrava, setSyncingStrava] = useState(false);
+  const [stravaResult, setStravaResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [authCodeInput, setAuthCodeInput] = useState("");
+  const [exchangingCode, setExchangingCode] = useState(false);
 
   const refreshDevices = useCallback(async () => {
     setScanningMics(true);
@@ -340,6 +359,90 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
     }
   };
 
+  const handleSyncStrava = async () => {
+    setSyncingStrava(true);
+    setStravaResult(null);
+    try {
+      saveStravaConfig(stravaForm);
+      const stats = await fetchStravaAthleteStats(stravaForm);
+      setStravaStats(stats);
+      setStravaResult({
+        ok: true,
+        message: `Synced ${stats.weeklyMileageKm.toFixed(1)} km this week (${stats.weeklyRunCount} runs).`,
+      });
+    } catch (err) {
+      setStravaResult({
+        ok: false,
+        message: String(err instanceof Error ? err.message : err),
+      });
+    } finally {
+      setSyncingStrava(false);
+    }
+  };
+
+  const handleOpenStravaAuth = async () => {
+    if (!stravaForm.clientId.trim()) {
+      setStravaResult({ ok: false, message: "Please enter your Strava Client ID in the input above first." });
+      return;
+    }
+    const url = buildStravaAuthUrl(stravaForm.clientId);
+    setStravaResult({
+      ok: true,
+      message: "Opening Strava in your browser… Click 'Authorize', then copy the code= from the redirected page.",
+    });
+    await openExternalUrl(url);
+  };
+
+  const handleCopyStravaAuthUrl = async () => {
+    if (!stravaForm.clientId.trim()) {
+      setStravaResult({ ok: false, message: "Please enter your Strava Client ID in the input above first." });
+      return;
+    }
+    const url = buildStravaAuthUrl(stravaForm.clientId);
+    try {
+      await navigator.clipboard.writeText(url);
+      setStravaResult({ ok: true, message: "Authorization URL copied to clipboard! Paste it into your browser." });
+    } catch {
+      setStravaResult({ ok: false, message: "Could not write to clipboard. Please click 1. Authorize directly." });
+    }
+  };
+
+  const handleExchangeCode = async () => {
+    if (!authCodeInput.trim() || !stravaForm.clientId || !stravaForm.clientSecret) {
+      setStravaResult({
+        ok: false,
+        message: "Please provide your Client ID, Client Secret, and Authorization Code.",
+      });
+      return;
+    }
+
+    setExchangingCode(true);
+    setStravaResult(null);
+    try {
+      let code = authCodeInput.trim();
+      const match = code.match(/[?&]code=([^&]+)/);
+      if (match) code = match[1];
+
+      const updated = await exchangeAuthorizationCode(code, stravaForm.clientId, stravaForm.clientSecret);
+      setStravaForm(updated);
+      setAuthCodeInput("");
+
+      const stats = await fetchStravaAthleteStats(updated);
+      setStravaStats(stats);
+      setStravaResult({
+        ok: true,
+        message: `Connected successfully as ${stats.athleteName}! Telemetry synced.`,
+      });
+    } catch (err) {
+      setStravaResult({
+        ok: false,
+        message: String(err instanceof Error ? err.message : err),
+      });
+    } finally {
+      setExchangingCode(false);
+    }
+  };
+
   const handleSave = () => {
     const activeDevice = devices.find((d) => d.deviceId === selectedMicId);
     setSelectedMicrophone(
@@ -347,6 +450,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
       activeDevice?.label ?? (selectedMicId ? "Selected Microphone" : "System Default Microphone")
     );
     saveElevenLabsConfig(elevenForm);
+    saveStravaConfig(stravaForm);
     onSave(form);
     onClose();
   };
@@ -404,6 +508,14 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
           >
             <Icon name="mic" size={13} />
             <span>Microphone Input</span>
+          </button>
+          <button
+            type="button"
+            className={`ai-tab-btn ${activeTab === "strava" ? "active" : ""}`}
+            onClick={() => setActiveTab("strava")}
+          >
+            <Icon name="activity" size={13} />
+            <span>Strava Telemetry</span>
           </button>
         </div>
 
@@ -727,6 +839,225 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
           </div>
         )}
 
+        {activeTab === "strava" && (
+          <div className="strava-tab-content">
+            {/* Athlete Status & Overview */}
+            {stravaStats ? (
+              <div className="strava-athlete-card">
+                <div className="strava-athlete-header">
+                  {stravaStats.athleteAvatar ? (
+                    <img
+                      src={stravaStats.athleteAvatar}
+                      alt={stravaStats.athleteName}
+                      className="strava-avatar"
+                    />
+                  ) : (
+                    <div className="strava-avatar-placeholder">
+                      <Icon name="activity" size={18} />
+                    </div>
+                  )}
+                  <div className="strava-athlete-meta">
+                    <div className="strava-athlete-name">{stravaStats.athleteName}</div>
+                    <div className="strava-athlete-badge">
+                      <span className="strava-online-dot" />
+                      Strava Telemetry Connected
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="strava-sync-btn"
+                    disabled={syncingStrava}
+                    onClick={handleSyncStrava}
+                    title="Sync latest activities from Strava"
+                  >
+                    <Icon name="reset" size={12} />
+                    <span>{syncingStrava ? "Syncing…" : "Sync"}</span>
+                  </button>
+                </div>
+
+                {/* Metrics Grid */}
+                <div className="strava-metrics-grid">
+                  <div className="strava-metric-box">
+                    <span className="strava-metric-label">THIS WEEK</span>
+                    <span className="strava-metric-value">{stravaStats.weeklyMileageKm.toFixed(1)} km</span>
+                    <span className="strava-metric-sub">{stravaStats.weeklyRunCount} runs</span>
+                  </div>
+                  <div className="strava-metric-box">
+                    <span className="strava-metric-label">THIS MONTH</span>
+                    <span className="strava-metric-value">{stravaStats.monthlyMileageKm.toFixed(1)} km</span>
+                    <span className="strava-metric-sub">Cumulative</span>
+                  </div>
+                  <div className="strava-metric-box">
+                    <span className="strava-metric-label">LATEST RUN</span>
+                    <span className="strava-metric-value">
+                      {stravaStats.latestRun ? stravaStats.latestRun.formattedDistance : "None"}
+                    </span>
+                    <span className="strava-metric-sub">
+                      {stravaStats.latestRun ? stravaStats.latestRun.formattedPace : "No runs"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Latest Run Details */}
+                {stravaStats.latestRun && (
+                  <div className="strava-latest-card">
+                    <div className="strava-latest-title">
+                      🏃 {stravaStats.latestRun.name}
+                    </div>
+                    <div className="strava-latest-details">
+                      <span>{stravaStats.latestRun.formattedDate}</span>
+                      <span>·</span>
+                      <span>{stravaStats.latestRun.formattedDuration}</span>
+                      <span>·</span>
+                      <span>{stravaStats.latestRun.elevationGainM}m elevation</span>
+                      {stravaStats.latestRun.averageHeartrate && (
+                        <>
+                          <span>·</span>
+                          <span>{stravaStats.latestRun.averageHeartrate} bpm</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="strava-unconnected-banner">
+                <Icon name="activity" size={20} />
+                <div className="strava-banner-text">
+                  <strong>Connect Your Strava Subscription</strong>
+                  <p>
+                    Severus will automatically ingest your running telemetry, compute weekly mileage,
+                    sync activities to your daily journal, and deliver spoken athletic briefings.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* API Credentials */}
+            <div className="ai-field-group">
+              <label className="ai-field-label">STRAVA CLIENT ID</label>
+              <input
+                type="text"
+                className="ai-field-input"
+                placeholder="e.g. 123456"
+                value={stravaForm.clientId}
+                onChange={(e) => setStravaForm({ ...stravaForm, clientId: e.target.value })}
+              />
+            </div>
+
+            <div className="ai-field-group">
+              <label className="ai-field-label">STRAVA CLIENT SECRET</label>
+              <div className="ai-input-with-action">
+                <input
+                  type={showStravaSecret ? "text" : "password"}
+                  className="ai-field-input"
+                  placeholder="e.g. 9f8a7b6c5d..."
+                  value={stravaForm.clientSecret}
+                  onChange={(e) => setStravaForm({ ...stravaForm, clientSecret: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="ai-input-action-btn"
+                  onClick={() => setShowStravaSecret(!showStravaSecret)}
+                  title={showStravaSecret ? "Hide secret" : "Show secret"}
+                >
+                  <Icon name="eye" size={13} />
+                </button>
+              </div>
+            </div>
+
+            <div className="ai-field-group">
+              <label className="ai-field-label">STRAVA REFRESH TOKEN</label>
+              <div className="ai-input-with-action">
+                <input
+                  type={showStravaSecret ? "text" : "password"}
+                  className="ai-field-input"
+                  placeholder="e.g. 3a2b1c0d..."
+                  value={stravaForm.refreshToken}
+                  onChange={(e) => setStravaForm({ ...stravaForm, refreshToken: e.target.value })}
+                />
+                <button
+                  type="button"
+                  className="ai-input-action-btn"
+                  onClick={() => setShowStravaSecret(!showStravaSecret)}
+                  title={showStravaSecret ? "Hide token" : "Show token"}
+                >
+                  <Icon name="eye" size={13} />
+                </button>
+              </div>
+            </div>
+
+            {/* 1-Click Setup Helper */}
+            <div className="strava-setup-guide">
+              <div className="strava-guide-title">
+                <Icon name="info" size={12} />
+                <span>Quick Setup Assistant (2 Minutes)</span>
+              </div>
+              <ol className="strava-steps-list">
+                <li>
+                  Open{" "}
+                  <button
+                    type="button"
+                    className="strava-link"
+                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit" }}
+                    onClick={() => void openExternalUrl("https://www.strava.com/settings/api")}
+                  >
+                    strava.com/settings/api
+                  </button>{" "}
+                  and create an app (Domain: <code>localhost</code>).
+                </li>
+                <li>Paste your <strong>Client ID</strong> and <strong>Client Secret</strong> above.</li>
+                <li style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span>Click:</span>
+                  <button
+                    type="button"
+                    className="strava-auth-link-btn"
+                    onClick={handleOpenStravaAuth}
+                  >
+                    1. Authorize Severus on Strava
+                  </button>
+                  <button
+                    type="button"
+                    className="ai-preset-btn"
+                    style={{ padding: "3px 8px", fontSize: "10.5px", cursor: "pointer" }}
+                    onClick={handleCopyStravaAuthUrl}
+                    title="Copy direct OAuth URL to clipboard"
+                  >
+                    Copy Link
+                  </button>
+                </li>
+                <li>
+                  After clicking Authorize, Strava redirects to <code>http://localhost/?code=...</code>. Copy the <code>code=</code> from the browser URL.
+                </li>
+                <li className="strava-code-exchange-row">
+                  <input
+                    type="text"
+                    className="ai-field-input code-input"
+                    placeholder="Paste code=XXXXX here"
+                    value={authCodeInput}
+                    onChange={(e) => setAuthCodeInput(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="strava-exchange-btn"
+                    disabled={!authCodeInput || exchangingCode || !stravaForm.clientId || !stravaForm.clientSecret}
+                    onClick={handleExchangeCode}
+                  >
+                    {exchangingCode ? "Connecting…" : "2. Complete Setup"}
+                  </button>
+                </li>
+              </ol>
+            </div>
+
+            {stravaResult && (
+              <div className={`ai-test-result ${stravaResult.ok ? "success" : "error"}`}>
+                <Icon name={stravaResult.ok ? "check" : "alert"} size={13} />
+                <span>{stravaResult.message}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Footer Actions */}
         <div className="ai-modal-footer">
           {activeTab === "llm" ? (
@@ -759,7 +1090,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 </>
               )}
             </button>
-          ) : (
+          ) : activeTab === "mic" ? (
             <button
               type="button"
               className="ai-btn-secondary"
@@ -767,6 +1098,16 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             >
               <Icon name={testListening ? "close" : "mic"} size={12} />
               <span>{testListening ? "Listening…" : "Test Speech Recognition"}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="ai-btn-secondary"
+              disabled={syncingStrava || !stravaForm.clientId || !stravaForm.refreshToken}
+              onClick={handleSyncStrava}
+            >
+              <Icon name="activity" size={12} />
+              <span>{syncingStrava ? "Syncing Telemetry…" : "Sync Strava Now"}</span>
             </button>
           )}
 

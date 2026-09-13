@@ -248,6 +248,8 @@ export interface VoiceCommandHandlers {
   onClose?: () => void;
   onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
   onThinkingMode?: () => void;
+  onStravaStatus?: () => void;
+  onOpenRunningMode?: () => void;
   onSystemCommand?: (transcript: string) => void;
   onHeard?: (transcript: string, matchedAction?: string) => void;
 }
@@ -571,6 +573,44 @@ export class VoiceCommandListener {
       this.lastCommandTime = now;
       this.handlers.onHeard?.(text, "journal");
       this.handlers.onJournal?.();
+      return;
+    }
+
+    if (
+      matchesKeywords(text, [
+        "strava",
+        "running status",
+        "run status",
+        "running mileage",
+        "weekly mileage",
+        "how much did i run",
+        "running stats",
+        "running telemetry",
+        "sync strava",
+        "my runs",
+      ])
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "strava status");
+      this.handlers.onStravaStatus?.();
+      return;
+    }
+
+    if (
+      matchesKeywords(text, [
+        "open running mode",
+        "start running mode",
+        "running mode",
+        "open running dashboard",
+        "show running mode",
+        "launch running mode",
+        "running cockpit",
+        "open running cockpit",
+      ])
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "open running mode");
+      this.handlers.onOpenRunningMode?.();
       return;
     }
 

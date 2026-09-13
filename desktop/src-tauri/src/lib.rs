@@ -74,6 +74,11 @@ fn append_journal(paths: State<Paths>, text: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn read_today_journal(paths: State<Paths>) -> Result<String, String> {
+    notes::read_today_journal(&paths)
+}
+
+#[tauri::command]
 fn open_in_editor(paths: State<Paths>, id: String) -> Result<(), String> {
     notes::open_in_editor(&paths, &id)
 }
@@ -134,6 +139,12 @@ fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String
         let _ = window.maximize();
         let _ = window.set_focus();
     }
+    Ok(())
+}
+
+#[tauri::command]
+fn set_floating_dimensions(window: tauri::Window, width: f64, height: f64) -> Result<(), String> {
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
     Ok(())
 }
 
@@ -326,6 +337,7 @@ pub fn run() {
             read_note,
             save_note,
             append_journal,
+            read_today_journal,
             open_in_editor,
             get_git_status,
             get_workspace_context,
@@ -345,7 +357,8 @@ pub fn run() {
             open_sound_settings,
             toggle_maximize,
             maximize_window,
-            toggle_fullscreen
+            toggle_fullscreen,
+            set_floating_dimensions
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

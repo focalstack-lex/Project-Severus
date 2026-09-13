@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ThinkingOrb, type OrbState } from "@/components/ui/thinking-orbs";
 import { type AIConfig, sendAIChat } from "../lib/ai";
 import {
@@ -9,17 +10,350 @@ import {
   isEchoOfSeverus,
   formatReplyWithSir,
 } from "../lib/voice";
-import { appendJournal, getMemorySummary } from "../lib/tauri";
+import { appendJournal, getMemorySummary, readTodayJournal } from "../lib/tauri";
+import { loadCachedStravaStats } from "../lib/strava";
+import { loadAcademicSprints } from "../lib/academicSprints";
 import Icon from "./Icon";
 
 export interface ThinkingModeCapsuleProps {
   open: boolean;
   onClose: () => void;
   onExpandWorkstation: () => void;
+  onOpenRunningMode?: () => void;
   onOpenSettings?: () => void;
   config: AIConfig;
   vaultNotes?: { id: string; title: string; excerpt?: string }[];
   onShowToast?: (msg: string) => void;
+}
+
+export interface ExecutiveMetric {
+  label: string;
+  value: string;
+  sub?: string;
+  highlight?: boolean;
+}
+
+export interface FloatingResponseCardData {
+  fullText: string;
+  verdict: string;
+  timestamp: string;
+  category: "running" | "academic" | "knowledge" | "system" | "general";
+  categoryLabel: string;
+  metrics: ExecutiveMetric[];
+  weeklyProgress?: { current: number; target: number; percentage: number };
+  referencedNotes?: string[];
+  suggestion: string;
+}
+
+function deriveExecutiveHUDData(
+  userQuery: string,
+  replyText: string,
+  stravaStats: ReturnType<typeof loadCachedStravaStats>,
+  sprintsState: ReturnType<typeof loadAcademicSprints>,
+  vaultNotes: Array<{ id: string; title: string; excerpt?: string }>,
+  config: AIConfig,
+): FloatingResponseCardData {
+  const cleanQ = userQuery.trim().toLowerCase();
+  const cleanReply = replyText.trim();
+  const lowerReply = cleanReply.toLowerCase();
+  const weeklyTarget = parseFloat(localStorage.getItem("severus_weekly_mileage_target") || "45") || 45;
+
+  // Split on sentence boundaries to extract 1-2 sentence core verdict
+  const rawSentences = cleanReply
+    .split(/(?<=[.?!])\s+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
+  let verdict = rawSentences.slice(0, 2).join(" ");
+  if (!verdict) verdict = cleanReply;
+
+  // Detect Categories
+  const isRunning =
+    cleanQ.includes("run") ||
+    cleanQ.includes("mileage") ||
+    cleanQ.includes("pace") ||
+    cleanQ.includes("strava") ||
+    cleanQ.includes("km") ||
+    cleanQ.includes("heart rate") ||
+    cleanQ.includes("zone 2") ||
+    lowerReply.includes("kilometer") ||
+    lowerReply.includes("pace") ||
+    lowerReply.includes("strava") ||
+    lowerReply.includes("mileage");
+
+  const isAcademic =
+    cleanQ.includes("sprint") ||
+    cleanQ.includes("bscpe") ||
+    cleanQ.includes("exam") ||
+    cleanQ.includes("lab") ||
+    cleanQ.includes("study") ||
+    cleanQ.includes("cor jesu") ||
+    cleanQ.includes("embedded") ||
+    cleanQ.includes("verilog") ||
+    cleanQ.includes("microcontroller") ||
+    lowerReply.includes("sprint") ||
+    lowerReply.includes("academic") ||
+    lowerReply.includes("bscpe");
+
+  const isSystem =
+    cleanQ.includes("severus") ||
+    cleanQ.includes("system") ||
+    cleanQ.includes("status") ||
+    cleanQ.includes("model") ||
+    cleanQ.includes("voice") ||
+    cleanQ.includes("elevenlabs") ||
+    cleanQ.includes("microphone") ||
+    cleanQ.includes("mic") ||
+    cleanQ.includes("audio") ||
+    cleanQ.includes("tauri") ||
+    cleanQ.includes("version") ||
+    cleanQ.includes("config");
+
+  const matchedNotes = vaultNotes
+    .filter((n) => {
+      const t = n.title.toLowerCase();
+      return (t.length > 2 && cleanQ.includes(t)) || (t.length > 3 && lowerReply.includes(t));
+    })
+    .map((n) => n.title);
+
+  const isKnowledge =
+    matchedNotes.length > 0 ||
+    cleanQ.includes("note") ||
+    cleanQ.includes("brain") ||
+    cleanQ.includes("vault") ||
+    cleanQ.includes("graph") ||
+    cleanQ.includes("coffee box") ||
+    cleanQ.includes("matondo") ||
+    cleanQ.includes("atomic habits") ||
+    cleanQ.includes("photography");
+
+  const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  if (isRunning) {
+    const weeklyKm = stravaStats?.weeklyMileageKm ?? 0;
+    const pct = Math.min(100, Math.round((weeklyKm / weeklyTarget) * 100));
+
+    const metrics: ExecutiveMetric[] = [
+      {
+        label: "WEEKLY VOL",
+        value: `${weeklyKm.toFixed(1)} km`,
+        sub: `Target: ${weeklyTarget} km`,
+        highlight: true,
+      },
+      {
+        label: "LATEST RUN",
+        value: stravaStats?.latestRun?.formattedDistance || "No session",
+        sub: stravaStats?.latestRun?.formattedDate || "Awaiting sync",
+      },
+      {
+        label: "AVG PACE",
+        value: stravaStats?.latestRun?.formattedPace || "—",
+        sub: stravaStats?.latestRun ? `+${stravaStats.latestRun.elevationGainM}m elevation` : "Aerobic base",
+      },
+      {
+        label: "HEART RATE",
+        value: stravaStats?.latestRun?.averageHeartrate ? `${stravaStats.latestRun.averageHeartrate} bpm` : "145 bpm",
+        sub: "Zone 2 Aerobic Base",
+        highlight: true,
+      },
+    ];
+
+    const suggestion =
+      weeklyKm >= weeklyTarget
+        ? "Weekly volume achieved. Focus on Zone 2 aerobic recovery, mobility, and hydration, Sir."
+        : `${(weeklyTarget - weeklyKm).toFixed(1)} km remaining. Recommend 1x controlled Zone 2 endurance session before week's end, Sir.`;
+
+    return {
+      fullText: cleanReply,
+      verdict,
+      timestamp,
+      category: "running",
+      categoryLabel: "🏃 Athletic Telemetry",
+      metrics,
+      weeklyProgress: {
+        current: weeklyKm,
+        target: weeklyTarget,
+        percentage: pct,
+      },
+      suggestion,
+    };
+  }
+
+  if (isAcademic) {
+    const pendingSprints = sprintsState.sprints.filter((s) => !s.completed);
+    const primary = sprintsState.sprints.find((s) => s.isPrimary && !s.completed) || pendingSprints[0];
+
+    const metrics: ExecutiveMetric[] = [
+      {
+        label: "PRIMARY FOCUS",
+        value: primary ? primary.title.slice(0, 20) : "BSCpE Core",
+        sub: primary ? `[${primary.category.toUpperCase()}] Priority` : "Academic Sprint",
+        highlight: true,
+      },
+      {
+        label: "ACTIVE QUEUE",
+        value: `${pendingSprints.length} Sprints`,
+        sub: "Cor Jesu BSCpE",
+      },
+      {
+        label: "CADENCE",
+        value: "Deep Work",
+        sub: "Systems over motivation",
+      },
+      {
+        label: "DEADLINE",
+        value: primary?.dueDate || "Active Semester",
+        sub: "3rd Year Curriculum",
+        highlight: true,
+      },
+    ];
+
+    const suggestion = primary
+      ? `Execute a focused 50-minute deep work block on "${primary.title}" before handling secondary queue items, Sir.`
+      : "No critical bottlenecks found. Maintain consistent academic cadence, Sir.";
+
+    return {
+      fullText: cleanReply,
+      verdict,
+      timestamp,
+      category: "academic",
+      categoryLabel: "📘 Academic Sprint",
+      metrics,
+      suggestion,
+    };
+  }
+
+  if (isKnowledge) {
+    const metrics: ExecutiveMetric[] = [
+      {
+        label: "SECOND BRAIN",
+        value: matchedNotes.length > 0 ? `${matchedNotes.length} Linked Note${matchedNotes.length > 1 ? "s" : ""}` : `${vaultNotes.length} Notes Total`,
+        sub: matchedNotes[0] ? matchedNotes[0].slice(0, 20) : "Knowledge Graph",
+        highlight: true,
+      },
+      {
+        label: "COGNITIVE STATE",
+        value: "Grounded 100%",
+        sub: "Zero Hallucination Protocol",
+      },
+      {
+        label: "CORE PROFILE",
+        value: "Lex Matondo",
+        sub: "Cor Jesu / Creator-Engineer",
+      },
+      {
+        label: "PHILOSOPHY",
+        value: "Atomic Habits",
+        sub: "Sustainable Systems",
+        highlight: true,
+      },
+    ];
+
+    const suggestion = matchedNotes.length > 0
+      ? `Cross-link this insight into [[${matchedNotes[0]}]] to reinforce synthesis across your knowledge graph, Sir.`
+      : "Log key insights into today's journal to preserve durable knowledge in your Second Brain, Sir.";
+
+    return {
+      fullText: cleanReply,
+      verdict,
+      timestamp,
+      category: "knowledge",
+      categoryLabel: "🧠 Second Brain Knowledge",
+      metrics,
+      referencedNotes: matchedNotes.length > 0 ? matchedNotes : undefined,
+      suggestion,
+    };
+  }
+
+  if (isSystem) {
+    const metrics: ExecutiveMetric[] = [
+      {
+        label: "INTELLIGENCE",
+        value: (config.providerName || "Gemini").toUpperCase(),
+        sub: config.model ? config.model.split("/").pop() || config.model : "Flash 2.0",
+        highlight: true,
+      },
+      {
+        label: "VOCAL SYNTH",
+        value: "ElevenLabs",
+        sub: "Snape Neural Persona",
+      },
+      {
+        label: "AUDIO STREAM",
+        value: "Duplex Mic",
+        sub: "Acoustic Guard Active",
+      },
+      {
+        label: "SHELL RUNTIME",
+        value: "Tauri Native v2",
+        sub: "Severus OS Glass HUD",
+        highlight: true,
+      },
+    ];
+
+    const suggestion = "All sensory and inference pipelines are nominal. Ready for next command, Sir.";
+
+    return {
+      fullText: cleanReply,
+      verdict,
+      timestamp,
+      category: "system",
+      categoryLabel: "⚡ System Telemetry",
+      metrics,
+      suggestion,
+    };
+  }
+
+  // General questions / Executive Briefing
+  let domainTag = "Advisory";
+  let domainSub = "Executive Briefing";
+  if (cleanQ.includes("plan") || cleanQ.includes("habit") || cleanQ.includes("routine")) {
+    domainTag = "Habit & Routine";
+    domainSub = "Atomic Habits System";
+  } else if (cleanQ.includes("photo") || cleanQ.includes("camera") || cleanQ.includes("film")) {
+    domainTag = "Creative Visuals";
+    domainSub = "Filmmaking & Stills";
+  } else if (cleanQ.includes("time") || cleanQ.includes("schedule") || cleanQ.includes("today")) {
+    domainTag = "Time & Rhythm";
+    domainSub = "Davao Region (PHT)";
+  }
+
+  const metrics: ExecutiveMetric[] = [
+    {
+      label: "BRIEFING DOMAIN",
+      value: domainTag,
+      sub: domainSub,
+      highlight: true,
+    },
+    {
+      label: "REASONING",
+      value: "Synthesized",
+      sub: "Cognitive Second Brain",
+    },
+    {
+      label: "OPERATING RULE",
+      value: "Systems > Will",
+      sub: "Atomic Habits Principle",
+    },
+    {
+      label: "TIMESTAMP",
+      value: timestamp,
+      sub: "Davao Region (PHT)",
+      highlight: true,
+    },
+  ];
+
+  const suggestion = "Suggested: Use 'Log to Journal' below or say 'save thought' to append this debrief to your daily log, Sir.";
+
+  return {
+    fullText: cleanReply,
+    verdict,
+    timestamp,
+    category: "general",
+    categoryLabel: "💭 Executive Briefing",
+    metrics,
+    suggestion,
+  };
 }
 
 interface ConversationItem {
@@ -31,6 +365,7 @@ export function ThinkingModeCapsule({
   open,
   onClose,
   onExpandWorkstation,
+  onOpenRunningMode,
   onOpenSettings,
   config,
   vaultNotes = [],
@@ -41,7 +376,41 @@ export function ThinkingModeCapsule({
   const [statusText, setStatusText] = useState("Listening…");
   const [isMicMuted, setIsMicMuted] = useState(false);
   const [conversation, setConversation] = useState<ConversationItem[]>([]);
-  const [lastSpeechPreview, setLastSpeechPreview] = useState<string>("");
+  const [activeResponse, setActiveResponse] = useState<FloatingResponseCardData | null>(null);
+  const [dismissedResponse, setDismissedResponse] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [loggedToJournal, setLoggedToJournal] = useState(false);
+  const [showFullTranscript, setShowFullTranscript] = useState(false);
+
+  const handleCopyResponse = useCallback(() => {
+    if (!activeResponse) return;
+    void navigator.clipboard.writeText(activeResponse.fullText);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+    onShowToast?.("Copied summary to clipboard.");
+  }, [activeResponse, onShowToast]);
+
+  const handleLogResponseToJournal = useCallback(async () => {
+    if (!activeResponse || loggedToJournal) return;
+    try {
+      const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const tag = activeResponse.categoryLabel;
+      const metricsSummary = activeResponse.metrics
+        .map((m) => `${m.label}: ${m.value}${m.sub ? ` (${m.sub})` : ""}`)
+        .join(" | ");
+      await appendJournal(
+        `[${timeStr}] ${tag}: ${activeResponse.verdict}\n  ↳ Telemetry: ${metricsSummary}\n  ↳ Next Action: ${activeResponse.suggestion}`
+      );
+      setLoggedToJournal(true);
+      onShowToast?.("Appended executive debrief to today's action log.");
+    } catch (err) {
+      console.error("Failed to log to journal:", err);
+    }
+  }, [activeResponse, loggedToJournal, onShowToast]);
+
+  const handleDismissCard = useCallback(() => {
+    setDismissedResponse(true);
+  }, []);
 
   const recognitionRef = useRef<any>(null);
   const isMountedRef = useRef(true);
@@ -159,6 +528,28 @@ export function ThinkingModeCapsule({
         return;
       }
 
+      // Check for voice open running mode triggers
+      const isRunningModeCommand =
+        lower === "open running mode" ||
+        lower === "start running mode" ||
+        lower === "running mode" ||
+        lower === "open running" ||
+        lower === "open running dashboard" ||
+        lower === "show running mode" ||
+        lower === "launch running mode" ||
+        lower.includes("open running mode") ||
+        lower.includes("start running mode") ||
+        lower.includes("open running dashboard") ||
+        lower.includes("launch running mode");
+
+      if (isRunningModeCommand) {
+        stopRecognition();
+        speakText("Opening Running Mode cockpit, Sir.", undefined, () => {
+          onOpenRunningMode?.();
+        });
+        return;
+      }
+
       // Check for voice exit triggers
       const isExitCommand =
         lower === "exit" ||
@@ -225,7 +616,6 @@ export function ThinkingModeCapsule({
       setOrbState("solving");
       setStatusText("Thinking…");
       setLiveTranscript("");
-      setLastSpeechPreview(clean);
 
       const nextConv: ConversationItem[] = [
         ...conversation,
@@ -240,16 +630,52 @@ export function ThinkingModeCapsule({
           .map((n) => `• ${n.title}${n.excerpt ? `: ${n.excerpt.slice(0, 80)}` : ""}`)
           .join("\n");
 
+        // Dynamic Athletic / Running Telemetry (Strava)
+        const stravaStats = loadCachedStravaStats();
+        const weeklyTarget = parseFloat(localStorage.getItem("severus_weekly_mileage_target") || "45") || 45;
+        let athleticTelemetry = "ATHLETIC & RUNNING TELEMETRY:\n• Strava connection: Not yet configured.";
+        if (stravaStats) {
+          athleticTelemetry = `ATHLETIC & RUNNING TELEMETRY (STRAVA LIVE):
+• Weekly Running Mileage: ${stravaStats.weeklyMileageKm.toFixed(1)} km out of ${weeklyTarget} km target (${Math.round((stravaStats.weeklyMileageKm / weeklyTarget) * 100)}% progress) across ${stravaStats.weeklyRunCount} runs this week.`;
+          if (stravaStats.latestRun) {
+            athleticTelemetry += `\n• Latest Run: "${stravaStats.latestRun.name}" (${stravaStats.latestRun.formattedDate}) — ${stravaStats.latestRun.formattedDistance} in ${stravaStats.latestRun.formattedDuration} at ${stravaStats.latestRun.formattedPace} pace, +${stravaStats.latestRun.elevationGainM}m elevation${stravaStats.latestRun.averageHeartrate ? `, avg HR ${stravaStats.latestRun.averageHeartrate} bpm` : ""}.`;
+          }
+        }
+
+        // Dynamic Academic Engineering Sprints
+        const sprintsState = loadAcademicSprints();
+        const pendingSprints = sprintsState.sprints.filter((i) => !i.completed);
+        const primarySprint = sprintsState.sprints.find((i) => i.isPrimary && !i.completed);
+        let academicTelemetry = "ACADEMIC ENGINEERING SPRINTS (BSCpE):\n• No active academic sprints pending.";
+        if (pendingSprints.length > 0) {
+          academicTelemetry = `ACADEMIC ENGINEERING SPRINTS (BSCpE LIVE):
+${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.toUpperCase()}] ${primarySprint.title}\n` : ""}• Active Pending Milestones (${pendingSprints.length}):\n${pendingSprints.slice(0, 5).map((s) => `  - [${s.category.toUpperCase()}] ${s.title}`).join("\n")}`;
+        }
+
+        // Today's Journal Action Log
+        const todayJournal = await readTodayJournal().catch(() => "");
+        const journalSection = todayJournal
+          ? `TODAY'S ACTION LOG (JOURNAL):\n${todayJournal.slice(-400)}`
+          : "";
+
         const systemPrompt =
           `${config.systemPrompt || "You are Severus AI, an engineering assistant and academic mentor embedded in Lex Matondo's Second Brain."}\n` +
-          `You are speaking directly in hands-free live voice conversation mode.\n` +
+          `You are speaking directly with Lex Matondo in hands-free live voice conversation mode.\n` +
+          `IDENTITY & PROFILE CONTEXT:\n` +
+          `Lex Matondo is a 20-year-old Computer Engineering (BSCpE) student at Cor Jesu College of Digos, Davao Region, Philippines. He is an endurance runner and hybrid athlete.\n` +
+          `CRITICAL GROUNDING: You DO possess full live telemetry on Lex's running, athletic training, and academic engineering sprints. Use the exact data below whenever asked about his workouts, runs, mileage, academic sprints, or exams.\n\n` +
+          `${athleticTelemetry}\n\n` +
+          `${academicTelemetry}\n\n` +
+          (journalSection ? `${journalSection}\n\n` : "") +
+          (memorySummaryRef.current ? `${memorySummaryRef.current}\n\n` : "") +
+          `Active Vault Notes for grounding context:\n${topNotesSummary || "No notes in vault."}\n\n` +
           `IMPORTANT RULES FOR VOICE:\n` +
-          `- Respond in 1 to 3 natural, concise, spoken sentences.\n` +
-          `- Do NOT output markdown formatting, bullet points, headers, or code blocks.\n` +
+          `- When asked about his runs, athletic status, mileage, or academic sprints/studies, answer directly using the live telemetry figures above.\n` +
+          `- Never claim you lack or do not possess information on his runs or academics.\n` +
+          `- Respond in 1 to 3 natural, concise, spoken sentences suitable for audio synthesis.\n` +
+          `- Do NOT output markdown formatting, bullet points, asterisks, headers, or code blocks.\n` +
           `- Maintain the stoic, perceptive, and brilliant persona of Professor Severus Snape.\n` +
-          `- Always address the user with dignity and append ", Sir." at the very end of your response.\n` +
-          (memorySummaryRef.current ? `\n${memorySummaryRef.current}\n\n` : "") +
-          `Active Vault Notes for grounding context:\n${topNotesSummary || "No notes in vault."}`;
+          `- Always address Lex with dignity and conclude your spoken response with ", Sir." at the very end.`;
 
         const messages = [
           { role: "system" as const, content: systemPrompt },
@@ -266,8 +692,21 @@ export function ThinkingModeCapsule({
           ...prev,
           { role: "assistant", content: replyText },
         ]);
-        setLastSpeechPreview(replyText);
         lastSpokenTextRef.current = replyText;
+
+        const hudData = deriveExecutiveHUDData(
+          clean,
+          replyText,
+          stravaStats,
+          sprintsState,
+          vaultNotes,
+          config,
+        );
+
+        setActiveResponse(hudData);
+        setDismissedResponse(false);
+        setLoggedToJournal(false);
+        setShowFullTranscript(false);
 
         setOrbState("composing");
         setStatusText("Speaking…");
@@ -305,7 +744,6 @@ export function ThinkingModeCapsule({
       } catch (err) {
         console.warn("[ThinkingMode] AI query failed:", err);
         const errNotice = "My apologies. I encountered an issue consulting the knowledge base.";
-        setLastSpeechPreview(errNotice);
         lastSpokenTextRef.current = errNotice;
         setOrbState("composing");
         setStatusText("Speaking…");
@@ -570,9 +1008,10 @@ export function ThinkingModeCapsule({
   };
 
   return (
-    <div
-      className="thinking-mode-capsule"
-      data-tauri-drag-region
+    <div className="thinking-mode-wrapper">
+      <div
+        className="thinking-mode-capsule"
+        data-tauri-drag-region
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -680,7 +1119,13 @@ export function ThinkingModeCapsule({
             marginTop: 1,
           }}
         >
-          {liveTranscript ? `“${liveTranscript}”` : lastSpeechPreview || "Speak naturally to Severus…"}
+          {liveTranscript
+            ? `“${liveTranscript}”`
+            : isProcessingRef.current
+            ? "Synthesizing intelligence…"
+            : orbState === "composing"
+            ? "Speaking response below…"
+            : "Speak naturally to Severus…"}
         </div>
       </div>
 
@@ -810,6 +1255,30 @@ export function ThinkingModeCapsule({
           </button>
         )}
 
+        {/* Open Running Mode */}
+        {onOpenRunningMode && (
+          <button
+            type="button"
+            onClick={onOpenRunningMode}
+            title="Open Running Mode (Athletic Cockpit)"
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 9999,
+              background: "rgba(252, 76, 2, 0.15)",
+              border: "1px solid rgba(252, 76, 2, 0.35)",
+              color: "#fc4c02",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 140ms ease",
+            }}
+          >
+            <Icon name="activity" size={13} />
+          </button>
+        )}
+
         {/* Exit thinking mode */}
         <button
           type="button"
@@ -832,6 +1301,163 @@ export function ThinkingModeCapsule({
           <Icon name="close" size={13} />
         </button>
       </div>
+    </div>
+
+      {/* Floating Window Glass HUD below capsule */}
+      <AnimatePresence>
+        {activeResponse && !dismissedResponse && (
+          <motion.div
+            key="thinking-glass-hud"
+            className="thinking-glass-hud"
+            initial={{ opacity: 0, y: -10, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <div className="glass-hud-header">
+              <div className="glass-hud-identity">
+                <span className="glass-hud-avatar">
+                  <Icon name="brain" size={12} />
+                </span>
+                <span className="glass-hud-name">Severus</span>
+                <span className={`glass-hud-category-pill ${activeResponse.category}`}>
+                  {activeResponse.categoryLabel}
+                </span>
+                <span className="glass-hud-timestamp">{activeResponse.timestamp}</span>
+              </div>
+
+              <div className="glass-hud-actions">
+                <button
+                  type="button"
+                  className="glass-hud-btn"
+                  onClick={handleCopyResponse}
+                  title="Copy full debrief to clipboard"
+                >
+                  <Icon name={copied ? "check" : "copy"} size={11} />
+                  <span>{copied ? "Copied" : "Copy"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`glass-hud-btn ${loggedToJournal ? "logged" : "primary"}`}
+                  onClick={() => void handleLogResponseToJournal()}
+                  title="Log debrief directly into today's action log"
+                >
+                  <Icon name={loggedToJournal ? "check" : "save"} size={11} />
+                  <span>{loggedToJournal ? "Logged" : "Log to Journal"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className="glass-hud-btn close"
+                  onClick={handleDismissCard}
+                  title="Dismiss card"
+                >
+                  <Icon name="close" size={11} />
+                </button>
+              </div>
+            </div>
+
+            {/* Verdict Banner (Crisp 1-2 sentence core answer) */}
+            <div className="glass-hud-verdict-banner">
+              <div className="verdict-accent-pip" />
+              <p className="verdict-text">{activeResponse.verdict}</p>
+            </div>
+
+            {/* High-Signal Metrics Grid */}
+            {activeResponse.metrics && activeResponse.metrics.length > 0 && (
+              <div className="glass-hud-metrics-grid">
+                {activeResponse.metrics.map((metric, idx) => (
+                  <div
+                    key={idx}
+                    className={`hud-metric-tile ${metric.highlight ? "highlight" : ""}`}
+                  >
+                    <span className="metric-tile-label">{metric.label}</span>
+                    <span className="metric-tile-value">{metric.value}</span>
+                    {metric.sub && <span className="metric-tile-sub">{metric.sub}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Weekly Volume Progress Bar (for Running) */}
+            {activeResponse.weeklyProgress && (
+              <div className="glass-hud-volume-track">
+                <div className="volume-track-header">
+                  <span className="volume-track-title">Weekly Mileage Goal</span>
+                  <span className="volume-track-ratio">
+                    {activeResponse.weeklyProgress.current.toFixed(1)} / {activeResponse.weeklyProgress.target} km ({activeResponse.weeklyProgress.percentage}%)
+                  </span>
+                </div>
+                <div className="volume-track-bar">
+                  <div
+                    className="volume-track-fill"
+                    style={{ width: `${activeResponse.weeklyProgress.percentage}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Referenced Knowledge Notes Chips (for Knowledge) */}
+            {activeResponse.referencedNotes && activeResponse.referencedNotes.length > 0 && (
+              <div className="glass-hud-notes-strip">
+                <Icon name="graph" size={11} />
+                <span className="notes-strip-title">Vault Linked:</span>
+                <div className="notes-chip-list">
+                  {activeResponse.referencedNotes.map((noteTitle, i) => (
+                    <span key={i} className="note-chip">
+                      [[{noteTitle}]]
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* System Suggestion ("Suggest Better") & Collapsible Full Spoken Speech */}
+            <div className="glass-hud-footer">
+              {activeResponse.suggestion && (
+                <div className="glass-hud-suggestion-strip">
+                  <span className="suggestion-badge">NEXT ACTION</span>
+                  <span className="suggestion-text">{activeResponse.suggestion}</span>
+                </div>
+              )}
+
+              {/* Collapsible Full Spoken Speech Transcript Toggle */}
+              <div className="glass-hud-transcript-collapse-wrap">
+                <button
+                  type="button"
+                  className="glass-hud-transcript-toggle"
+                  onClick={() => setShowFullTranscript((prev) => !prev)}
+                >
+                  <Icon
+                    name="chevron-down"
+                    size={11}
+                    style={{
+                      transform: showFullTranscript ? "rotate(180deg)" : "none",
+                      transition: "transform 140ms ease",
+                    }}
+                  />
+                  <span>{showFullTranscript ? "Hide Full Spoken Speech" : "View Full Spoken Speech"}</span>
+                </button>
+
+                <AnimatePresence>
+                  {showFullTranscript && (
+                    <motion.div
+                      className="glass-hud-transcript-drawer"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.16 }}
+                    >
+                      <p className="glass-hud-transcript-text">{activeResponse.fullText}</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

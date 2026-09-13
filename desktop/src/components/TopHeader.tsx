@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import Icon from "./Icon";
 import type { AIConfig } from "../lib/ai";
 import type { GitStatusData } from "../types";
 import { toggleMaximize } from "../lib/tauri";
+import { loadCachedStravaStats, type StravaAthleteStats } from "../lib/strava";
 
 export type NavSection = "home" | "knowledge" | "ai";
 export type KnowledgeSubTab = "notes" | "graph" | "tags";
@@ -39,6 +40,7 @@ interface Props {
   onToggleMaximize?: () => void;
   isMaximized?: boolean;
   onEnterThinkingMode?: () => void;
+  onOpenRunningMode?: () => void;
   onHideToTray?: () => void;
   onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
   onOpenJournal?: () => void;
@@ -74,11 +76,22 @@ export default function TopHeader({
   onToggleMaximize,
   isMaximized,
   onEnterThinkingMode,
+  onOpenRunningMode,
   onHideToTray,
   onMoveMonitor,
   onOpenJournal,
 }: Props) {
   const [systemPopoverOpen, setSystemPopoverOpen] = useState(false);
+  const [stravaStats, setStravaStats] = useState<StravaAthleteStats | null>(loadCachedStravaStats);
+
+  useEffect(() => {
+    const handleUpdate = (e: Event) => {
+      const custom = e as CustomEvent<StravaAthleteStats>;
+      if (custom.detail) setStravaStats(custom.detail);
+    };
+    window.addEventListener("severus:strava-stats-updated", handleUpdate);
+    return () => window.removeEventListener("severus:strava-stats-updated", handleUpdate);
+  }, []);
 
   const handleStartDrag = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -263,6 +276,18 @@ export default function TopHeader({
               <span>Thinking</span>
             </button>
           )}
+
+          {onOpenRunningMode && (
+            <button
+              type="button"
+              className="assistant-running-btn"
+              onClick={onOpenRunningMode}
+              title="Open Running Mode (Athletic Telemetry & Training Cockpit)"
+            >
+              <Icon name="activity" size={13} />
+              <span>Running</span>
+            </button>
+          )}
         </div>
 
         <span className="nav-divider" />
@@ -318,6 +343,29 @@ export default function TopHeader({
                       </span>
                       <span className="item-value">
                         {aiConfig.model} · {aiConfig.providerName}
+                      </span>
+                    </div>
+                    <span className="item-arrow">
+                      <Icon name="chevron-right" size={13} />
+                    </span>
+                  </div>
+
+                  <div
+                    className="popover-item"
+                    onClick={() => {
+                      setSystemPopoverOpen(false);
+                      onOpenAISettings();
+                    }}
+                  >
+                    <div className="popover-item-text">
+                      <span className="item-label">
+                        <Icon name="activity" size={13} />
+                        Strava Running Telemetry
+                      </span>
+                      <span className="item-value">
+                        {stravaStats
+                          ? `${stravaStats.weeklyMileageKm.toFixed(1)} km this week (${stravaStats.weeklyRunCount} runs)`
+                          : "Connect Strava Telemetry"}
                       </span>
                     </div>
                     <span className="item-arrow">

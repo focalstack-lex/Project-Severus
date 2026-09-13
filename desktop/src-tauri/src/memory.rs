@@ -169,18 +169,24 @@ pub fn get_memory_summary(paths: State<Paths>) -> Result<String, String> {
     let all = load_all_memories(&user_dir)?;
 
     let mut identities = Vec::new();
+    let mut education = Vec::new();
     let mut constraints = Vec::new();
     let mut projects = Vec::new();
     let mut habits_goals = Vec::new();
+    let mut fitness = Vec::new();
 
     for item in all {
         if item.category == "hard_constraint" {
             constraints.push(format!("• {}", item.content));
         } else if item.category == "identity" {
             identities.push(format!("• {}", item.content));
+        } else if item.category == "education" && item.status == "current" {
+            education.push(format!("• {}", item.content));
         } else if item.category == "projects" && item.status == "current" {
             projects.push(format!("• {}", item.content));
-        } else if (item.category == "goals" || item.category == "routines" || item.category == "fitness") && item.importance == "high" {
+        } else if item.category == "fitness" {
+            fitness.push(format!("• {}", item.content));
+        } else if (item.category == "goals" || item.category == "routines") && item.importance == "high" {
             habits_goals.push(format!("• {}", item.content));
         }
     }
@@ -188,10 +194,14 @@ pub fn get_memory_summary(paths: State<Paths>) -> Result<String, String> {
     let summary = format!(
         "[SEVERUS STRUCTURED USER MEMORY — LEX MATONDO]\n\
         IDENTITY & REGIONAL CONTEXT:\n{}\n\n\
+        EDUCATION & ACADEMICS:\n{}\n\n\
+        FITNESS & RUNNING PHILOSOPHY:\n{}\n\n\
         MANDATORY HARD CONSTRAINTS (STRICT):\n{}\n\n\
         ACTIVE PROJECTS:\n{}\n\n\
         PRIMARY HABITS & GOALS:\n{}",
-        if identities.is_empty() { "• Lex Matondo (BSCpE student, Cor Jesu College of Digos, Davao Region)".to_string() } else { identities.join("\n") },
+        if identities.is_empty() { "• Lex Matondo (20-year-old, Cor Jesu College of Digos, Davao Region)".to_string() } else { identities.join("\n") },
+        if education.is_empty() { "• Bachelor of Science in Computer Engineering (BSCpE) student at Cor Jesu College of Digos".to_string() } else { education.join("\n") },
+        if fitness.is_empty() { "• Endurance runner and hybrid athlete (Zone 2 aerobic base, 80/20 training distribution)".to_string() } else { fitness.join("\n") },
         if constraints.is_empty() { "• Do not change structure. Never describe Lex as based in Manila.".to_string() } else { constraints.join("\n") },
         if projects.is_empty() { "• Project Severus".to_string() } else { projects.join("\n") },
         if habits_goals.is_empty() { "• Systems over motivation (Atomic Habits)".to_string() } else { habits_goals.join("\n") }
