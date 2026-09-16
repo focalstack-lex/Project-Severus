@@ -152,6 +152,12 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M17.5 9a8 8 0 0 1-8 8" />
     </>
   ),
+  "history-undo": (
+    <>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </>
+  ),
   graph: (
     <>
       <circle cx="6" cy="6" r="2.4" />
@@ -161,12 +167,6 @@ const PATHS: Record<IconName, React.ReactNode> = {
     </>
   ),
   hexagon: <path d="M12 2.5 20.5 7.25v9.5L12 21.5l-8.5-4.75v-9.5L12 2.5z" />,
-  "history-undo": (
-    <>
-      <path d="M9 14 4 9l5-5" />
-      <path d="M4 9h9.5a6.5 6.5 0 0 1 0 13H10" />
-    </>
-  ),
   home: (
     <>
       <path d="M3 10.8 12 3l9 7.8" />

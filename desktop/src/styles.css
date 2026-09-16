@@ -9517,6 +9517,103 @@ div.graph-container.mode-3d {
   font-size: 12.5px;
 }
 
+/* ---------------------------------------------------------------------------
+   TAG BAR & FILTER CHIPS — Multi-line Glass Dock with Micro-Scrolling Reset
+--------------------------------------------------------------------------- */
+.tagbar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: calc(100% - 48px);
+  max-height: 90px;
+  padding: 8px 14px;
+  background: rgba(10, 10, 11, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+.tagbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.tag-chip:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tag-chip.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.tag-chip.off {
+  opacity: 0.5;
+  filter: grayscale(0.8);
+}
+
+.tag-chip.off:hover {
+  opacity: 0.85;
+  filter: grayscale(0.2);
+}
+
+.tag-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.tag-hash {
+  opacity: 0.45;
+  margin-right: 1px;
+}
+
+.tag-reset-chip {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.tag-reset-chip:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #ffffff;
+}
+
+
 
 
 

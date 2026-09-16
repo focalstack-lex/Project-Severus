@@ -46,11 +46,11 @@ function isHubNode(node: VisNode): boolean {
   const idLower = (node.id || "").toLowerCase();
   const titleLower = (node.title || "").toLowerCase();
   return (
-    idLower.includes("glorious evolution") ||
-    titleLower.includes("glorious evolution") ||
+    idLower.includes("glorious") ||
+    titleLower.includes("glorious") ||
     idLower.includes("ascension") ||
     titleLower.includes("ascension") ||
-    (node.importance != null && node.importance >= 15.0)
+    (node.importance != null && node.importance >= 10.0)
   );
 }
 
