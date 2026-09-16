@@ -196,6 +196,14 @@ function Invoke-Build {
     Get-Process severus-secondbrain -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 400
 
+    Write-Host "[Severus Build] Building frontend web distribution assets (npm run build)..." -ForegroundColor Cyan
+    Push-Location $DesktopDir
+    try {
+        npm run build
+    } finally {
+        Pop-Location
+    }
+
     Write-Host "[Severus Build] Executing release compilation..." -ForegroundColor Cyan
     Push-Location (Join-Path $DesktopDir "src-tauri")
     try {

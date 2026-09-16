@@ -42,13 +42,15 @@ function parseThreeColor(colorStr?: string): THREE.Color {
 }
 
 function isHubNode(node: VisNode): boolean {
-  if (!node || !node.id) return false;
-  const idLower = node.id.toLowerCase();
+  if (!node) return false;
+  const idLower = (node.id || "").toLowerCase();
+  const titleLower = (node.title || "").toLowerCase();
   return (
-    idLower === "the glorious evolution" ||
-    idLower === "glorious evolution" ||
-    idLower === "the ascension" ||
-    (node.importance != null && node.importance >= 20.0)
+    idLower.includes("glorious evolution") ||
+    titleLower.includes("glorious evolution") ||
+    idLower.includes("ascension") ||
+    titleLower.includes("ascension") ||
+    (node.importance != null && node.importance >= 15.0)
   );
 }
 
