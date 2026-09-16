@@ -21,6 +21,7 @@ import SystemConsoleModal, { type CommandOutcome } from "./components/SystemCons
 import PasswordGateModal from "./components/PasswordGateModal";
 import DualPacingCockpit from "./components/DualPacingCockpit";
 import RunningModeWindow from "./components/RunningModeWindow";
+import LearningHistoryModal from "./components/LearningHistoryModal";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import { mapTextToIntent } from "./lib/deepseekIntent";
 import {
@@ -176,6 +177,7 @@ export default function App() {
   const [groundingOpen, setGroundingOpen] = useState(false);
   const [newNoteModalOpen, setNewNoteModalOpen] = useState(false);
   const [systemConsoleOpen, setSystemConsoleOpen] = useState(false);
+  const [learningHistoryOpen, setLearningHistoryOpen] = useState(false);
 
   // Gmail school updates
   const [gmailMeta, setGmailMeta] = useState(() => loadGmailConfig());
@@ -1236,6 +1238,9 @@ export default function App() {
           if (!prev) void playVoice("nav_assembler_open.mp3");
           return !prev;
         });
+      } else if (mod && event.shiftKey && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        setLearningHistoryOpen(true);
       } else if (mod && event.key.toLowerCase() === "b") {
         event.preventDefault();
         setNotesDrawerOpen((prev) => {
@@ -1770,6 +1775,7 @@ export default function App() {
               onHideToTray={handleHideToTray}
               onMoveMonitor={handleMoveMonitor}
               onOpenJournal={() => setJournalOpen(true)}
+              onOpenLearningHistory={() => setLearningHistoryOpen(true)}
               mailConnected={isGmailConnected(gmailMeta)}
               mailUnread={mailUnread}
               hubSummary={
@@ -2169,6 +2175,11 @@ export default function App() {
           saveAIConfig(newCfg);
         }}
         onClose={() => setAiSettingsOpen(false)}
+      />
+
+      <LearningHistoryModal
+        isOpen={learningHistoryOpen}
+        onClose={() => setLearningHistoryOpen(false)}
       />
 
       <AnimatePresence>

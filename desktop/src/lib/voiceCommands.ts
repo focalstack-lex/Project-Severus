@@ -447,11 +447,13 @@ export class VoiceCommandListener {
       };
 
       rec.onerror = (err) => {
-        if (err.error !== "no-speech") {
-          console.warn("[VoiceCommandListener] Speech recognition error:", err.error);
+        const errorType = err.error || "unknown";
+        if (errorType !== "no-speech" && errorType !== "network" && errorType !== "aborted") {
+          console.warn("[VoiceCommandListener] Speech recognition error:", errorType);
         }
         if (this.isListening && !this.isPaused) {
-          this.scheduleRestart(400);
+          const delay = errorType === "network" ? 3000 : 400;
+          this.scheduleRestart(delay);
         }
       };
 

@@ -48,6 +48,7 @@ interface Props {
   onHideToTray?: () => void;
   onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
   onOpenJournal?: () => void;
+  onOpenLearningHistory?: () => void;
 }
 
 /**
@@ -88,6 +89,7 @@ export default function TopHeader({
   onHideToTray,
   onMoveMonitor,
   onOpenJournal,
+  onOpenLearningHistory,
 }: Props) {
   const [systemPopoverOpen, setSystemPopoverOpen] = useState(false);
   const [stravaStats, setStravaStats] = useState<StravaAthleteStats | null>(loadCachedStravaStats);
@@ -235,6 +237,17 @@ export default function TopHeader({
               title={`Capture Daily Journal (${MOD_KEY}+J)`}
             >
               <Icon name="pen" size={13} />
+            </button>
+          )}
+
+          {onOpenLearningHistory && (
+            <button
+              type="button"
+              className="nav-icon-action-btn"
+              onClick={onOpenLearningHistory}
+              title={`Severus Learning History & Directive Audit (${MOD_KEY}+Shift+L)`}
+            >
+              <Icon name="history-undo" size={13} />
             </button>
           )}
 

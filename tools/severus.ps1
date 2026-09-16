@@ -203,8 +203,10 @@ function Invoke-Build {
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[Severus Build] Compilation successful." -ForegroundColor Green
             $targetExe = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
-            $progFiles = "C:\Program Files\Severus.ai\severus-secondbrain.exe"
+            $progFilesDir = "C:\Program Files\Severus.ai"
+            $progFiles = Join-Path $progFilesDir "severus-secondbrain.exe"
             if (Test-Path $targetExe) {
+                if (-not (Test-Path $progFilesDir)) { New-Item -ItemType Directory -Path $progFilesDir -Force | Out-Null }
                 Copy-Item -Path $targetExe -Destination $progFiles -Force -ErrorAction SilentlyContinue
                 Write-Host "[Severus Build] Synced binary to $progFiles" -ForegroundColor DarkGray
             }

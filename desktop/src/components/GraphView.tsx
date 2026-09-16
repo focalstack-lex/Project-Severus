@@ -41,42 +41,84 @@ function parseThreeColor(colorStr?: string): THREE.Color {
   }
 }
 
+function isHubNode(node: VisNode): boolean {
+  if (!node || !node.id) return false;
+  const idLower = node.id.toLowerCase();
+  return (
+    idLower === "the glorious evolution" ||
+    idLower === "glorious evolution" ||
+    idLower === "the ascension" ||
+    (node.importance != null && node.importance >= 20.0)
+  );
+}
+
 /**
- * Holographic Synapse: Luminous Crystalline Core + Subtle Geodesic Wireframe Aura
+ * Holographic Synapse: Luminous Crystalline Core + Celestial Saturn Orbital Wireframe Aura
  */
 function createHolographicNode(node: VisNode, isSelected: boolean): THREE.Group {
   const group = new THREE.Group();
-  const baseRadius = Math.max(3.6, Math.min(12, (node.size || 3.5) * 1.35));
+  const isHub = isHubNode(node);
+  const baseRadius = Math.max(
+    isHub ? 6.5 : 3.6,
+    Math.min(isHub ? 15 : 12, (node.size || 3.5) * (isHub ? 1.6 : 1.35)),
+  );
   const threeColor = parseThreeColor(node.color);
 
   // 1. Luminous Crystalline Core Sphere
   const coreGeo = new THREE.SphereGeometry(baseRadius, 32, 32);
   const coreMat = new THREE.MeshStandardMaterial({
-    color: isSelected ? 0xffffff : threeColor,
-    emissive: threeColor,
-    emissiveIntensity: isSelected ? 0.95 : 0.45,
-    roughness: 0.16,
-    metalness: 0.82,
+    color: isHub || isSelected ? 0xffffff : threeColor,
+    emissive: isHub ? 0xffffff : threeColor,
+    emissiveIntensity: isHub ? 1.35 : isSelected ? 0.95 : 0.45,
+    roughness: isHub ? 0.05 : 0.16,
+    metalness: isHub ? 0.95 : 0.82,
     transparent: true,
-    opacity: isSelected ? 1.0 : 0.94,
+    opacity: isHub || isSelected ? 1.0 : 0.94,
   });
   const coreMesh = new THREE.Mesh(coreGeo, coreMat);
   group.add(coreMesh);
 
   // 2. Geodesic Wireframe Aura
-  const auraRadius = baseRadius * 1.5;
-  const auraGeo = new THREE.IcosahedronGeometry(auraRadius, 1);
+  const auraRadius = baseRadius * (isHub ? 1.4 : 1.5);
+  const auraGeo = new THREE.IcosahedronGeometry(auraRadius, isHub ? 2 : 1);
   const auraMat = new THREE.MeshBasicMaterial({
-    color: isSelected ? 0xffffff : threeColor,
+    color: isHub || isSelected ? 0xffffff : threeColor,
     wireframe: true,
     transparent: true,
-    opacity: isSelected ? 0.7 : 0.22,
+    opacity: isHub ? 0.55 : isSelected ? 0.7 : 0.22,
   });
   const auraMesh = new THREE.Mesh(auraGeo, auraMat);
   group.add(auraMesh);
 
-  // 3. Selection Accents: Equatorial Glowing Ring & Secondary Halo
-  if (isSelected) {
+  // 3. Central Hub Celestial Saturn Orbital Rings (matching screenshot style)
+  if (isHub) {
+    const innerRingGeo = new THREE.RingGeometry(baseRadius * 1.5, baseRadius * 1.75, 48);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const innerRingMesh = new THREE.Mesh(innerRingGeo, ringMat);
+    innerRingMesh.rotation.x = Math.PI / 2.8;
+    innerRingMesh.rotation.y = Math.PI / 8;
+    group.add(innerRingMesh);
+
+    const outerRingGeo = new THREE.RingGeometry(baseRadius * 2.0, baseRadius * 2.25, 48);
+    const outerRingMat = new THREE.MeshBasicMaterial({
+      color: 0xe2e8f0,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.65,
+    });
+    const outerRingMesh = new THREE.Mesh(outerRingGeo, outerRingMat);
+    outerRingMesh.rotation.x = Math.PI / 2.3;
+    outerRingMesh.rotation.z = Math.PI / 6;
+    group.add(outerRingMesh);
+  }
+
+  // 4. Selection Accents: Equatorial Glowing Ring & Secondary Halo
+  if (isSelected && !isHub) {
     const ringGeo = new THREE.RingGeometry(baseRadius * 1.85, baseRadius * 2.15, 32);
     const ringMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,

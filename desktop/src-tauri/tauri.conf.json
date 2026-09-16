@@ -18,12 +18,12 @@
         "height": 110,
         "minWidth": 160,
         "minHeight": 60,
-        "center": false,
-        "transparent": true,
+        "center": true,
+        "transparent": false,
         "decorations": false,
-        "alwaysOnTop": true,
-        "shadow": false,
-        "visible": false
+        "alwaysOnTop": false,
+        "shadow": true,
+        "visible": true
       }
     ],
     "security": {
