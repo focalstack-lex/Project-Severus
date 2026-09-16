@@ -69,7 +69,15 @@ function Invoke-Open {
         }
     }
     Write-Host "[Severus] Launching native companion: $ReleaseExe" -ForegroundColor Cyan
-    Start-Process -FilePath $ReleaseExe -WorkingDirectory $DesktopDir
+    try {
+        python -c "import subprocess; subprocess.Popen([r'$ReleaseExe'], cwd=r'$DesktopDir')" | Out-Null
+    } catch {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $ReleaseExe
+        $psi.WorkingDirectory = $DesktopDir
+        $psi.UseShellExecute = $true
+        [System.Diagnostics.Process]::Start($psi) | Out-Null
+    }
 }
 
 function Invoke-Status {
@@ -196,6 +204,12 @@ function Invoke-Build {
     Write-Host "[Severus Build] Executing Tauri release compilation..." -ForegroundColor Cyan
     Push-Location $DesktopDir
     try {
+        Write-Host "[Severus Build] Building frontend assets (tsc && vite build)..." -ForegroundColor Cyan
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[Severus Build] Frontend build failed with code $LASTEXITCODE" -ForegroundColor Red
+            return
+        }
         npx tauri build --no-bundle
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[Severus Build] Compilation successful." -ForegroundColor Green
@@ -207,9 +221,13 @@ function Invoke-Build {
             if (Test-Path $targetExe) {
                 if (-not (Test-Path $progFilesDir)) { New-Item -ItemType Directory -Path $progFilesDir -Force | Out-Null }
                 if (-not (Test-Path $appDataDir)) { New-Item -ItemType Directory -Path $appDataDir -Force | Out-Null }
-                Copy-Item -Path $targetExe -Destination $progFiles -Force -ErrorAction SilentlyContinue
-                Copy-Item -Path $targetExe -Destination $appDataExe -Force -ErrorAction SilentlyContinue
-                Write-Host "[Severus Build] Synced binary to $progFiles and $appDataExe" -ForegroundColor DarkGray
+                try {
+                    Copy-Item -Path $targetExe -Destination $progFiles -Force -ErrorAction Stop
+                    Copy-Item -Path $targetExe -Destination $appDataExe -Force -ErrorAction Stop
+                    Write-Host "[Severus Build] Synced binary to $progFiles and $appDataExe" -ForegroundColor DarkGray
+                } catch {
+                    Write-Host "[Severus Build] Warning: Could not overwrite running binary copy: $_" -ForegroundColor Yellow
+                }
             }
         } else {
             Write-Host "[Severus Build] Build exited with code $LASTEXITCODE" -ForegroundColor Red
