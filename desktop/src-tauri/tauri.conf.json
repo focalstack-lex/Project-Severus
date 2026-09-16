@@ -16,13 +16,13 @@
         "title": "Severus.ai",
         "width": 1280,
         "height": 820,
-        "minWidth": 960,
-        "minHeight": 600,
+        "minWidth": 0,
+        "minHeight": 0,
         "center": true,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": false,
-        "shadow": true,
+        "shadow": false,
         "visible": true
       }
     ],
