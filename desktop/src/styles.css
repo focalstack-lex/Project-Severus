@@ -117,6 +117,28 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
+.nav-icon-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  transition: all 140ms var(--ease-out);
+}
+
+.nav-icon-action-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
 ::selection {
   background: #f2f2f0;
   color: #050505;
