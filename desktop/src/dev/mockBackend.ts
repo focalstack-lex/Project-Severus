@@ -20,13 +20,13 @@ interface MockNode {
 
 const NOTES: MockNode[] = [
   {
-    id: "The Ascension",
-    title: "The Ascension",
-    tags: ["ascension", "meta"],
+    id: "The Glorious Evolution",
+    title: "The Glorious Evolution",
+    tags: ["glorious-evolution", "meta"],
     excerpt:
       "The ongoing upgrade of this environment from a plain coding assistant into an autonomous Senior Engineer: strict rules, forensic skills, self-made tools, and a knowledge graph that fades when neglected.",
     content:
-      "# The Ascension\n\nThe ongoing upgrade of this environment from a plain coding assistant into an autonomous Senior Engineer: strict rules, forensic skills, self-made tools, and a knowledge graph that fades when neglected.\n\nKey pillars: [[Zero Hallucination Directive]], [[Continuous Evolution]], [[Agent Skills]], [[Second Brain]].\n\nThis note is the hub of the graph — every other pillar links back here. #ascension #meta\n",
+      "# The Glorious Evolution\n\nThe ongoing upgrade of this environment from a plain coding assistant into an autonomous Senior Engineer: strict rules, forensic skills, self-made tools, and a knowledge graph that fades when neglected.\n\nKey pillars: [[Zero Hallucination Directive]], [[Continuous Evolution]], [[Agent Skills]], [[Second Brain]].\n\nThis note is the hub of the graph — every other pillar links back here. #glorious-evolution #meta\n",
   },
   {
     id: "Zero Hallucination Directive",
@@ -35,16 +35,16 @@ const NOTES: MockNode[] = [
     excerpt:
       "Never guess. Explore with real terminal commands, cite `file:line` for claims about code, and run the build or tests before declaring any task done.",
     content:
-      "# Zero Hallucination Directive\n\nNever guess. Explore with real terminal commands, cite `file:line` for claims about code, and run the build or tests before declaring any task done.\n\nA task without verification is not finished — it is merely typed. Related: [[The Ascension]]. #protocol #verification\n",
+      "# Zero Hallucination Directive\n\nNever guess. Explore with real terminal commands, cite `file:line` for claims about code, and run the build or tests before declaring any task done.\n\nA task without verification is not finished — it is merely typed. Related: [[The Glorious Evolution]]. #protocol #verification\n",
   },
   {
     id: "Continuous Evolution",
     title: "Continuous Evolution",
-    tags: ["philosophy", "ascension"],
+    tags: ["philosophy", "glorious-evolution"],
     excerpt:
       "There is no Apex State. When a limitation or bottleneck appears, propose a concrete evolution — an architecture change, a hook, a skill, a tool — instead of silently working around it.",
     content:
-      "# Continuous Evolution\n\nThere is no Apex State. When a limitation or bottleneck appears, propose a concrete evolution — an architecture change, a hook, a skill, a tool — instead of silently working around it. Before entering a brand-new domain, present a short evolution plan first.\n\nPart of [[The Ascension]]. #philosophy #ascension\n",
+      "# Continuous Evolution\n\nThere is no Apex State. When a limitation or bottleneck appears, propose a concrete evolution — an architecture change, a hook, a skill, a tool — instead of silently working around it. Before entering a brand-new domain, present a short evolution plan first.\n\nPart of [[The Glorious Evolution]]. #philosophy #glorious-evolution\n",
   },
   {
     id: "Agent Skills",
@@ -53,7 +53,7 @@ const NOTES: MockNode[] = [
     excerpt:
       "Capabilities live in folders with a `SKILL.md` (frontmatter: `name`, `description`; body: the playbook). The same open format works in ZCode and Antigravity, so a skill is written once and used in both.",
     content:
-      "# Agent Skills\n\nCapabilities live in folders with a `SKILL.md` (frontmatter: `name`, `description`; body: the playbook). The same open format works in ZCode (`~/.agents/skills/`) and Antigravity (`~/.gemini/config/skills/`), so a skill is written once and used in both.\n\nInstalled ascension skills: codebase-auditor, forensic-audit, uiux-auditor, project-scaffolding, deploy-checklist. See [[The Ascension]]. #tools #skills\n",
+      "# Agent Skills\n\nCapabilities live in folders with a `SKILL.md` (frontmatter: `name`, `description`; body: the playbook). The same open format works in ZCode (`~/.agents/skills/`) and Antigravity (`~/.gemini/config/skills/`), so a skill is written once and used in both.\n\nInstalled Glorious Evolution skills: codebase-auditor, forensic-audit, uiux-auditor, project-scaffolding, deploy-checklist. See [[The Glorious Evolution]]. #tools #skills\n",
   },
   {
     id: "Second Brain",
@@ -62,7 +62,7 @@ const NOTES: MockNode[] = [
     excerpt:
       "This graph is the environment's memory: notes carry inline tags and `[[wiki-links]]`, and become a 3D graph where size encodes PageRank importance and brightness encodes freshness — older notes visibly decay.",
     content:
-      "# Second Brain\n\nThis graph is the environment's memory: notes carry inline tags and `[[wiki-links]]`, and become a 3D graph where size encodes PageRank importance and brightness encodes freshness — older notes visibly decay. Rebuild after editing notes:\n\n    python second-brain/build_graph.py\n\nBuilt with the Python standard library only. See [[The Ascension]] and [[Agent Skills]]. #meta #knowledge\n",
+      "# Second Brain\n\nThis graph is the environment's memory: notes carry inline tags and `[[wiki-links]]`, and become a 3D graph where size encodes PageRank importance and brightness encodes freshness — older notes visibly decay. Rebuild after editing notes:\n\n    python second-brain/build_graph.py\n\nBuilt with the Python standard library only. See [[The Glorious Evolution]] and [[Agent Skills]]. #meta #knowledge\n",
   },
   {
     id: "impeccable_design_skills",
@@ -71,30 +71,30 @@ const NOTES: MockNode[] = [
     excerpt:
       "`impeccable` (v4.3.1) is an out-of-distribution frontend design intelligence engine created by Paul Bakaus, installed into Severus and Google Antigravity IDE.",
     content:
-      "# Impeccable Design Skills\n\n`impeccable` (v4.3.1) is an out-of-distribution frontend design intelligence engine created by Paul Bakaus ([impeccable repo](https://github.com/pbakaus/impeccable.git)), installed into Severus and Google Antigravity IDE.\n\nIt provides AI agents with senior design director craft: typography hierarchies, spatial rhythm, purposeful animations, accessibility rigor, visual critique, and interactive browser iteration.\n\nRelated: [[Ascension_Guide]], [[SYSTEM]]\n\n#skills #design #tools #impeccable #ui-ux\n",
+      "# Impeccable Design Skills\n\n`impeccable` (v4.3.1) is an out-of-distribution frontend design intelligence engine created by Paul Bakaus ([impeccable repo](https://github.com/pbakaus/impeccable.git)), installed into Severus and Google Antigravity IDE.\n\nIt provides AI agents with senior design director craft: typography hierarchies, spatial rhythm, purposeful animations, accessibility rigor, visual critique, and interactive browser iteration.\n\nRelated: [[Glorious_Evolution_Guide]], [[SYSTEM]]\n\n#skills #design #tools #impeccable #ui-ux\n",
   },
 ];
 
 const WIKI_LINKS: Array<[string, string]> = [
-  ["Agent Skills", "The Ascension"],
-  ["Continuous Evolution", "The Ascension"],
-  ["Second Brain", "The Ascension"],
+  ["Agent Skills", "The Glorious Evolution"],
+  ["Continuous Evolution", "The Glorious Evolution"],
+  ["Second Brain", "The Glorious Evolution"],
   ["Second Brain", "Agent Skills"],
-  ["The Ascension", "Zero Hallucination Directive"],
-  ["The Ascension", "Continuous Evolution"],
-  ["The Ascension", "Agent Skills"],
-  ["The Ascension", "Second Brain"],
-  ["Zero Hallucination Directive", "The Ascension"],
+  ["The Glorious Evolution", "Zero Hallucination Directive"],
+  ["The Glorious Evolution", "Continuous Evolution"],
+  ["The Glorious Evolution", "Agent Skills"],
+  ["The Glorious Evolution", "Second Brain"],
+  ["Zero Hallucination Directive", "The Glorious Evolution"],
 ];
 
 const SHARED_TAG_PAIRS: Array<[string, string]> = [
   ["Agent Skills", "impeccable_design_skills"],
-  ["Continuous Evolution", "The Ascension"],
-  ["Second Brain", "The Ascension"],
+  ["Continuous Evolution", "The Glorious Evolution"],
+  ["Second Brain", "The Glorious Evolution"],
 ];
 
 const TAG_ORDER: string[] = [
-  "ascension",
+  "glorious-evolution",
   "meta",
   "protocol",
   "verification",
@@ -377,6 +377,12 @@ export function installMockBackend(): void {
 
   let callbackId = 0;
   const internals = {
+    // getCurrentWindow()/getCurrentWebview() read these synchronously on
+    // mount — without them the renderer crashes and React unmounts.
+    metadata: {
+      currentWindow: { label: "main" },
+      currentWebview: { label: "main" },
+    },
     transformCallback(callback: (response: unknown) => void, once?: boolean): number {
       callbackId += 1;
       const id = callbackId;
@@ -392,6 +398,11 @@ export function installMockBackend(): void {
       return id;
     },
     invoke(cmd: string, args: Record<string, unknown> = {}): Promise<unknown> {
+      // Tauri event + window plugin IPC — resolve with a no-op so listeners
+      // and window show/hide calls register cleanly in the harness.
+      if (cmd.startsWith("plugin:event|") || cmd.startsWith("plugin:window|")) {
+        return Promise.resolve(() => {});
+      }
       const handler = HANDLERS[cmd];
       if (!handler) {
         return Promise.reject(new Error(`[severus dev mock] Unhandled IPC command: ${cmd}`));

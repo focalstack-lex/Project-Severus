@@ -15,7 +15,8 @@ Severus is a personal intelligence architecture built around three pillars:
 Severus/
 ├── AGENTS.md               # Workspace rules and operating constitution
 ├── SYSTEM.md               # System architectural documentation for agents
-├── Ascension_Guide.md      # Evolutionary constitution & protocols
+├── Glorious_Evolution_Guide.md # Evolutionary constitution & protocols
+├── candidates.md           # T1 pattern candidate store for self-learning protocol
 ├── journal/                # Append-only daily action logs (YYYY-MM-DD.md)
 ├── tools/                  # Self-made CLI utilities and automation scripts
 ├── second-brain/           # Python-based reference graph generator & offline viewer

@@ -538,9 +538,9 @@ export default function TopHeader({
               type="button"
               className="nav-icon-window-btn"
               onClick={onToggleFloatingMode}
-              title="Switch to Desktop Floating Companion Pill"
+              title="Minimize to Dynamic Island Pill"
             >
-              <Icon name="external" size={12} />
+              <Icon name="minimize" size={12} />
             </button>
           )}
 

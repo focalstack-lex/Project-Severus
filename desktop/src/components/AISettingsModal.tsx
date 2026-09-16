@@ -616,10 +616,17 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
           </button>
         </div>
 
-        {activeTab === "llm" && (
-          <>
-            {/* Preset Quick Select */}
-            <div className="ai-presets-wrap">
+        <AnimatePresence mode="wait">
+          {activeTab === "llm" && (
+            <motion.div
+              key="llm"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {/* Preset Quick Select */}
+              <div className="ai-presets-wrap">
               <span className="ai-field-label">PRESETS:</span>
               <div className="ai-presets-list">
                 {PRESETS.map((p) => (
@@ -713,11 +720,18 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 </div>
               )}
             </div>
-          </>
+          </motion.div>
         )}
 
         {activeTab === "voice" && (
-          <div className="ai-form-body">
+          <motion.div
+            key="voice"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="ai-form-body"
+          >
             {/* Free Presets Quick Select */}
             <div className="ai-presets-wrap">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 4 }}>
@@ -826,11 +840,18 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 <span>{elevenTestResult.message}</span>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
         {activeTab === "mic" && (
-          <div className="ai-form-body">
+          <motion.div
+            key="mic"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="ai-form-body"
+          >
             <div className="ai-tip-box" style={{ background: "rgba(59, 130, 246, 0.06)", borderColor: "rgba(59, 130, 246, 0.18)", marginBottom: 8 }}>
               <div style={{ fontWeight: 600, color: "#93c5fd", marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
                 <Icon name="mic" size={13} />
@@ -890,8 +911,11 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                     }}
                   />
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)" }}>
-                  <span>{micLevel > 0.06 ? "🟢 Voice signal detected" : "⚪ Ambient noise / Silent"}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-muted)" }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: micLevel > 0.06 ? "#34d399" : "rgba(255,255,255,0.3)", boxShadow: micLevel > 0.06 ? "0 0 8px #34d399" : "none" }} />
+                    {micLevel > 0.06 ? "Voice signal detected" : "Ambient noise / Silent"}
+                  </span>
                   <span style={{ maxWidth: "55%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {devices.find((d) => d.deviceId === selectedMicId)?.label || "Default System Mic"}
                   </span>
@@ -933,11 +957,18 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 <span>Open Windows Sound Settings (ms-settings:sound)</span>
               </button>
             </div>
-          </div>
+          </motion.div>
         )}
 
         {activeTab === "strava" && (
-          <div className="strava-tab-content">
+          <motion.div
+            key="strava"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+            className="strava-tab-content"
+          >
             {/* Athlete Status & Overview */}
             {stravaStats ? (
               <div className="strava-athlete-card">
@@ -998,8 +1029,9 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 {/* Latest Run Details */}
                 {stravaStats.latestRun && (
                   <div className="strava-latest-card">
-                    <div className="strava-latest-title">
-                      🏃 {stravaStats.latestRun.name}
+                    <div className="strava-latest-title" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <Icon name="activity" size={13} />
+                      <span>{stravaStats.latestRun.name}</span>
                     </div>
                     <div className="strava-latest-details">
                       <span>{stravaStats.latestRun.formattedDate}</span>
@@ -1152,11 +1184,17 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 <span>{stravaResult.message}</span>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
         {activeTab === "gmail" && (
-          <>
+          <motion.div
+            key="gmail"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          >
             <div className="ai-status-line">
               <span className={`ai-test-pill ${gmailConnected ? "ai-test-ok" : "ai-test-err"}`}>
                 <span className="dot" />
@@ -1278,8 +1316,9 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 </>
               )}
             </div>
-          </>
+          </motion.div>
         )}
+      </AnimatePresence>
 
         {/* Footer Actions */}
         <div className="ai-modal-footer">

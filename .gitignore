@@ -35,4 +35,10 @@ second-brain/graph.html
 .stignore
 .DS_Store
 Thumbs.db
+logs/
+.playwright-mcp/
+screen_capture.png
+screen_test.png
+harness-after-fix.png
+boot-780x110.png
 

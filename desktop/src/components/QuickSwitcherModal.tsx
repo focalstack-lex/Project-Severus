@@ -13,6 +13,12 @@ interface Props {
   onOpenCopilot: () => void;
   onOpenGrounding?: () => void;
   onOpenSystemConsole?: () => void;
+  onOpenRunningMode?: () => void;
+  onSyncStrava?: () => void;
+  onOpenSchoolHub?: () => void;
+  onToggleMic?: () => void;
+  onToggleThinkingMode?: () => void;
+  onDockIsland?: () => void;
   onClose: () => void;
 }
 
@@ -45,6 +51,12 @@ export default function QuickSwitcherModal({
   onOpenCopilot,
   onOpenGrounding,
   onOpenSystemConsole,
+  onOpenRunningMode,
+  onSyncStrava,
+  onOpenSchoolHub,
+  onToggleMic,
+  onToggleThinkingMode,
+  onDockIsland,
   onClose,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -63,6 +75,14 @@ export default function QuickSwitcherModal({
   const actions: ActionItem[] = useMemo(
     () => [
       {
+        id: "action-dock-island",
+        type: "action",
+        title: "Snap Dynamic Island to Top",
+        sub: "Dock Severus back to the top-center edge of the active display",
+        shortcut: "Island",
+        execute: () => onDockIsland?.(),
+      },
+      {
         id: "action-new-note",
         type: "action",
         title: "Create New Note",
@@ -77,6 +97,46 @@ export default function QuickSwitcherModal({
         sub: "Timestamp and append thought to today's log",
         shortcut: "Ctrl+J",
         execute: onOpenJournal,
+      },
+      {
+        id: "action-running-mode",
+        type: "action",
+        title: "Launch Running Cockpit",
+        sub: "Full-screen endurance telemetry, pace splits, Strava metrics & audio coaching",
+        shortcut: "Running",
+        execute: () => onOpenRunningMode?.(),
+      },
+      {
+        id: "action-sync-strava",
+        type: "action",
+        title: "Sync Strava Athletic Telemetry",
+        sub: "Refresh latest runs, weekly mileage, heart rate & elevation gain",
+        shortcut: "Strava",
+        execute: () => onSyncStrava?.(),
+      },
+      {
+        id: "action-school-hub",
+        type: "action",
+        title: "Open Academic Hub & Inbox",
+        sub: "Cor Jesu College BSCpE updates, assignments, classroom announcements & mail",
+        shortcut: "School Hub",
+        execute: () => onOpenSchoolHub?.(),
+      },
+      {
+        id: "action-toggle-mic",
+        type: "action",
+        title: "Toggle Hands-Free Voice Listener",
+        sub: "Turn live speech recognition on or off for voice commands",
+        shortcut: "Ctrl+Shift+M",
+        execute: () => onToggleMic?.(),
+      },
+      {
+        id: "action-thinking-mode",
+        type: "action",
+        title: "Toggle Autonomous Thinking Mode",
+        sub: "Continuous cognitive loop analyzing codebase, notes, and academic load",
+        shortcut: "Thinking",
+        execute: () => onToggleThinkingMode?.(),
       },
       {
         id: "action-grounding",
@@ -111,7 +171,19 @@ export default function QuickSwitcherModal({
         execute: () => onOpenSystemConsole?.(),
       },
     ],
-    [onNewNote, onOpenJournal, onOpenGrounding, onOpenCopilot, onOpenAISettings, onOpenSystemConsole],
+    [
+      onNewNote,
+      onOpenJournal,
+      onOpenRunningMode,
+      onSyncStrava,
+      onOpenSchoolHub,
+      onToggleMic,
+      onToggleThinkingMode,
+      onOpenGrounding,
+      onOpenCopilot,
+      onOpenAISettings,
+      onOpenSystemConsole,
+    ],
   );
 
   const filteredItems: ListItem[] = useMemo(() => {
@@ -223,8 +295,11 @@ export default function QuickSwitcherModal({
                 filteredItems.map((item, idx) => {
                   const isSelected = idx === selectedIndex;
                   return (
-                    <div
+                    <motion.div
                       key={item.id}
+                      initial={{ opacity: 0, x: -6 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.14, delay: Math.min(idx * 0.015, 0.12) }}
                       className={`switcher-item ${item.type} ${isSelected ? "selected" : ""}`}
                       onClick={() => handleSelect(item)}
                       onMouseEnter={() => setSelectedIndex(idx)}
@@ -244,7 +319,7 @@ export default function QuickSwitcherModal({
                       {item.type === "note" && (
                         <span className="switcher-enter-hint">Jump →</span>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })
               )}

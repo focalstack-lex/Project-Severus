@@ -191,9 +191,9 @@ export const DEFAULT_RUNNING_GOALS: RunningGoal[] = [
 export function loadTrainingBlocks(): TrainingBlock[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_BLOCKS);
-    if (!raw) return DEFAULT_TRAINING_BLOCKS;
+    if (raw === null) return DEFAULT_TRAINING_BLOCKS;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_TRAINING_BLOCKS;
+    return Array.isArray(parsed) ? parsed : DEFAULT_TRAINING_BLOCKS;
   } catch {
     return DEFAULT_TRAINING_BLOCKS;
   }
@@ -211,9 +211,9 @@ export function saveTrainingBlocks(blocks: TrainingBlock[]): void {
 export function loadRunningGoals(): RunningGoal[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_GOALS);
-    if (!raw) return DEFAULT_RUNNING_GOALS;
+    if (raw === null) return DEFAULT_RUNNING_GOALS;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_RUNNING_GOALS;
+    return Array.isArray(parsed) ? parsed : DEFAULT_RUNNING_GOALS;
   } catch {
     return DEFAULT_RUNNING_GOALS;
   }

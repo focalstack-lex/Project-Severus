@@ -21,7 +21,6 @@ import SystemConsoleModal, { type CommandOutcome } from "./components/SystemCons
 import PasswordGateModal from "./components/PasswordGateModal";
 import DualPacingCockpit from "./components/DualPacingCockpit";
 import RunningModeWindow from "./components/RunningModeWindow";
-import { PillBase } from "@/components/ui/3d-adaptive-navigation-bar";
 import { type AIConfig, loadAIConfig, saveAIConfig } from "./lib/ai";
 import { mapTextToIntent } from "./lib/deepseekIntent";
 import {
@@ -59,6 +58,7 @@ import {
   saveNote,
   setFloatingMode,
   setFloatingDimensions,
+  dockToTopIsland,
   moveToMonitor,
   toggleMaximize,
   maximizeWindow,
@@ -70,6 +70,7 @@ import {
   formatReplyWithSir,
   getTimeGreetingData,
   getVoiceMuted,
+  playSpatialShiftSound,
   playStartupChime,
   playTimeGreeting,
   playVoice,
@@ -86,7 +87,6 @@ import {
 } from "./lib/voiceCommands";
 import {
   fetchStravaAthleteStats,
-  formatStravaVoiceReport,
   loadCachedStravaStats,
   type StravaAthleteStats,
 } from "./lib/strava";
@@ -137,6 +137,14 @@ export default function App() {
   const [zenMode, setZenMode] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
 
+  // Multi-Monitor Spatial Animation & Telemetry State
+  const [monitorTransition, setMonitorTransition] = useState<{
+    active: boolean;
+    direction: "left" | "right";
+    step: "exit" | "enter" | "idle";
+  }>({ active: false, direction: "right", step: "idle" });
+  const [monitorBadge, setMonitorBadge] = useState<string | null>(null);
+
   // Voice & Acoustic Settings
   const [voiceMuted, setVoiceMutedState] = useState<boolean>(getVoiceMuted);
   const [clapEnabled, setClapEnabledState] = useState<boolean>(getClapEnabled);
@@ -175,8 +183,8 @@ export default function App() {
   const [inboxEmails, setInboxEmails] = useState<EmailUpdate[] | null>(null);
   const [classroom, setClassroom] = useState<ClassroomSnapshot | null>(null);
   const gmailMetaRef = useRef(gmailMeta);
-  gmailMetaRef.current = gmailMeta;
   const [runningModeOpen, setRunningModeOpen] = useState(false);
+  const [ambientQuery, setAmbientQuery] = useState<string | undefined>(undefined);
 
   // System control: destructive intents await the control password here
   const [pendingGate, setPendingGate] = useState<{ intent: SystemIntent; description: string } | null>(null);
@@ -187,12 +195,27 @@ export default function App() {
   const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
   const [gitStatus, setGitStatus] = useState<GitStatusData | null>(null);
 
+  // Dynamic Island UI States
+  const [isEdgeDocked, setIsEdgeDocked] = useState<boolean>(true);
+  const [isIslandExpanded, setIsIslandExpanded] = useState<boolean>(false);
+  const [isRetracted, setIsRetracted] = useState<boolean>(false);
+
   // Notifications & State (on-screen toast notes removed system-wide)
   const [refreshTick, setRefreshTick] = useState(0);
 
   const showToast = useCallback((_message: string) => {
     // Silent: on-screen toasts/notes disabled across the entire system
   }, []);
+
+  const handleSyncStrava = useCallback(async () => {
+    try {
+      const stats = await fetchStravaAthleteStats();
+      setStravaStats(stats);
+      showToast("Strava telemetry synced.");
+    } catch (err) {
+      console.warn("Strava sync failed:", err);
+    }
+  }, [showToast]);
 
   const refreshGitStatus = useCallback(async () => {
     try {
@@ -274,6 +297,9 @@ export default function App() {
     setIsFloatingMode(true);
     try {
       await setFloatingMode(true);
+      await dockToTopIsland();
+      setIsEdgeDocked(true);
+      setIsRetracted(false);
     } catch (e) {
       console.error("Failed to enter floating mode:", e);
     }
@@ -313,10 +339,34 @@ export default function App() {
 
   const handleMoveMonitor = useCallback(
     async (target: "left" | "right" | "next" | "primary" = "next") => {
+      const dir: "left" | "right" = target === "left" ? "left" : "right";
       try {
+        playSpatialShiftSound(dir);
+        setMonitorTransition({ active: true, direction: dir, step: "exit" });
+
+        // Allow spatial exit glide (140ms)
+        await new Promise((resolve) => setTimeout(resolve, 140));
+
         await moveToMonitor(target);
+
+        // Display destination telemetry badge
+        const badgeLabel =
+          target === "primary"
+            ? "Display: Primary Monitor"
+            : `Display: Shifted ${target.toUpperCase()}`;
+        setMonitorBadge(badgeLabel);
+        setMonitorTransition({ active: true, direction: dir, step: "enter" });
+
+        setTimeout(() => {
+          setMonitorTransition({ active: false, direction: dir, step: "idle" });
+        }, 260);
+
+        setTimeout(() => {
+          setMonitorBadge(null);
+        }, 2200);
       } catch (err) {
         console.warn(`Could not switch display: ${String(err)}`);
+        setMonitorTransition({ active: false, direction: dir, step: "idle" });
       }
     },
     [],
@@ -434,8 +484,210 @@ export default function App() {
     [pendingGate],
   );
 
+  const islandHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const isAnyAppRunning =
+    isThinkingMode ||
+    runningModeOpen ||
+    quickSwitcherOpen ||
+    aiSettingsOpen ||
+    systemConsoleOpen ||
+    groundingOpen ||
+    journalOpen ||
+    newNoteModalOpen;
+
+  const resetRetractTimer = useCallback(() => {
+    if (retractTimerRef.current) {
+      clearTimeout(retractTimerRef.current);
+      retractTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleRetract = useCallback(() => {
+    resetRetractTimer();
+    if (isAnyAppRunning || !isEdgeDocked) return;
+    retractTimerRef.current = setTimeout(() => {
+      setIsRetracted(true);
+      setIsIslandExpanded(false);
+    }, 2600);
+  }, [isAnyAppRunning, isEdgeDocked, resetRetractTimer]);
+
   useEffect(() => {
-    void setFloatingMode(true).catch(() => {});
+    if (isAnyAppRunning || !isEdgeDocked) {
+      resetRetractTimer();
+      setIsRetracted(false);
+    }
+    return resetRetractTimer;
+  }, [isAnyAppRunning, isEdgeDocked, resetRetractTimer]);
+
+  // Wake island up whenever window receives focus or is summoned, or convert to pill on minimize
+  useEffect(() => {
+    const handleFocus = () => {
+      resetRetractTimer();
+      setIsRetracted(false);
+    };
+    window.addEventListener("focus", handleFocus);
+    let unlistenFocus: (() => void) | null = null;
+    let unlistenMinimize: (() => void) | null = null;
+
+    void getCurrentWindow()
+      .listen("severus:focus", handleFocus)
+      .then((fn) => {
+        unlistenFocus = fn;
+      });
+
+    void getCurrentWindow()
+      .listen("severus:minimize-to-pill", () => {
+        void handleEnterFloatingMode();
+      })
+      .then((fn) => {
+        unlistenMinimize = fn;
+      });
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      if (unlistenFocus) unlistenFocus();
+      if (unlistenMinimize) unlistenMinimize();
+    };
+  }, [handleEnterFloatingMode, resetRetractTimer]);
+
+  const handleIslandMouseEnter = useCallback(() => {
+    resetRetractTimer();
+    setIsRetracted(false);
+    if (islandHoverTimerRef.current) {
+      clearTimeout(islandHoverTimerRef.current);
+      islandHoverTimerRef.current = null;
+    }
+    islandHoverTimerRef.current = setTimeout(() => {
+      setIsIslandExpanded(true);
+    }, 120);
+  }, [resetRetractTimer]);
+
+  const handleIslandMouseLeave = useCallback(() => {
+    if (islandHoverTimerRef.current) {
+      clearTimeout(islandHoverTimerRef.current);
+      islandHoverTimerRef.current = null;
+    }
+    setIsIslandExpanded(false);
+    scheduleRetract();
+  }, [scheduleRetract]);
+
+  const isFloatingModeRef = useRef(isFloatingMode);
+  isFloatingModeRef.current = isFloatingMode;
+
+  const handleDockToTopIsland = useCallback(async () => {
+    try {
+      await dockToTopIsland();
+      localStorage.removeItem("severus:island-position");
+      setIsEdgeDocked(true);
+      setIsRetracted(false);
+      showToast("Dynamic Island docked flush to top bezel");
+    } catch (err) {
+      console.warn("Failed to dock dynamic island to top:", err);
+    }
+  }, [showToast]);
+
+  const isDraggingWindowRef = useRef(false);
+
+  const handleStartDragging = useCallback(() => {
+    try {
+      isDraggingWindowRef.current = true;
+      void getCurrentWindow().startDragging();
+    } catch (err) {
+      console.warn("startDragging failed:", err);
+    }
+  }, []);
+
+  // Always put Dynamic Island in top center on initial boot or reload.
+  // The window is created hidden (visible: false) — show it only after the
+  // island is placed, so the WebView's broken first composition (dark rect
+  // with raw scrollbars) is never visible. At login the IPC bridge may not
+  // be ready when the page loads, so placement retries with backoff.
+  useEffect(() => {
+    localStorage.removeItem("severus:island-position");
+    let attempts = 0;
+    let done = false;
+    let timer: number | null = null;
+    const place = () => {
+      if (done) return;
+      attempts += 1;
+      try {
+        setFloatingMode(true)
+          .then(() => handleDockToTopIsland())
+          .then(async () => {
+            await getCurrentWindow().show();
+            // WebView2 can present a stale first composition (dark rect with
+            // raw scrollbars) and keep it until a surface change. A 1px nudge
+            // and back forces two fresh presentations.
+            await setFloatingDimensions(781, 111);
+            await new Promise((r) => setTimeout(r, 60));
+            await setFloatingDimensions(780, 110);
+            done = true;
+          })
+          .catch(() => {
+            // Safety valve: never leave the user without a window.
+            if (attempts >= 20) {
+              void getCurrentWindow().show().catch(() => {});
+              return;
+            }
+            timer = window.setTimeout(place, 500);
+          });
+      } catch {
+        timer = window.setTimeout(place, 500);
+      }
+    };
+    place();
+    return () => {
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [handleDockToTopIsland]);
+
+  // Global mouseup to cleanly finalize dragging: if dropped near top bezel, snap flush to top center; otherwise keep custom floating position
+  useEffect(() => {
+    const handleMouseUp = async () => {
+      if (!isDraggingWindowRef.current) return;
+      isDraggingWindowRef.current = false;
+      try {
+        const win = getCurrentWindow();
+        const pos = await win.outerPosition();
+        if (pos.y <= 30) {
+          await handleDockToTopIsland();
+        } else {
+          setIsEdgeDocked(false);
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleDockToTopIsland]);
+
+  // Listen to window movements for edge-docking status without disruptive setPosition calls
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+
+    const setupMoveListener = async () => {
+      try {
+        const win = getCurrentWindow();
+        unlisten = await win.onMoved(({ payload: pos }) => {
+          if (!isFloatingModeRef.current) return;
+          setIsEdgeDocked(pos.y <= 24);
+        });
+      } catch (err) {
+        console.warn("Could not register window move listener:", err);
+      }
+    };
+
+    void setupMoveListener();
+
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   useEffect(() => {
@@ -443,7 +695,7 @@ export default function App() {
       if (runningModeOpen) {
         void setFloatingDimensions(1160, 760);
       } else if (isThinkingMode) {
-        void setFloatingDimensions(760, 420);
+        void setFloatingDimensions(780, 680);
       } else {
         void setFloatingDimensions(780, 110);
       }
@@ -763,22 +1015,20 @@ export default function App() {
     },
     onCheckEmail: () => {
       void handleCheckEmail();
+      voiceHandlersRef.current.onGeneralQuery?.("What are my latest school emails?");
     },
     onCheckClassroom: () => {
       void handleCheckClassroom();
+      voiceHandlersRef.current.onGeneralQuery?.("What is due and missing in Google Classroom?");
     },
     onStravaStatus: async () => {
       try {
         const stats = await fetchStravaAthleteStats();
         setStravaStats(stats);
-        speakText(formatStravaVoiceReport(stats));
       } catch {
-        speakText(
-          formatReplyWithSir(
-            "Strava telemetry is not yet connected, Sir. Please enter your credentials in settings."
-          )
-        );
+        // Ignored
       }
+      voiceHandlersRef.current.onGeneralQuery?.("What is my running telemetry and Strava status?");
     },
     onSystemCommand: async (text: string) => {
       const outcome = await handleRunSystemCommand(text);
@@ -787,6 +1037,17 @@ export default function App() {
       } else {
         void playVoice("alert_api_error.mp3");
       }
+    },
+    onHideToTray: () => {
+      void handleHideToTray();
+    },
+    onOpenDynamicIsland: () => {
+      void handleEnterFloatingMode();
+    },
+    onGeneralQuery: (query: string) => {
+      setAmbientQuery(query);
+      void handleEnterFloatingMode();
+      setIsThinkingMode(true);
     },
   };
 
@@ -815,11 +1076,15 @@ export default function App() {
       onClose: () => voiceHandlersRef.current.onClose?.(),
       onMoveMonitor: (target) => voiceHandlersRef.current.onMoveMonitor?.(target),
       onThinkingMode: () => voiceHandlersRef.current.onThinkingMode?.(),
+      onOpenRunningMode: () => voiceHandlersRef.current.onOpenRunningMode?.(),
       onStravaStatus: () => voiceHandlersRef.current.onStravaStatus?.(),
       onToggleListening: (active) => voiceHandlersRef.current.onToggleListening?.(active),
       onSystemCommand: (text) => voiceHandlersRef.current.onSystemCommand?.(text),
       onCheckEmail: () => voiceHandlersRef.current.onCheckEmail?.(),
       onCheckClassroom: () => voiceHandlersRef.current.onCheckClassroom?.(),
+      onHideToTray: () => voiceHandlersRef.current.onHideToTray?.(),
+      onOpenDynamicIsland: () => voiceHandlersRef.current.onOpenDynamicIsland?.(),
+      onGeneralQuery: (query) => voiceHandlersRef.current.onGeneralQuery?.(query),
     });
 
     voiceListenerRef.current = listener;
@@ -1020,6 +1285,27 @@ export default function App() {
   // the full workstation shell — voice commands work from either.
   const systemOverlays = (
     <>
+      <AnimatePresence>
+        {monitorBadge && (
+          <motion.div
+            key="severus-monitor-badge"
+            className="severus-monitor-badge"
+            initial={{ opacity: 0, y: -16, scale: 0.92, filter: "blur(4px)" }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -10, scale: 0.96, filter: "blur(2px)" }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <span className="severus-monitor-badge-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                <line x1="8" y1="21" x2="16" y2="21" />
+                <line x1="12" y1="17" x2="12" y2="21" />
+              </svg>
+            </span>
+            <span className="severus-monitor-badge-text">{monitorBadge}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <SystemConsoleModal
         open={systemConsoleOpen}
         onClose={() => setSystemConsoleOpen(false)}
@@ -1040,152 +1326,296 @@ export default function App() {
     </>
   );
 
-  if (isFloatingMode) {
-    return (
-      <div
-        className="floating-companion-viewport"
-        data-tauri-drag-region
-        onMouseDown={(e) => {
-          if (e.button !== 0) return;
-          const target = e.target as HTMLElement | null;
-          if (target?.closest("button, input, select, textarea, a, [data-no-drag]")) return;
-          try {
-            void getCurrentWindow().startDragging();
-          } catch {
-            // ignore
-          }
-        }}
-      >
-        <div className="floating-companion-cluster">
-          <AnimatePresence mode="wait">
-            {isStartupAnimating ? (
-              <motion.div
-                key="severus-boot-sequence"
-                initial={{ opacity: 0, scale: 0.86, filter: "blur(8px)", y: 6 }}
-                animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
-                exit={{ opacity: 0, scale: 0.94, filter: "blur(4px)", y: -4 }}
-                transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-                className="severus-boot-capsule"
-              >
-                <div className="severus-boot-edge" />
-                <div className="severus-boot-glow" />
-                <div className="severus-boot-content">
-                  <span className="severus-boot-pulse">
-                    <span className="severus-boot-dot" />
-                    <span className="severus-boot-ring" />
-                  </span>
-                  <span className="severus-boot-title">SEVERUS</span>
-                  <span className="severus-boot-divider">·</span>
-                  <span className="severus-boot-status">SYSTEMS ONLINE</span>
-                </div>
-              </motion.div>
-            ) : isThinkingMode ? (
-              <motion.div
-                key="thinking-capsule-wrap"
-                initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <ThinkingModeCapsule
-                  open={isThinkingMode}
-                  onClose={() => setIsThinkingMode(false)}
-                  onExpandWorkstation={() => {
-                    setIsThinkingMode(false);
-                    void ensureWorkstation();
-                  }}
-                  onOpenRunningMode={() => setRunningModeOpen(true)}
-                  onOpenSettings={() => setAiSettingsOpen(true)}
-                  config={aiConfig}
-                  vaultNotes={notesList}
-                  onShowToast={showToast}
-                />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="floating-row-wrap"
-                initial={{ opacity: 0, scale: 0.95, y: 4 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 4 }}
-                transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                className="floating-companion-row"
-              >
-                <PillBase
-                  theme="dark"
-                  items={[
-                    { label: "Severus", id: "home" },
-                    { label: "Thinking", id: "thinking" },
-                    { label: "Running", id: "running" },
-                    { label: "Knowledge", id: "graph" },
-                    { label: "Notes", id: "notes" },
-                    { label: "Copilot", id: "copilot" },
-                  ]}
-                  onChange={(id) => {
-                    if (id === "running") {
-                      setRunningModeOpen(true);
-                      return;
-                    }
-                    if (id === "thinking") {
-                      setIsThinkingMode(true);
-                      void playVoice("action_copilot_ready.mp3");
-                      showToast("Severus: Thinking Mode activated");
-                      return;
-                    }
-                    handleSectionSelect(id);
-                  }}
-                />
-                <button
-                  type="button"
-                  className={`floating-mic-toggle ${listeningActive ? "active" : "paused"}`}
-                  onClick={() => handleToggleListening(undefined, true)}
-                  title={
-                    listeningActive
-                      ? `Listening Mode Active (Click or say "Stop listening" / ${MOD_KEY}+Shift+M)`
-                      : `Listening Mode Paused (Click or say "Start listening" / ${MOD_KEY}+Shift+M)`
-                  }
-                  aria-label={listeningActive ? "Mute listening mode" : "Resume listening mode"}
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      {isFloatingMode ? (
+        <motion.div
+          key="floating-companion-mode"
+          initial={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }}
+          animate={{
+            opacity: monitorTransition.active && monitorTransition.step === "exit" ? 0.2 : 1,
+            scale: monitorTransition.active && monitorTransition.step === "exit" ? 0.96 : 1,
+            x: monitorTransition.active
+              ? monitorTransition.step === "exit"
+                ? (monitorTransition.direction === "left" ? -40 : 40)
+                : 0
+              : 0,
+            filter: monitorTransition.active && monitorTransition.step === "exit" ? "blur(3px)" : "blur(0px)",
+          }}
+          exit={{ opacity: 0, scale: 0.95, filter: "blur(4px)" }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="floating-companion-viewport"
+          data-tauri-drag-region
+          onMouseDown={(e) => {
+            if (e.button !== 0) return;
+            const target = e.target as HTMLElement | null;
+            if (target?.closest("button, input, select, textarea, a, [data-no-drag]")) return;
+            handleStartDragging();
+          }}
+        >
+          {isEdgeDocked && isRetracted && !isAnyAppRunning && (
+            <div
+              className="dynamic-island-wake-zone"
+              onMouseEnter={handleIslandMouseEnter}
+              title="Hover to reveal Dynamic Island"
+            />
+          )}
+          <div className="floating-companion-cluster">
+            <AnimatePresence mode="wait">
+              {isStartupAnimating ? (
+                <motion.div
+                  key="severus-boot-sequence"
+                  initial={{ opacity: 0, scale: 0.86, filter: "blur(8px)", y: 6 }}
+                  animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
+                  exit={{ opacity: 0, scale: 0.94, filter: "blur(4px)", y: -4 }}
+                  transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                  className="severus-boot-capsule"
                 >
-                  {listeningActive ? (
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      <line x1="12" y1="19" x2="12" y2="23" />
-                      <line x1="8" y1="23" x2="16" y2="23" />
-                    </svg>
-                  ) : (
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <line x1="1" y1="1" x2="23" y2="23" />
-                      <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" />
-                      <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" />
-                      <line x1="12" y1="19" x2="12" y2="23" />
-                      <line x1="8" y1="23" x2="16" y2="23" />
-                    </svg>
+                  <div className="severus-boot-edge" />
+                  <div className="severus-boot-glow" />
+                  <div className="severus-boot-content">
+                    <span className="severus-boot-pulse">
+                      <span className="severus-boot-dot" />
+                      <span className="severus-boot-ring" />
+                    </span>
+                    <span className="severus-boot-title">SEVERUS</span>
+                    <span className="severus-boot-divider">·</span>
+                    <span className="severus-boot-status">SYSTEMS ONLINE</span>
+                  </div>
+                </motion.div>
+              ) : isThinkingMode ? (
+                <motion.div
+                  key="thinking-capsule-wrap"
+                  initial={{ opacity: 0, scale: 0.92, y: -12, filter: "blur(6px)" }}
+                  animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, scale: 0.94, y: -8, filter: "blur(4px)" }}
+                  transition={{ type: "spring", stiffness: 400, damping: 28 }}
+                >
+                  <ThinkingModeCapsule
+                    open={isThinkingMode}
+                    onClose={() => {
+                      setIsThinkingMode(false);
+                      setAmbientQuery(undefined);
+                    }}
+                    onExpandWorkstation={() => {
+                      setIsThinkingMode(false);
+                      setAmbientQuery(undefined);
+                      void ensureWorkstation();
+                    }}
+                    onOpenRunningMode={() => setRunningModeOpen(true)}
+                    onOpenSettings={() => setAiSettingsOpen(true)}
+                    config={aiConfig}
+                    vaultNotes={notesList}
+                    onShowToast={showToast}
+                    initialQuery={ambientQuery}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="floating-island-wrap"
+                  layout
+                  initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                  animate={
+                    isEdgeDocked && isRetracted && !isAnyAppRunning
+                      ? {
+                          y: -46,
+                          opacity: 0,
+                          scale: 0.94,
+                          filter: "blur(2px)",
+                        }
+                      : {
+                          y: 0,
+                          opacity: 1,
+                          scale: 1,
+                          filter: "blur(0px)",
+                        }
+                  }
+                  exit={{ opacity: 0, scale: 0.96, y: -4 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.8 }}
+                  className={`dynamic-island-capsule ${isEdgeDocked ? "edge-docked" : "floating"} ${isIslandExpanded ? "is-expanded" : "is-compact"} ${isRetracted && isEdgeDocked && !isAnyAppRunning ? "is-retracted" : ""}`}
+                  onMouseEnter={handleIslandMouseEnter}
+                  onMouseLeave={handleIslandMouseLeave}
+                  data-tauri-drag-region
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    const target = e.target as HTMLElement | null;
+                    if (target?.closest("button, input, select, textarea, a, [data-no-drag]")) return;
+                    handleStartDragging();
+                  }}
+                >
+                  {/* Smooth corner attachment flares (only when docked to top bezel) */}
+                  {isEdgeDocked && (
+                    <>
+                      <svg
+                        className="island-attachment-ear ear-left"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M 0 0 L 16 0 L 16 16 C 16 7.163 8.837 0 0 0 Z"
+                          fill="#000000"
+                        />
+                      </svg>
+                      <svg
+                        className="island-attachment-ear ear-right"
+                        width="16"
+                        height="16"
+                        viewBox="0 0 16 16"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M 16 0 L 0 0 L 0 16 C 0 7.163 7.163 0 16 0 Z"
+                          fill="#000000"
+                        />
+                      </svg>
+                    </>
                   )}
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
 
-        {quickSwitcherOpen && (
+                  {/* Left: Hardware Sensor Punch-Hole & Status Beacon */}
+                  <div
+                    className="dynamic-island-hardware"
+                    title="Drag to reposition Dynamic Island"
+                    onMouseDown={(e) => {
+                      if (e.button !== 0) return;
+                      e.preventDefault();
+                      handleStartDragging();
+                    }}
+                    data-tauri-drag-region
+                  >
+                    <span className="island-lens" title="Severus Optical Sensor" />
+                    <span className="island-pulse-wrap" title="System Online">
+                      <span className="island-pulse-dot" />
+                      <span className="island-pulse-ring" />
+                    </span>
+                  </div>
+
+                  {/* Center: Brand Glance (Compact) vs Navigation Items (Expanded) */}
+                  <div className="dynamic-island-body" data-tauri-drag-region>
+                    <AnimatePresence mode="wait" initial={false}>
+                      {!isIslandExpanded ? (
+                        <motion.div
+                          key="island-compact-brand"
+                          className="dynamic-island-brand-view"
+                          initial={{ opacity: 0, y: 3, filter: "blur(2px)" }}
+                          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                          exit={{ opacity: 0, y: -3, filter: "blur(2px)" }}
+                          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                          data-tauri-drag-region
+                        >
+                          <span className="dynamic-island-title">Severus</span>
+                          {stravaStats && (
+                            <span className="dynamic-island-metric-chip" title="Weekly Mileage">
+                              {stravaStats.weeklyMileageKm.toFixed(1)} km
+                            </span>
+                          )}
+                        </motion.div>
+                      ) : (
+                        <motion.nav
+                          key="island-expanded-nav"
+                          className="dynamic-island-nav-strip"
+                          initial={{ opacity: 0, scale: 0.98, filter: "blur(2px)" }}
+                          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                          exit={{ opacity: 0, scale: 0.98, filter: "blur(2px)" }}
+                          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                        >
+                          {[
+                            { label: "Severus", id: "home" },
+                            { label: "Thinking", id: "thinking" },
+                            { label: "Running", id: "running" },
+                            { label: "Knowledge", id: "graph" },
+                            { label: "Notes", id: "notes" },
+                            { label: "Copilot", id: "copilot" },
+                          ].map((item) => {
+                            const isActive = activeSection === item.id;
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={`dynamic-island-nav-link ${isActive ? "active" : ""}`}
+                                onClick={() => {
+                                  if (item.id === "running") {
+                                    setRunningModeOpen(true);
+                                    setIsIslandExpanded(false);
+                                    return;
+                                  }
+                                  if (item.id === "thinking") {
+                                    setIsThinkingMode(true);
+                                    void playVoice("action_copilot_ready.mp3");
+                                    showToast("Severus: Thinking Mode activated");
+                                    setIsIslandExpanded(false);
+                                    return;
+                                  }
+                                  handleSectionSelect(item.id);
+                                  setIsIslandExpanded(false);
+                                }}
+                              >
+                                {item.label}
+                              </button>
+                            );
+                          })}
+                        </motion.nav>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Right: Audio Wavebars & Action Controls */}
+                  <div className="dynamic-island-actions">
+                    {listeningActive && (
+                      <div className="island-audio-wavebars" title="Hands-free listening active">
+                        <span className="island-wavebar bar-1" />
+                        <span className="island-wavebar bar-2" />
+                        <span className="island-wavebar bar-3" />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className={`dynamic-island-btn ${listeningActive ? "active" : ""}`}
+                      onClick={() => handleToggleListening(undefined, true)}
+                      title={
+                        listeningActive
+                          ? `Listening Active (Click to mute / ${MOD_KEY}+Shift+M)`
+                          : `Listening Paused (Click to resume / ${MOD_KEY}+Shift+M)`
+                      }
+                      aria-label={listeningActive ? "Mute listening mode" : "Resume listening mode"}
+                    >
+                      <Icon name={listeningActive ? "mic" : "mic-off"} size={13} />
+                    </button>
+                    {!isEdgeDocked && (
+                      <button
+                        type="button"
+                        className="dynamic-island-btn"
+                        onClick={() => void handleDockToTopIsland()}
+                        title="Snap flush to top center"
+                        aria-label="Snap flush to top center"
+                      >
+                        <Icon name="arrow-up" size={13} />
+                      </button>
+                    )}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="dynamic-island-drag-handle"
+                      title="Drag to reposition Dynamic Island anywhere"
+                      aria-label="Drag to reposition Dynamic Island"
+                      onMouseDown={(e) => {
+                        if (e.button !== 0) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleStartDragging();
+                      }}
+                    >
+                      <Icon name="grip" size={13} />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <QuickSwitcherModal
             open={quickSwitcherOpen}
             notes={notesList}
@@ -1199,20 +1629,25 @@ export default function App() {
             }}
             onOpenGrounding={() => setGroundingOpen(true)}
             onOpenSystemConsole={() => setSystemConsoleOpen(true)}
+            onOpenRunningMode={() => setRunningModeOpen(true)}
+            onSyncStrava={() => void handleSyncStrava()}
+            onOpenSchoolHub={() => {
+              setInspectorOpen(true);
+              setInspectorTab("inbox");
+            }}
+            onToggleMic={() => handleToggleListening(undefined, true)}
+            onToggleThinkingMode={() => setIsThinkingMode((prev) => !prev)}
+            onDockIsland={() => void handleDockToTopIsland()}
             onClose={() => setQuickSwitcherOpen(false)}
           />
-        )}
 
-        {newNoteModalOpen && (
           <NewNoteModal
             open={newNoteModalOpen}
             existingNotes={notesList}
             onClose={() => setNewNoteModalOpen(false)}
             onCreate={handleCreateNote}
           />
-        )}
 
-        {groundingOpen && (
           <ContextAssemblerModal
             open={groundingOpen}
             notes={notesList}
@@ -1220,17 +1655,13 @@ export default function App() {
             onClose={() => setGroundingOpen(false)}
             onShowToast={showToast}
           />
-        )}
 
-        {journalOpen && (
           <JournalCapture
             open={journalOpen}
             onClose={() => setJournalOpen(false)}
             onSubmit={handleJournal}
           />
-        )}
 
-        {aiSettingsOpen && (
           <AISettingsModal
             open={aiSettingsOpen}
             config={aiConfig}
@@ -1240,23 +1671,39 @@ export default function App() {
             }}
             onClose={() => setAiSettingsOpen(false)}
           />
-        )}
 
-        <RunningModeWindow
-          open={runningModeOpen}
-          onClose={() => setRunningModeOpen(false)}
-          onMinimizeToFloating={() => setRunningModeOpen(false)}
-          aiConfig={aiConfig}
-          onShowToast={showToast}
-        />
+          <AnimatePresence>
+            {runningModeOpen && (
+              <RunningModeWindow
+                open={runningModeOpen}
+                onClose={() => setRunningModeOpen(false)}
+                onMinimizeToFloating={() => setRunningModeOpen(false)}
+                aiConfig={aiConfig}
+                onShowToast={showToast}
+              />
+            )}
+          </AnimatePresence>
 
-        {systemOverlays}
-      </div>
-    );
-  }
-
-  return (
-    <div className={`app workstation ${zenMode ? "zen-mode" : ""}`}>
+          {systemOverlays}
+        </motion.div>
+      ) : (
+        <motion.div
+          key="workstation-mode"
+          initial={{ opacity: 0, scale: 0.985, filter: "blur(4px)" }}
+          animate={{
+            opacity: monitorTransition.active && monitorTransition.step === "exit" ? 0.2 : 1,
+            scale: monitorTransition.active && monitorTransition.step === "exit" ? 0.985 : 1,
+            x: monitorTransition.active
+              ? monitorTransition.step === "exit"
+                ? (monitorTransition.direction === "left" ? -60 : 60)
+                : 0
+              : 0,
+            filter: monitorTransition.active && monitorTransition.step === "exit" ? "blur(3px)" : "blur(0px)",
+          }}
+          exit={{ opacity: 0, scale: 0.985, filter: "blur(4px)" }}
+          transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          className={`app workstation ${zenMode ? "zen-mode" : ""}`}
+        >
       <AnimatePresence>
         {!zenMode && (
           <motion.div
@@ -1419,7 +1866,7 @@ export default function App() {
                       <>
                         <span className="sep">/</span>
                         <span className="strava-home-badge" title="Strava Running Mileage This Week">
-                          🏃 <strong>{stravaStats.weeklyMileageKm.toFixed(1)} km</strong> this week
+                          <Icon name="activity" size={12} /> <strong>{stravaStats.weeklyMileageKm.toFixed(1)} km</strong> this week
                         </span>
                       </>
                     )}
@@ -1682,6 +2129,14 @@ export default function App() {
         }}
         onOpenGrounding={() => setGroundingOpen(true)}
         onOpenSystemConsole={() => setSystemConsoleOpen(true)}
+        onOpenRunningMode={() => setRunningModeOpen(true)}
+        onSyncStrava={() => void handleSyncStrava()}
+        onOpenSchoolHub={() => {
+          setInspectorOpen(true);
+          setInspectorTab("inbox");
+        }}
+        onToggleMic={() => handleToggleListening(undefined, true)}
+        onToggleThinkingMode={() => setIsThinkingMode((prev) => !prev)}
         onClose={() => setQuickSwitcherOpen(false)}
       />
 
@@ -1716,18 +2171,24 @@ export default function App() {
         onClose={() => setAiSettingsOpen(false)}
       />
 
-      <RunningModeWindow
-        open={runningModeOpen}
-        onClose={() => setRunningModeOpen(false)}
-        onMinimizeToFloating={() => {
-          setRunningModeOpen(false);
-          void handleEnterFloatingMode();
-        }}
-        aiConfig={aiConfig}
-        onShowToast={showToast}
-      />
+      <AnimatePresence>
+        {runningModeOpen && (
+          <RunningModeWindow
+            open={runningModeOpen}
+            onClose={() => setRunningModeOpen(false)}
+            onMinimizeToFloating={() => {
+              setRunningModeOpen(false);
+              void handleEnterFloatingMode();
+            }}
+            aiConfig={aiConfig}
+            onShowToast={showToast}
+          />
+        )}
+      </AnimatePresence>
 
       {systemOverlays}
-    </div>
+    </motion.div>
+  )}
+</AnimatePresence>
   );
 }

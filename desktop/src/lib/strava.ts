@@ -45,6 +45,7 @@ export interface StravaActivity {
   movingTimeSec: number;
   elevationGainM: number;
   startDate: string;
+  startTime?: string; // e.g. "6:16 PM"
   averagePaceSec: number; // sec / km
   averageHeartrate?: number;
   maxHeartrate?: number;
@@ -117,7 +118,36 @@ export function isStravaConfigured(config?: StravaConfig): boolean {
 export function loadCachedStravaStats(): StravaAthleteStats | null {
   try {
     const raw = localStorage.getItem(CACHE_STATS_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const stats = JSON.parse(raw) as StravaAthleteStats;
+      if (stats && Array.isArray(stats.recentRuns)) {
+        stats.recentRuns = stats.recentRuns.map((r) => {
+          const cleanDate = (r.startDate || "").replace(/Z$/, "");
+          const d = parseStravaDate(cleanDate);
+          return {
+            ...r,
+            startDate: cleanDate,
+            formattedDate: formatRelativeDate(cleanDate),
+            startTime: !isNaN(d.getTime())
+              ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+              : undefined,
+          };
+        });
+        if (stats.latestRun) {
+          const cleanDate = (stats.latestRun.startDate || "").replace(/Z$/, "");
+          const d = parseStravaDate(cleanDate);
+          stats.latestRun = {
+            ...stats.latestRun,
+            startDate: cleanDate,
+            formattedDate: formatRelativeDate(cleanDate),
+            startTime: !isNaN(d.getTime())
+              ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+              : undefined,
+          };
+        }
+      }
+      return stats;
+    }
   } catch {
     // Ignore
   }
@@ -138,9 +168,14 @@ export function saveCachedStravaStats(stats: StravaAthleteStats): void {
  * with the required `activity:read_all` scope.
  */
 export function buildStravaAuthUrl(clientId: string, redirectUri = "http://localhost"): string {
-  const cleanId = encodeURIComponent(clientId.trim());
-  const cleanRedirect = encodeURIComponent(redirectUri);
-  return `https://www.strava.com/oauth/authorize?client_id=${cleanId}&response_type=code&redirect_uri=${cleanRedirect}&approval_prompt=force&scope=read,activity:read_all`;
+  const params = new URLSearchParams({
+    client_id: clientId.trim(),
+    redirect_uri: redirectUri,
+    response_type: "code",
+    approval_prompt: "auto",
+    scope: "read,activity:read,activity:read_all",
+  });
+  return `https://www.strava.com/oauth/authorize?${params.toString()}`;
 }
 
 /**
@@ -163,8 +198,8 @@ export async function exchangeAuthorizationCode(
   });
 
   if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Authorization code exchange failed (${res.status}): ${errText}`);
+    const errorText = await res.text();
+    throw new Error(`Strava token exchange failed (${res.status}): ${errorText}`);
   }
 
   const data = await res.json();
@@ -186,50 +221,46 @@ export async function exchangeAuthorizationCode(
 }
 
 /**
- * Internal: returns a valid unexpired Bearer token, automatically refreshing if needed.
+ * Returns a valid access token, refreshing it automatically if expired
  */
 async function getValidAccessToken(config: StravaConfig): Promise<{ token: string; updatedConfig: StravaConfig }> {
   const nowSec = Math.floor(Date.now() / 1000);
-
-  // If token has at least 2 minutes of validity, reuse it
-  if (config.accessToken && config.expiresAt && config.expiresAt > nowSec + 120) {
+  if (config.accessToken && config.expiresAt && config.expiresAt > nowSec + 60) {
     return { token: config.accessToken, updatedConfig: config };
   }
 
-  // Otherwise, refresh it using refresh_token
   const res = await fetch("https://www.strava.com/oauth/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: config.clientId.trim(),
-      client_secret: config.clientSecret.trim(),
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      refresh_token: config.refreshToken,
       grant_type: "refresh_token",
-      refresh_token: config.refreshToken.trim(),
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Strava token refresh failed (${res.status}): ${errText}`);
+    throw new Error(`Failed to refresh Strava token (${res.status}): ${errText}`);
   }
 
   const data = await res.json();
-  const updatedConfig: StravaConfig = {
+  const updated: StravaConfig = {
     ...config,
     accessToken: data.access_token,
-    refreshToken: data.refresh_token || config.refreshToken,
+    refreshToken: data.refresh_token,
     expiresAt: data.expires_at,
   };
-
-  saveStravaConfig(updatedConfig);
-  return { token: data.access_token, updatedConfig };
+  saveStravaConfig(updated);
+  return { token: data.access_token, updatedConfig: updated };
 }
 
 /**
- * Format meters per second into "MM:SS /km" pace
+ * Format meters/sec speed into human-friendly min/km pace
  */
 export function formatPace(metersPerSec: number): string {
-  if (!metersPerSec || metersPerSec <= 0) return "--:-- /km";
+  if (!metersPerSec || metersPerSec <= 0) return "—";
   const secPerKm = 1000 / metersPerSec;
   const minutes = Math.floor(secPerKm / 60);
   const seconds = Math.floor(secPerKm % 60);
@@ -252,10 +283,28 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * Format ISO date string into relative/compact label
+ * Safely parse an activity date string from Strava.
+ * Strava's `start_date_local` provides the athlete's exact local wall-clock time
+ * (e.g. "2026-09-14T05:36:00Z" for 5:36 AM local).
+ * Crucially, Strava appends a trailing 'Z' to start_date_local. If passed directly
+ * to new Date(), the browser interprets 'Z' as UTC and adds the local timezone
+ * offset (+8h in Asia/Manila), erroneously shifting 5:36 AM to 1:36 PM!
+ * Stripping the trailing 'Z' ensures JavaScript parses it directly in local time.
+ */
+export function parseStravaDate(isoStr: string): Date {
+  if (!isoStr) return new Date();
+  const cleanStr = isoStr.replace(/Z$/, "");
+  const d = new Date(cleanStr);
+  if (!isNaN(d.getTime())) return d;
+  return new Date(isoStr);
+}
+
+/**
+ * Format ISO date string into relative/compact label with exact activity time
  */
 export function formatRelativeDate(isoStr: string): string {
-  const d = new Date(isoStr);
+  if (!isoStr) return "Recent";
+  const d = parseStravaDate(isoStr);
   if (isNaN(d.getTime())) return isoStr;
 
   const now = new Date();
@@ -280,11 +329,22 @@ export function formatRelativeDate(isoStr: string): string {
 }
 
 /**
- * Transforms raw Strava API activity into clean, typed StravaActivity
+ * Transforms raw Strava API activity into clean, typed StravaActivity.
+ * Uses raw.start_date_local stripped of trailing 'Z' as the canonical local timestamp!
  */
 function transformActivity(raw: StravaRawActivity): StravaActivity {
   const distKm = raw.distance / 1000;
   const paceSec = distKm > 0 ? raw.moving_time / distKm : 0;
+
+  // Use raw.start_date_local without trailing 'Z' so it is parsed in local time!
+  const localIso = raw.start_date_local
+    ? raw.start_date_local.replace(/Z$/, "")
+    : (raw.start_date ? raw.start_date.replace(/Z$/, "") : new Date().toISOString().replace(/Z$/, ""));
+
+  const d = parseStravaDate(localIso);
+  const startTime = !isNaN(d.getTime())
+    ? d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : undefined;
 
   return {
     id: raw.id,
@@ -293,14 +353,15 @@ function transformActivity(raw: StravaRawActivity): StravaActivity {
     distanceKm: distKm,
     movingTimeSec: raw.moving_time,
     elevationGainM: Math.round(raw.total_elevation_gain || 0),
-    startDate: raw.start_date_local || raw.start_date,
+    startDate: localIso,
+    startTime,
     averagePaceSec: paceSec,
     averageHeartrate: raw.average_heartrate ? Math.round(raw.average_heartrate) : undefined,
     maxHeartrate: raw.max_heartrate ? Math.round(raw.max_heartrate) : undefined,
     formattedDistance: `${distKm.toFixed(2)} km`,
     formattedPace: formatPace(raw.average_speed),
     formattedDuration: formatDuration(raw.moving_time),
-    formattedDate: formatRelativeDate(raw.start_date_local || raw.start_date),
+    formattedDate: formatRelativeDate(localIso),
   };
 }
 

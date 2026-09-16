@@ -274,11 +274,16 @@ export async function completeGmailConnect(
     // best effort
   }
   // The coursework scope is what actually gates courseWork/studentSubmissions
-  // reads — its absence means the running Rust binary still requests the old
-  // (wrong) scope set.
+  // reads. Its absence means the running binary predates the scope fix, the
+  // consent came from a stale tab, or Google dropped the scope (admin policy).
   if (token.scope && !token.scope.includes("classroom.coursework.me.readonly")) {
+    const granted = token.scope
+      .split(" ")
+      .map((scope) => scope.replace("https://www.googleapis.com/auth/", ""))
+      .join(", ");
     throw new Error(
-      "The consent did NOT include the Classroom Coursework scope — your app binary is outdated. Fully stop and restart `npm run tauri dev` (Rust must recompile), then Disconnect & Reconnect.",
+      `Google did not grant the Classroom Coursework scope (granted: ${granted || "none"}). ` +
+        "Close any old consent tabs, restart the app you are using (dev: stop and rerun `npm run tauri dev`; installed: rebuild and reinstall), then connect again and confirm the Classroom coursework permission is listed before you click Allow.",
     );
   }
   await secureStore("gmail_refresh_token", token.refresh_token);

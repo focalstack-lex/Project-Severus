@@ -8,6 +8,8 @@ import type { SVGProps } from "react";
 export type IconName =
   | "activity"
   | "alert"
+  | "anchor"
+  | "arrow-up"
   | "book"
   | "brain"
   | "check"
@@ -23,6 +25,7 @@ export type IconName =
   | "gear"
   | "git-branch"
   | "graph"
+  | "grip"
   | "hexagon"
   | "history-undo"
   | "home"
@@ -56,6 +59,29 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M12 3.5 2.5 20h19L12 3.5z" />
       <path d="M12 10v4.5" />
       <path d="M12 17.2h.01" />
+    </>
+  ),
+  anchor: (
+    <>
+      <circle cx="12" cy="5" r="3" />
+      <line x1="12" y1="22" x2="12" y2="8" />
+      <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+    </>
+  ),
+  "arrow-up": (
+    <>
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </>
+  ),
+  grip: (
+    <>
+      <circle cx="9" cy="7" r="1.2" fill="currentColor" />
+      <circle cx="9" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="9" cy="17" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="7" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="12" r="1.2" fill="currentColor" />
+      <circle cx="15" cy="17" r="1.2" fill="currentColor" />
     </>
   ),
   book: (

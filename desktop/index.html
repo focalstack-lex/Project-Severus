@@ -16,6 +16,11 @@
         padding: 0;
         overflow: hidden;
       }
+      /* Suppress raw scrollbars before the app stylesheet loads — the bundled
+         CSS re-styles scrollbars for inner panels once it arrives. */
+      ::-webkit-scrollbar {
+        display: none;
+      }
     </style>
   </head>
 

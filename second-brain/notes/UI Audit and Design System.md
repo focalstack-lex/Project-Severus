@@ -8,4 +8,4 @@ Structural fixes: Home is an editorial briefing (greeting, vault stats, PageRank
 
 Verified with `npm run build` (tsc + vite), a 13-state screenshot pass, the brand anti-slop review (zero emoji, zero glow, zero gradient glass), and the impeccable detector (clean after removing the one flagged width transition).
 
-See [[The Ascension]], [[Second Brain]], and [[Impeccable Design Skills]] for the environment this UI serves. #ui #design #audit #meta
+See [[The Glorious Evolution]], [[Second Brain]], and [[Impeccable Design Skills]] for the environment this UI serves. #ui #design #audit #meta

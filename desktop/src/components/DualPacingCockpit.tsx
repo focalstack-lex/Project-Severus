@@ -144,7 +144,7 @@ export default function DualPacingCockpit({ onOpenJournalModal, onOpenSettings }
     const r = stravaStats.latestRun;
     const hrText = r.averageHeartrate ? ` · ${r.averageHeartrate} bpm` : "";
     const elevText = r.elevationGainM > 0 ? ` · ${r.elevationGainM}m elevation` : "";
-    const entry = `🏃 Strava Run: ${r.name} (${r.formattedDistance} in ${r.formattedDuration} @ ${r.formattedPace}${hrText}${elevText})`;
+    const entry = `Strava Run: ${r.name} (${r.formattedDistance} in ${r.formattedDuration} @ ${r.formattedPace}${hrText}${elevText})`;
 
     try {
       await appendJournal(entry);
@@ -352,7 +352,7 @@ export default function DualPacingCockpit({ onOpenJournalModal, onOpenSettings }
                     onClick={() => handleSetPrimary(item.id)}
                     title="Make High-Leverage Primary"
                   >
-                    ★
+                    <Icon name="spark" size={11} />
                   </button>
                   <button
                     type="button"
@@ -429,7 +429,7 @@ export default function DualPacingCockpit({ onOpenJournalModal, onOpenSettings }
                     title="Click to edit weekly target"
                   >
                     <span>{weeklyTargetKm} km</span>
-                    <span className="meter-edit-icon">✎</span>
+                    <span className="meter-edit-icon"><Icon name="pen" size={10} /></span>
                   </button>
                 )}
               </div>
@@ -457,7 +457,7 @@ export default function DualPacingCockpit({ onOpenJournalModal, onOpenSettings }
             <div className="latest-run-cockpit-card">
               <div className="latest-run-top">
                 <div className="latest-run-info">
-                  <span className="run-icon">🏃</span>
+                  <span className="run-icon"><Icon name="activity" size={13} /></span>
                   <div className="run-meta-col">
                     <span className="run-name">{stravaStats.latestRun.name}</span>
                     <span className="run-date">{stravaStats.latestRun.formattedDate}</span>

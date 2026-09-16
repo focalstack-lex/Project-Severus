@@ -1,0 +1,12 @@
+{
+  "name": "severus-project",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Severus — Cognitive Operating System, Knowledge Graph & Running Telemetry Engine",
+  "scripts": {
+    "dev": "npm --prefix desktop run dev",
+    "build": "npm --prefix desktop run build",
+    "build:release": "npm --prefix desktop run build:release",
+    "tauri": "npm --prefix desktop run tauri"
+  }
+}

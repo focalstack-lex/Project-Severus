@@ -4,4 +4,4 @@ This graph is the environment's memory: notes carry inline tags and `[[wiki-link
 
     python second-brain/build_graph.py
 
-Built with the Python standard library only. See [[The Ascension]] and [[Agent Skills]]. #meta #knowledge
+Built with the Python standard library only. See [[The Glorious Evolution]] and [[Agent Skills]]. #meta #knowledge

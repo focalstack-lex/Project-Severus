@@ -199,8 +199,11 @@ export default function SystemConsoleModal({ open, onClose, onRunCommand }: Prop
                   </div>
                 ) : (
                   history.map((entry) => (
-                    <div
+                    <motion.div
                       key={entry.id}
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
                       className={`history-item ${
                         entry.ok === null ? "running" : entry.ok ? "success" : "error"
                       }`}
@@ -210,7 +213,7 @@ export default function SystemConsoleModal({ open, onClose, onRunCommand }: Prop
                         <code>{entry.text}</code>
                       </div>
                       <div className="history-message">{entry.message}</div>
-                    </div>
+                    </motion.div>
                   ))
                 )}
               </div>

@@ -151,6 +151,45 @@ let isSpeakingVoice = false;
 let speakingTimeout: number | null = null;
 let lastPlaybackEndTime = 0;
 
+type SpeechFrameCallback = (amplitude: number) => void;
+const speechFrameListeners = new Set<SpeechFrameCallback>();
+let speechAnimFrameId: number | null = null;
+
+export function subscribeSpeechFrame(cb: SpeechFrameCallback): () => void {
+  speechFrameListeners.add(cb);
+  return () => speechFrameListeners.delete(cb);
+}
+
+function notifySpeechFrame(amp: number) {
+  for (const cb of speechFrameListeners) {
+    try {
+      cb(amp);
+    } catch {
+      // ignore listener errors
+    }
+  }
+}
+
+function startSpeechFrameLoop() {
+  if (speechAnimFrameId !== null) return;
+  const loop = () => {
+    if (isSpeakingVoice) {
+      // Compute organic speech acoustic envelope pulse based on sine harmonics
+      const now = Date.now() / 1000;
+      const wave1 = Math.sin(now * 12) * 0.4;
+      const wave2 = Math.sin(now * 22) * 0.3;
+      const wave3 = Math.sin(now * 38) * 0.3;
+      const rawAmp = Math.abs(wave1 + wave2 + wave3);
+      notifySpeechFrame(Math.min(1, Math.max(0.15, rawAmp)));
+      speechAnimFrameId = requestAnimationFrame(loop);
+    } else {
+      notifySpeechFrame(0);
+      speechAnimFrameId = null;
+    }
+  };
+  speechAnimFrameId = requestAnimationFrame(loop);
+}
+
 export function isVoiceSpeaking(): boolean {
   return isSpeakingVoice;
 }
@@ -360,6 +399,7 @@ async function playElevenLabsPhrase(
     }
 
     isSpeakingVoice = true;
+    startSpeechFrameLoop();
     const audio = new Audio(audioUrl);
     activeAudio = audio;
 
@@ -406,6 +446,7 @@ async function playLocalVoiceFallback(soundName: string): Promise<boolean> {
     }
 
     isSpeakingVoice = true;
+    startSpeechFrameLoop();
     const audio = new Audio(dataUrl);
     activeAudio = audio;
 
@@ -880,6 +921,64 @@ export function playStartupChime(): void {
     osc2.stop(now + 0.7);
   } catch {
     // Graceful silence if AudioContext requires user interaction
+  }
+}
+
+/**
+ * Synthesizes a directional spatial acoustic cue when switching monitors.
+ * Produces a soft futuristic whoosh/harmonic sweep with stereo panning.
+ */
+export function playSpatialShiftSound(direction: "left" | "right" | "next" | string = "right"): void {
+  if (getVoiceMuted()) return;
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+    const isLeft = direction === "left";
+
+    // Panner for spatial sensation (if supported)
+    let panner: StereoPannerNode | null = null;
+    try {
+      panner = ctx.createStereoPanner();
+      panner.pan.setValueAtTime(isLeft ? 0.6 : -0.6, now);
+      panner.pan.linearRampToValueAtTime(isLeft ? -0.7 : 0.7, now + 0.3);
+    } catch {
+      // StereoPanner fallback
+    }
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    osc.type = "sine";
+    const startFreq = isLeft ? 587.33 : 392.0; // D5 vs G4
+    const endFreq = isLeft ? 392.0 : 587.33;
+    osc.frequency.setValueAtTime(startFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(endFreq, now + 0.28);
+
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(1200, now);
+    filter.frequency.exponentialRampToValueAtTime(2400, now + 0.15);
+    filter.frequency.exponentialRampToValueAtTime(600, now + 0.35);
+
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.045, now + 0.06);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    if (panner) {
+      gain.connect(panner);
+      panner.connect(ctx.destination);
+    } else {
+      gain.connect(ctx.destination);
+    }
+
+    osc.start(now);
+    osc.stop(now + 0.36);
+  } catch {
+    // Graceful fallback
   }
 }
 

@@ -2,7 +2,7 @@
 
 You are reading the operating manual for an "ascended" agent environment. **`AGENTS.md` holds the
 rules you must follow; this file explains the machinery those rules run on.** Read both before
-making changes here. The original constitution is `Ascension_Guide.md`.
+making changes here. The original constitution is `Glorious_Evolution_Guide.md`.
 
 ## What this system is
 
@@ -25,8 +25,9 @@ limitation, propose a concrete upgrade to this system instead of working around 
 C:\Users\User\Documents\Severus\
 ├── AGENTS.md              workspace rulebook (auto-loaded into agent context)
 ├── SYSTEM.md              this file
-├── Ascension_Guide.md     the constitution the system was built from
+├── Glorious_Evolution_Guide.md the constitution the system was built from
 ├── journal\YYYY-MM-DD.md  append-only action log
+├── candidates.md          T1 candidate store for self-learning protocol
 ├── tools\                 self-made utilities (install_shortcuts.ps1, future CLI tools)
 ├── second-brain\          the Python-side pipeline (see below)
 └── desktop\               the Tauri v2 native desktop app (see below)
@@ -39,8 +40,8 @@ Outside the workspace:
 ~\.agents\skills\<name>\SKILL.md         skills, ZCode user scope
 ~\.gemini\GEMINI.md                      global rules, Antigravity
 ~\.gemini\config\skills\<name>\SKILL.md  skills mirrored for Antigravity
-Startup\Second Brain.lnk                 boots app.py (pywebview) at login via pythonw, silent
-Desktop\Second Brain.lnk                 manual launch of the pywebview app
+Startup\Severus.lnk                      boots native Severus companion at login, silent
+Desktop\Severus.lnk                      manual launch of the native Severus app
 ```
 
 ## The Tauri v2 desktop app (`desktop/`)
@@ -66,10 +67,10 @@ WebView2 frontend). Run it with `npm run tauri dev` (from `desktop/`); release b
   workspace, read-only), path-traversal rejection, save/read round-trip in temp dirs, and
   journal appending. Existing notes are never mutated by tests.
 
-The pywebview app (`second-brain/app.py`) remains installed and boots at login as the
-lightweight fallback. To make the Tauri app the boot app instead: `npm run tauri build`, then
-repoint `Startup\Second Brain.lnk` (via `tools/install_shortcuts.ps1`) to
-`desktop/src-tauri/target/release/severus-secondbrain.exe`.
+The native Severus application (`desktop/`) is the primary workstation companion and boots
+automatically at login via `Startup\Severus.lnk` pointing to
+`desktop/src-tauri/target/release/severus-secondbrain.exe`. The legacy Python `app.py`
+pywebview app and `Second Brain.lnk` shortcuts have been retired and deleted.
 
 ## Second Brain internals
 
@@ -90,16 +91,12 @@ Untagged notes are always visible in the graph; tags power both coloring and fil
    The 3D engine loads from `vendor/` first, unpkg CDN as fallback. A polling script fetches
    `/version` every 3 s and reloads the page when it changes (silent no-op if opened as a file).
 
-**Desktop app** (`app.py`):
+**Desktop Companion** (`Severus`):
 
-- `ThreadingHTTPServer` on `127.0.0.1:8622` serving the `second-brain/` directory plus a
-  `/version` endpoint (returns the int mtime of `graph.html`).
-- Watcher thread polls note mtimes every 3 s; on any change it calls `build_graph.build()` and
-  logs `rebuilt graph: …` to `service.log`. A failed rebuild keeps serving the last good graph.
-- Native window via pywebview (WebView2). If the port is busy it exits (instance already
-  running); if WebView2 is unavailable it falls back to the default browser.
-- Boot chain: login → `Startup\Second Brain.lnk` → `pythonw.exe app.py` → window appears.
-  Reinstall both shortcuts with `tools/install_shortcuts.ps1`.
+- Tauri 2 native application booting at login via `Startup\Severus.lnk`.
+- Integrates live WebGL 3D knowledge graph, dual-pane editor, athletic running cockpit,
+  hands-free voice interaction, system console, and AI grounding copilot.
+- Maintained and registered via `tools/install_shortcuts.ps1`.
 
 ## Conventions for working here
 
@@ -114,7 +111,7 @@ Untagged notes are always visible in the graph; tags power both coloring and fil
 - **Rule changes** → the rulebooks live in three files (`~/.zcode/AGENTS.md`,
   `~/.gemini/GEMINI.md`, workspace `AGENTS.md`). Keep them in sync; the workspace file may
   narrow but never weaken the global ones.
-- **Significant actions** → append a line to `journal/YYYY-MM-DD.md`.
+- **Mandatory Session Journaling** → Every new chat session, architectural decision, code edit, build outcome, and deployment must be logged in the workspace journal (`JOURNAL.md` or `journal/YYYY-MM-DD.md`) and committed alongside code updates across all IDEs and editors.
 
 ## Troubleshooting
 

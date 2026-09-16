@@ -23,7 +23,9 @@ import {
 import { appendJournal, getMemorySummary, readTodayJournal } from "../lib/tauri";
 import { loadCachedStravaStats } from "../lib/strava";
 import { loadAcademicSprints } from "../lib/academicSprints";
-import Icon from "./Icon";
+import Icon, { type IconName } from "./Icon";
+
+import { subscribeSpeechFrame } from "../lib/voice";
 
 export interface ThinkingModeCapsuleProps {
   open: boolean;
@@ -34,6 +36,7 @@ export interface ThinkingModeCapsuleProps {
   config: AIConfig;
   vaultNotes?: { id: string; title: string; excerpt?: string }[];
   onShowToast?: (msg: string) => void;
+  initialQuery?: string;
 }
 
 export interface ExecutiveMetric {
@@ -49,6 +52,7 @@ export interface FloatingResponseCardData {
   timestamp: string;
   category: "running" | "academic" | "knowledge" | "system" | "general";
   categoryLabel: string;
+  categoryIcon: IconName;
   metrics: ExecutiveMetric[];
   weeklyProgress?: { current: number; target: number; percentage: number };
   referencedNotes?: string[];
@@ -86,6 +90,10 @@ function deriveExecutiveHUDData(
     cleanQ.includes("km") ||
     cleanQ.includes("heart rate") ||
     cleanQ.includes("zone 2") ||
+    cleanQ.includes("training block") ||
+    cleanQ.includes("training") ||
+    cleanQ.includes("workout") ||
+    cleanQ.includes("block") ||
     lowerReply.includes("kilometer") ||
     lowerReply.includes("pace") ||
     lowerReply.includes("strava") ||
@@ -178,7 +186,8 @@ function deriveExecutiveHUDData(
       verdict,
       timestamp,
       category: "running",
-      categoryLabel: "🏃 Athletic Telemetry",
+      categoryLabel: "ATHLETIC TELEMETRY",
+      categoryIcon: "activity",
       metrics,
       weeklyProgress: {
         current: weeklyKm,
@@ -227,7 +236,8 @@ function deriveExecutiveHUDData(
       verdict,
       timestamp,
       category: "academic",
-      categoryLabel: "📘 Academic Sprint",
+      categoryLabel: "ACADEMIC SPRINT",
+      categoryIcon: "school",
       metrics,
       suggestion,
     };
@@ -268,7 +278,8 @@ function deriveExecutiveHUDData(
       verdict,
       timestamp,
       category: "knowledge",
-      categoryLabel: "🧠 Second Brain Knowledge",
+      categoryLabel: "SECOND BRAIN",
+      categoryIcon: "brain",
       metrics,
       referencedNotes: matchedNotes.length > 0 ? matchedNotes : undefined,
       suggestion,
@@ -308,7 +319,8 @@ function deriveExecutiveHUDData(
       verdict,
       timestamp,
       category: "system",
-      categoryLabel: "⚡ System Telemetry",
+      categoryLabel: "SYSTEM TELEMETRY",
+      categoryIcon: "gear",
       metrics,
       suggestion,
     };
@@ -360,7 +372,8 @@ function deriveExecutiveHUDData(
     verdict,
     timestamp,
     category: "general",
-    categoryLabel: "💭 Executive Briefing",
+    categoryLabel: "EXECUTIVE BRIEFING",
+    categoryIcon: "spark",
     metrics,
     suggestion,
   };
@@ -380,6 +393,7 @@ export function ThinkingModeCapsule({
   config,
   vaultNotes = [],
   onShowToast,
+  initialQuery,
 }: ThinkingModeCapsuleProps) {
   const [orbState, setOrbState] = useState<OrbState>("listening");
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -989,6 +1003,20 @@ ${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.t
     }
   }, [stopRecognition, scheduleRestart, handleDispatchQuery]);
 
+  const [speechAmp, setSpeechAmp] = useState(0);
+
+  useEffect(() => {
+    return subscribeSpeechFrame((amp) => {
+      setSpeechAmp(amp);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (open && initialQuery && initialQuery.trim().length > 3) {
+      void handleDispatchQuery(initialQuery);
+    }
+  }, [open, initialQuery, handleDispatchQuery]);
+
   // Handle open / mute state transitions
   useEffect(() => {
     isMountedRef.current = true;
@@ -1081,27 +1109,58 @@ ${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.t
 
   return (
     <div className="thinking-mode-wrapper">
-      <div
-        className="thinking-mode-capsule"
+      <motion.div
+        className="thinking-mode-capsule dynamic-island-capsule edge-docked is-thinking"
         data-tauri-drag-region
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 12,
-        background: "rgba(18, 18, 21, 0.88)",
-        border: "1px solid rgba(255, 255, 255, 0.14)",
-        borderRadius: 9999,
-        padding: "6px 14px 6px 8px",
-        boxShadow: "0 10px 36px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(255, 255, 255, 0.04)",
-        backdropFilter: "blur(24px)",
-        WebkitBackdropFilter: "blur(24px)",
-        minWidth: 320,
-        maxWidth: 580,
-        height: 60,
-        userSelect: "none",
-        cursor: "move",
-      }}
-    >
+        animate={{
+          scale: speechAmp > 0 ? 1 + speechAmp * 0.03 : 1,
+        }}
+        transition={{ type: "spring", stiffness: 480, damping: 24 }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 12,
+          background: "#000000",
+          border: speechAmp > 0.35 ? "1px solid rgba(99, 102, 241, 0.5)" : "1px solid rgba(255, 255, 255, 0.14)",
+          borderRadius: 9999,
+          padding: "6px 14px 6px 8px",
+          boxShadow: speechAmp > 0.35 ? "0 0 24px rgba(99, 102, 241, 0.35), 0 10px 36px rgba(0, 0, 0, 0.88)" : "0 10px 36px rgba(0, 0, 0, 0.88)",
+          minWidth: 340,
+          maxWidth: 620,
+          height: 60,
+          userSelect: "none",
+          cursor: "grab",
+          position: "relative",
+          transition: "border-color 0.15s ease, box-shadow 0.15s ease",
+        }}
+      >
+        {/* Smooth corner attachment flares flush to monitor top bezel */}
+        <svg
+          className="island-attachment-ear ear-left"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M 0 0 L 16 0 L 16 16 C 16 7.163 8.837 0 0 0 Z"
+            fill="#000000"
+          />
+        </svg>
+        <svg
+          className="island-attachment-ear ear-right"
+          width="16"
+          height="16"
+          viewBox="0 0 16 16"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M 16 0 L 0 0 L 0 16 C 0 7.163 7.163 0 16 0 Z"
+            fill="#000000"
+          />
+        </svg>
       {/* Corner Second Brain Badge */}
       <div
         className="thinking-brain-badge"
@@ -1373,7 +1432,7 @@ ${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.t
           <Icon name="close" size={13} />
         </button>
       </div>
-    </div>
+    </motion.div>
 
       {/* Floating Window Glass HUD below capsule */}
       <AnimatePresence>
@@ -1381,10 +1440,10 @@ ${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.t
           <motion.div
             key="thinking-glass-hud"
             className="thinking-glass-hud"
-            initial={{ opacity: 0, y: -10, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.96 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            initial={{ opacity: 0, y: -24, scale: 0.92, filter: "blur(10px)" }}
+            animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, y: -16, scale: 0.94, filter: "blur(6px)" }}
+            transition={{ type: "spring", stiffness: 360, damping: 28, mass: 0.75 }}
           >
             <div className="glass-hud-header">
               <div className="glass-hud-identity">
@@ -1393,7 +1452,8 @@ ${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.t
                 </span>
                 <span className="glass-hud-name">Severus</span>
                 <span className={`glass-hud-category-pill ${activeResponse.category}`}>
-                  {activeResponse.categoryLabel}
+                  <Icon name={activeResponse.categoryIcon} size={10} />
+                  <span>{activeResponse.categoryLabel}</span>
                 </span>
                 <span className="glass-hud-timestamp">{activeResponse.timestamp}</span>
               </div>
@@ -1489,7 +1549,10 @@ ${primarySprint ? `• Primary High-Leverage Sprint: [${primarySprint.category.t
             <div className="glass-hud-footer">
               {activeResponse.suggestion && (
                 <div className="glass-hud-suggestion-strip">
-                  <span className="suggestion-badge">NEXT ACTION</span>
+                  <span className="suggestion-badge">
+                    <Icon name="spark" size={9} />
+                    <span>NEXT ACTION</span>
+                  </span>
                   <span className="suggestion-text">{activeResponse.suggestion}</span>
                 </div>
               )}

@@ -246,6 +246,9 @@ export interface VoiceCommandHandlers {
   onMaximize?: () => void;
   onFloat?: () => void;
   onClose?: () => void;
+  onHideToTray?: () => void;
+  onOpenDynamicIsland?: () => void;
+  onGeneralQuery?: (query: string) => void;
   onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
   onThinkingMode?: () => void;
   onStravaStatus?: () => void;
@@ -575,6 +578,23 @@ export class VoiceCommandListener {
       this.lastCommandTime = now;
       this.handlers.onHeard?.(text, "journal");
       this.handlers.onJournal?.();
+      return;
+    }
+
+    if (
+      matchesKeywords(text, [
+        "training block",
+        "training blocks",
+        "my training block",
+        "my training blocks",
+        "current training block",
+        "workout block",
+        "running block",
+      ])
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "training block");
+      this.handlers.onGeneralQuery?.(text);
       return;
     }
 
@@ -1039,6 +1059,48 @@ export class VoiceCommandListener {
       return;
     }
 
+    if (
+      matchesKeywords(text, [
+        "close system",
+        "close the system",
+        "exit system",
+        "hide system",
+        "close severus",
+        "close workstation",
+        "exit workstation",
+        "send to tray",
+        "hide to tray",
+        "exit to tray",
+      ])
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "close system");
+      if (this.handlers.onHideToTray) {
+        this.handlers.onHideToTray();
+      } else {
+        this.handlers.onClose?.();
+      }
+      return;
+    }
+
+    if (
+      matchesKeywords(text, [
+        "open dynamic island",
+        "show dynamic island",
+        "open island",
+        "show island",
+        "wake dynamic island",
+        "dock island",
+        "dynamic island",
+        "reveal island",
+      ])
+    ) {
+      this.lastCommandTime = now;
+      this.handlers.onHeard?.(text, "open dynamic island");
+      this.handlers.onOpenDynamicIsland?.();
+      return;
+    }
+
     // Priority 4: Wake Phrase on stripped text (if user said e.g. "please open system")
     if (strippedText.length > 0 && matchesWakePhrase(strippedText)) {
       this.lastCommandTime = now;
@@ -1047,7 +1109,11 @@ export class VoiceCommandListener {
       return;
     }
 
-    // Fallback: notify that phrase was heard even if no command was matched
+    // Fallback: notify that phrase was heard and dispatch ambient cognitive query to Thinking Mode
     this.handlers.onHeard?.(text, undefined);
+    if (text.trim().length > 3) {
+      this.lastCommandTime = now;
+      this.handlers.onGeneralQuery?.(text);
+    }
   }
 }

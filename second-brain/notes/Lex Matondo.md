@@ -16,4 +16,4 @@ He is the creator and user of Severus, designed as his personal JARVIS-inspired 
 3. **Location & Name**: Based in Davao Region / Digos City (never Manila). Preferred name: Lex Matondo (or Lex).
 4. **Contextual Memory**: Distinguish information states (`current`, `historical`, `preference`, `hard_constraint`, `project`, `goal`, `routine`, `uncertain`). Never invent missing facts.
 
-Connected to [[The Ascension]], [[Second Brain]], [[Windows System Control]], and [[UI Audit and Design System]]. Canonical document: `USER_KNOWLEDGE_BASE.md`. #identity #user #profile #engineering #creator #fitness #hybridathlete #secondbrain #atomic-habits #constraints
+Connected to [[The Glorious Evolution]], [[Second Brain]], [[Windows System Control]], and [[UI Audit and Design System]]. Canonical document: `USER_KNOWLEDGE_BASE.md`. #identity #user #profile #engineering #creator #fitness #hybridathlete #secondbrain #atomic-habits #constraints

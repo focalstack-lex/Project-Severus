@@ -4,6 +4,7 @@ import Icon from "./Icon";
 import {
   loadCachedStravaStats,
   fetchStravaAthleteStats,
+  isStravaConfigured,
   type StravaAthleteStats,
 } from "../lib/strava";
 import {
@@ -96,6 +97,11 @@ export default function RunningModeWindow({
 
       const activeB = curBlocks.find((b) => b.status === "active") || curBlocks[0];
       setInsights(generateSuggestBetterInsights(currentStats, activeB, curGoals));
+
+      // Automatically refresh live Strava telemetry on open if configured
+      if (isStravaConfigured()) {
+        void handleSyncStrava();
+      }
     }
   }, [open, refreshJournal]);
 
@@ -127,14 +133,18 @@ export default function RunningModeWindow({
     }
   };
 
-  // 1-Click Log Latest Run to Journal
+  // 1-Click Log Latest Run to Journal with accurate activity timestamp
   const handleLogLatestRun = async () => {
     if (!stravaStats?.latestRun || runLogged) return;
     const r = stravaStats.latestRun;
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const actDate = new Date(r.startDate);
+    const timeStr = !isNaN(actDate.getTime())
+      ? actDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     const hrText = r.averageHeartrate ? ` · ${r.averageHeartrate} bpm (Zone 2)` : "";
     const elevText = r.elevationGainM > 0 ? ` · +${r.elevationGainM}m elevation` : "";
-    const entry = `[${timeStr}] 🏃 Strava Run: ${r.name} (${r.formattedDistance} in ${r.formattedDuration} @ ${r.formattedPace}${hrText}${elevText})`;
+    const dateLabel = r.formattedDate ? ` (${r.formattedDate})` : "";
+    const entry = `[${timeStr}] Strava Run: ${r.name} (${r.formattedDistance} in ${r.formattedDuration} @ ${r.formattedPace}${hrText}${elevText})${dateLabel}`;
 
     try {
       await appendJournal(entry);
@@ -174,6 +184,7 @@ export default function RunningModeWindow({
   const handleDeleteBlock = (blockId: string) => {
     const updated = deleteTrainingBlock(blockId);
     setBlocks(updated);
+    onShowToast?.("Training block deleted.");
   };
 
   // Goal Actions
@@ -198,6 +209,7 @@ export default function RunningModeWindow({
   const handleDeleteGoal = (id: string) => {
     const updated = deleteRunningGoal(id);
     setGoals(updated);
+    onShowToast?.("Goal removed.");
   };
 
   // Ask Severus AI for Custom Running Mentorship
@@ -263,13 +275,21 @@ export default function RunningModeWindow({
   };
 
   return (
-    <div className="running-mode-overlay">
+    <motion.div
+      className="running-mode-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+      onClick={onClose}
+    >
       <motion.div
         className="running-mode-window"
         initial={{ opacity: 0, scale: 0.96, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 15 }}
         transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* WINDOW HEADER */}
         <header className="running-mode-header">
@@ -383,9 +403,17 @@ export default function RunningModeWindow({
 
         {/* MAIN BODY CONTENT AREA */}
         <main className="running-mode-content">
-          {/* TAB 1: TELEMETRY DASHBOARD */}
-          {activeTab === "dashboard" && (
-            <div className="running-tab-view dashboard-view">
+          <AnimatePresence mode="wait">
+            {/* TAB 1: TELEMETRY DASHBOARD */}
+            {activeTab === "dashboard" && (
+              <motion.div
+                key="dashboard"
+                initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
+                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className="running-tab-view dashboard-view"
+              >
               {/* TOP METRICS STRIP */}
               <div className="running-metrics-grid">
                 <div className="running-metric-card highlight">
@@ -539,7 +567,7 @@ export default function RunningModeWindow({
                     <p className="block-focus-desc">{activeBlock?.focus}</p>
 
                     <div className="block-mini-schedule">
-                      {activeBlock?.workouts.slice(0, 4).map((w) => (
+                      {activeBlock?.workouts?.slice(0, 4)?.map((w) => (
                         <div key={w.id} className={`mini-workout-row ${w.completed ? "done" : ""}`}>
                           <span className="mini-day">{w.day}</span>
                           <span className="mini-title">{w.title}</span>
@@ -562,12 +590,19 @@ export default function RunningModeWindow({
                   </div>
                 </section>
               </div>
-            </div>
-          )}
+              </motion.div>
+            )}
 
           {/* TAB 2: TRAINING BLOCKS */}
           {activeTab === "blocks" && (
-            <div className="running-tab-view blocks-view">
+            <motion.div
+              key="blocks"
+              initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="running-tab-view blocks-view"
+            >
               <div className="tab-view-toolbar">
                 <div>
                   <h2 className="view-heading">Training Blocks & Periodization</h2>
@@ -645,8 +680,14 @@ export default function RunningModeWindow({
               )}
 
               {/* LIST OF TRAINING BLOCKS */}
-              <div className="training-blocks-stack">
-                {blocks.map((block) => {
+              {blocks.length === 0 ? (
+                <div className="running-empty-state">
+                  <Icon name="layers" size={22} />
+                  <p>No training blocks configured. Create your custom schedule above.</p>
+                </div>
+              ) : (
+                <div className="training-blocks-stack">
+                  {blocks.map((block) => {
                   const isActive = block.status === "active";
                   return (
                     <div key={block.id} className={`block-card-container ${isActive ? "active" : ""}`}>
@@ -720,12 +761,20 @@ export default function RunningModeWindow({
                   );
                 })}
               </div>
-            </div>
+              )}
+            </motion.div>
           )}
 
           {/* TAB 3: RUNNING GOALS */}
           {activeTab === "goals" && (
-            <div className="running-tab-view goals-view">
+            <motion.div
+              key="goals"
+              initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="running-tab-view goals-view"
+            >
               <div className="tab-view-toolbar">
                 <div>
                   <h2 className="view-heading">Running Goals & Performance Benchmarks</h2>
@@ -803,8 +852,14 @@ export default function RunningModeWindow({
               )}
 
               {/* GOALS GRID */}
-              <div className="goals-grid-cards">
-                {goals.map((goal) => (
+              {goals.length === 0 ? (
+                <div className="running-empty-state">
+                  <Icon name="activity" size={22} />
+                  <p>No active running goals defined. Add your custom benchmarks and targets above.</p>
+                </div>
+              ) : (
+                <div className="goals-grid-cards">
+                  {goals.map((goal) => (
                   <div key={goal.id} className={`goal-card ${goal.completed ? "completed" : ""}`}>
                     <div className="goal-card-top">
                       <span className={`goal-category-tag ${goal.category}`}>
@@ -851,12 +906,20 @@ export default function RunningModeWindow({
                   </div>
                 ))}
               </div>
-            </div>
+              )}
+            </motion.div>
           )}
 
           {/* TAB 4: SUGGEST BETTER (AI COACH) */}
           {activeTab === "suggest" && (
-            <div className="running-tab-view suggest-view">
+            <motion.div
+              key="suggest"
+              initial={{ opacity: 0, y: 8, filter: "blur(4px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -8, filter: "blur(4px)" }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="running-tab-view suggest-view"
+            >
               <div className="tab-view-toolbar">
                 <div>
                   <h2 className="view-heading">Suggest Better · AI Athletic Intelligence</h2>
@@ -940,10 +1003,11 @@ export default function RunningModeWindow({
                   </div>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
-        </main>
-      </motion.div>
-    </div>
+        </AnimatePresence>
+      </main>
+    </motion.div>
+  </motion.div>
   );
 }

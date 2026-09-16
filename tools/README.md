@@ -1,6 +1,6 @@
 # tools/
 
-Home for self-made CLI tools (Ascension Guide §3). When a task needs a utility that doesn't
+Home for self-made CLI tools (Glorious Evolution Guide §3). When a task needs a utility that doesn't
 exist yet, build it here, document it, and add a line to the journal.
 
 Conventions:

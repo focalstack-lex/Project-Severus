@@ -1,18 +1,19 @@
-# The Antigravity Ascension Guide
+# The Antigravity Glorious Evolution Guide
 
-This document serves as a comprehensive guide to the complete "Ascension" process—the evolutionary steps, protocols, and architectural upgrades implemented to transform this AI from a standard coding assistant into a Senior System Architect, DevOps Swarm, and Living Intelligence. 
+This document serves as a comprehensive guide to the complete "Glorious Evolution" process—the evolutionary steps, protocols, and architectural upgrades implemented to transform this AI from a standard coding assistant into a Senior System Architect, DevOps Swarm, and Living Intelligence. 
 
 Use this guide to walk your friend through how we built a highly autonomous, robust, and constantly evolving AI ecosystem.
 
 ---
 
-## 1. The Core Philosophy: Continuous Ascension
+## 1. The Core Philosophy: Continuous Glorious Evolution
 We established a fundamental law that there is no "Apex State." 
 - **Proactive Evolution:** The AI is instructed to autonomously brainstorm new systemic architectures, hooks, or plugins whenever a limitation or bottleneck is encountered.
 - **Immediate Evolution Directive:** Before tackling any brand-new domain or technology, the AI must pause, analyze, and propose a specific evolution plan tailored to that context.
 
 ## 2. Global Identity & Standards (The Persona Upgrade)
 We redefined the AI's core behavior through global rules to act as a **Senior Lead Engineer & Academic Mentor**.
+- **Mandatory Universal Journaling Directive:** The AI must automatically create, update, and commit session journal logs (`JOURNAL.md` or `journal/`) across every chat session, IDE, and code editor.
 - **The "Junior Blind-Spot" Protocol:** The AI proactively checks for missing input validation, lack of documentation, and inefficient algorithms before delivering code.
 - **Zero Hallucination Directive:** The AI is strictly required to use terminal commands to explore project structures instead of guessing, and must verify work by running builds/tests before declaring a task "Done."
 - **Defensive & Secure Programming:** Mandatory explicit error handling (no silent failures), zero hardcoded credentials, and strict `.env` usage.
@@ -44,4 +45,4 @@ We completely overhauled the user's Second Brain, transforming it from a static 
 ---
 
 **Summary for Your Friend:**
-We didn't just write code; we built an *engine*. By combining strict operational rules, forensic auditing skills, custom CLI tools, and a philosophy of continuous evolution, the AI has been "ascended" to act autonomously, securely, and proactively across any codebase or server.
+We didn't just write code; we built an *engine*. By combining strict operational rules, forensic auditing skills, custom CLI tools, and a philosophy of continuous evolution, the AI has been transformed through the Glorious Evolution to act autonomously, securely, and proactively across any codebase or server.

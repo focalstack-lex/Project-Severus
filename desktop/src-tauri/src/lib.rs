@@ -15,7 +15,7 @@ use std::path::PathBuf;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 pub struct Paths {
     pub root: PathBuf,
@@ -125,14 +125,19 @@ fn hide_to_tray(window: tauri::Window) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(serde::Serialize)]
+pub struct PhysicalCoordinates {
+    pub x: i32,
+    pub y: i32,
+}
+
 #[tauri::command]
 fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String> {
     if floating {
         let _ = window.set_fullscreen(false);
         let _ = window.unmaximize();
-        let _ = window.set_size(tauri::LogicalSize::new(720.0, 110.0));
+        let _ = window.set_size(tauri::LogicalSize::new(780.0, 110.0));
         let _ = window.set_always_on_top(true);
-        let _ = window.center();
     } else {
         let _ = window.set_always_on_top(false);
         let _ = window.set_size(tauri::LogicalSize::new(1360.0, 860.0));
@@ -141,6 +146,35 @@ fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String
         let _ = window.set_focus();
     }
     Ok(())
+}
+
+#[tauri::command]
+fn dock_to_top_island(window: tauri::Window) -> Result<PhysicalCoordinates, String> {
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten())
+        .ok_or_else(|| "No display monitor detected".to_string())?;
+
+    let m_pos = monitor.position();
+    let m_size = monitor.size();
+    let scale_factor = monitor.scale_factor();
+    let curr_outer = window.outer_size().unwrap_or(tauri::PhysicalSize::new((780.0 * scale_factor) as u32, (680.0 * scale_factor) as u32));
+    let w_to_use = if curr_outer.width == 0 || curr_outer.width > m_size.width {
+        (780.0 * scale_factor) as i32
+    } else {
+        curr_outer.width as i32
+    };
+
+    let top_x = m_pos.x + ((m_size.width as i32 - w_to_use) / 2);
+    let top_y = m_pos.y;
+
+    window
+        .set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(top_x, top_y)))
+        .map_err(|e| e.to_string())?;
+
+    Ok(PhysicalCoordinates { x: top_x, y: top_y })
 }
 
 #[tauri::command]
@@ -326,7 +360,12 @@ fn base64_encode(data: &[u8]) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    std::panic::set_hook(Box::new(|info| {
+        let msg = format!("SEVERUS PANIC: {:?}\n", info);
+        let _ = std::fs::write("C:\\Users\\User\\Documents\\Severus\\panic.log", &msg);
+    }));
+
+    let result = tauri::Builder::default()
         .manage(Paths::resolve())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
@@ -360,15 +399,27 @@ pub fn run() {
             maximize_window,
             toggle_fullscreen,
             set_floating_dimensions,
+            dock_to_top_island,
             gmail_auth::gmail_begin_auth,
             gmail_auth::secure_store,
             gmail_auth::secure_load,
             gmail_auth::secure_delete
         ])
         .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                tauri::WindowEvent::Focused(true) => {
+                    let _ = window.emit("severus:focus", ());
+                }
+                _ => {}
+            }
+            if let Ok(true) = window.is_minimized() {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.emit("severus:minimize-to-pill", ());
             }
         })
         .setup(|app| {
@@ -429,8 +480,32 @@ pub fn run() {
             }
             let notes_dir = app.state::<Paths>().notes_dir();
             watcher::start(app.handle().clone(), notes_dir);
+
+            // Initial top-center Dynamic Island positioning on primary monitor
+            if let Some(w) = app.get_webview_window("main") {
+                if let Ok(Some(monitor)) = w.primary_monitor() {
+                    let m_pos = monitor.position();
+                    let m_size = monitor.size();
+                    let scale_factor = monitor.scale_factor();
+                    let w_size = w.outer_size().unwrap_or_else(|_| {
+                        tauri::PhysicalSize::new((780.0 * scale_factor) as u32, (110.0 * scale_factor) as u32)
+                    });
+                    let top_x = m_pos.x + ((m_size.width as i32 - w_size.width as i32) / 2);
+                    let top_y = m_pos.y;
+                    let _ = w.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(top_x, top_y)));
+                }
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .run(tauri::generate_context!());
+
+    if let Err(e) = result {
+        let msg = format!("SEVERUS RUN ERROR: {:?}\n", e);
+        let _ = std::fs::write("C:\\Users\\User\\Documents\\Severus\\panic.log", &msg);
+        panic!("error while running tauri application: {:?}", e);
+    }
 }

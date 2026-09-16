@@ -12,4 +12,4 @@ The consent now also carries three Classroom read-only scopes (courses, student 
 
 Surfaces: the Inbox tab became the **School Hub** (Mail + Classroom sections — due soon, missing in red, announcements), the Status popover shows "N due · N missing · N unread", and Thinking Mode receives a LIVE CLASSROOM telemetry block so "what's due, Sir?" is answered from real due dates. Voice: "what's due", "missing assignments", "any announcements", "check my classroom". "open classroom" launches classroom.google.com. A 403 in the Hub means stale scopes — reconnect.
 
-Related: [[Windows System Control]], [[The Ascension]], [[Second Brain]]. #gmail #classroom #email #voice #meta
+Related: [[Windows System Control]], [[The Glorious Evolution]], [[Second Brain]]. #gmail #classroom #email #voice #meta

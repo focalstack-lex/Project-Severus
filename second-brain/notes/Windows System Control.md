@@ -6,4 +6,4 @@ The design principle is one allowlisted action set: a deterministic, unit-tested
 
 Verification: 22 Rust unit tests green (grammar contract, destructive flags, unconfirmed-execution rejection), tsc/vite build clean, and the console + password flows exercised live in the dev harness. Real Win32 behavior (volume, snap, screenshot) needs one manual session in `npm run tauri dev`.
 
-Related: [[The Ascension]], [[Second Brain]], [[UI Audit and Design System]]. #windows #voice #system-control #meta
+Related: [[The Glorious Evolution]], [[Second Brain]], [[UI Audit and Design System]]. #windows #voice #system-control #meta

@@ -4,7 +4,7 @@
 
 It provides AI agents with senior design director craft: typography hierarchies, spatial rhythm, purposeful animations, accessibility rigor, visual critique, and interactive browser iteration.
 
-Related: [[Ascension_Guide]], [[SYSTEM]]
+Related: [[Glorious_Evolution_Guide]], [[SYSTEM]]
 
 ---
 

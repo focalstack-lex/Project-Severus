@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.severus.secondbrain",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm run dev:ui",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
@@ -12,16 +12,18 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Severus.ai",
         "width": 780,
         "height": 110,
         "minWidth": 160,
         "minHeight": 60,
-        "center": true,
+        "center": false,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
-        "shadow": false
+        "shadow": false,
+        "visible": false
       }
     ],
     "security": {
