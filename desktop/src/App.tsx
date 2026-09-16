@@ -128,7 +128,7 @@ export default function App() {
   // Navigation & Shell Layout
   const [activeSection, setActiveSection] = useState<NavSection>("knowledge");
   const [knowledgeSubTab, setKnowledgeSubTab] = useState<KnowledgeSubTab>("graph");
-  const [isFloatingMode, setIsFloatingMode] = useState<boolean>(true);
+  const [isFloatingMode, setIsFloatingMode] = useState<boolean>(false);
   const [isThinkingMode, setIsThinkingMode] = useState<boolean>(false);
 
   // Inspector & Panes
@@ -531,12 +531,21 @@ export default function App() {
     };
     window.addEventListener("focus", handleFocus);
     let unlistenFocus: (() => void) | null = null;
+    let unlistenOpenWorkstation: (() => void) | null = null;
     let unlistenMinimize: (() => void) | null = null;
 
     void getCurrentWindow()
       .listen("severus:focus", handleFocus)
       .then((fn) => {
         unlistenFocus = fn;
+      });
+
+    void getCurrentWindow()
+      .listen("severus:open-workstation", () => {
+        void ensureWorkstation();
+      })
+      .then((fn) => {
+        unlistenOpenWorkstation = fn;
       });
 
     void getCurrentWindow()
@@ -550,9 +559,10 @@ export default function App() {
     return () => {
       window.removeEventListener("focus", handleFocus);
       if (unlistenFocus) unlistenFocus();
+      if (unlistenOpenWorkstation) unlistenOpenWorkstation();
       if (unlistenMinimize) unlistenMinimize();
     };
-  }, [handleEnterFloatingMode, resetRetractTimer]);
+  }, [handleEnterFloatingMode, ensureWorkstation, resetRetractTimer]);
 
   const handleIslandMouseEnter = useCallback(() => {
     resetRetractTimer();
@@ -607,6 +617,11 @@ export default function App() {
   // with raw scrollbars) is never visible. At login the IPC bridge may not
   // be ready when the page loads, so placement retries with backoff.
   useEffect(() => {
+    if (!isFloatingMode) {
+      void getCurrentWindow().show();
+      void getCurrentWindow().center();
+      return;
+    }
     localStorage.removeItem("severus:island-position");
     let attempts = 0;
     let done = false;
@@ -619,16 +634,12 @@ export default function App() {
           .then(() => handleDockToTopIsland())
           .then(async () => {
             await getCurrentWindow().show();
-            // WebView2 can present a stale first composition (dark rect with
-            // raw scrollbars) and keep it until a surface change. A 1px nudge
-            // and back forces two fresh presentations.
             await setFloatingDimensions(781, 111);
             await new Promise((r) => setTimeout(r, 60));
             await setFloatingDimensions(780, 110);
             done = true;
           })
           .catch(() => {
-            // Safety valve: never leave the user without a window.
             if (attempts >= 20) {
               void getCurrentWindow().show().catch(() => {});
               return;
@@ -643,7 +654,7 @@ export default function App() {
     return () => {
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [handleDockToTopIsland]);
+  }, [isFloatingMode, handleDockToTopIsland]);
 
   // Global mouseup to cleanly finalize dragging: if dropped near top bezel, snap flush to top center; otherwise keep custom floating position
   useEffect(() => {

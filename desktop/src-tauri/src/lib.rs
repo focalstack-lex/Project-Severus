@@ -14,7 +14,7 @@ mod watcher;
 use std::path::PathBuf;
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager, State};
 
 pub struct Paths {
@@ -444,7 +444,9 @@ pub fn run() {
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.unminimize();
                                 let _ = w.show();
+                                let _ = w.center();
                                 let _ = w.set_focus();
+                                let _ = w.emit("severus:open-workstation", ());
                             }
                         }
                         "maximize" => {
@@ -453,6 +455,7 @@ pub fn run() {
                                 let _ = w.show();
                                 let _ = w.maximize();
                                 let _ = w.set_focus();
+                                let _ = w.emit("severus:open-workstation", ());
                             }
                         }
                         "quit" => {
@@ -461,19 +464,25 @@ pub fn run() {
                         _ => {}
                     })
                     .on_tray_icon_event(|tray, event| {
-                        if let TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            button_state: MouseButtonState::Up,
-                            ..
-                        } = event
-                        {
-                            let app = tray.app_handle();
-                            if let Some(w) = app.get_webview_window("main") {
-                                let _ = w.unminimize();
-                                let _ = w.show();
-                                let _ = w.center();
-                                let _ = w.set_focus();
+                        match event {
+                            TrayIconEvent::Click {
+                                button: MouseButton::Left,
+                                ..
                             }
+                            | TrayIconEvent::DoubleClick {
+                                button: MouseButton::Left,
+                                ..
+                            } => {
+                                let app = tray.app_handle();
+                                if let Some(w) = app.get_webview_window("main") {
+                                    let _ = w.unminimize();
+                                    let _ = w.show();
+                                    let _ = w.center();
+                                    let _ = w.set_focus();
+                                    let _ = w.emit("severus:open-workstation", ());
+                                }
+                            }
+                            _ => {}
                         }
                     })
                     .build(app)?;
