@@ -55,24 +55,21 @@ function Show-Help {
 function Invoke-Open {
     $proc = Get-Process severus-secondbrain -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($proc) {
-        Write-Host "[Severus] Companion is active (PID $($proc.Id)). Bringing to focus..." -ForegroundColor Green
-        try {
-            $ws = New-Object -ComObject WScript.Shell
-            $ws.AppActivate($proc.Id) | Out-Null
-        } catch {}
-    } else {
-        if (-not (Test-Path $ReleaseExe)) {
-            $altProgFiles = "C:\Program Files\Severus.ai\severus-secondbrain.exe"
-            if (Test-Path $altProgFiles) {
-                $ReleaseExe = $altProgFiles
-            } else {
-                Write-Host "[Severus] Executable not found at $ReleaseExe. Run 'severus build' first." -ForegroundColor Red
-                return
-            }
-        }
-        Write-Host "[Severus] Launching native companion: $ReleaseExe" -ForegroundColor Cyan
-        Start-Process -FilePath $ReleaseExe -WorkingDirectory $DesktopDir
+        Write-Host "[Severus] Restarting active companion process (PID $($proc.Id)) to bring window to center..." -ForegroundColor Green
+        $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Milliseconds 300
     }
+    if (-not (Test-Path $ReleaseExe)) {
+        $altProgFiles = "C:\Program Files\Severus.ai\severus-secondbrain.exe"
+        if (Test-Path $altProgFiles) {
+            $ReleaseExe = $altProgFiles
+        } else {
+            Write-Host "[Severus] Executable not found at $ReleaseExe. Run 'severus build' first." -ForegroundColor Red
+            return
+        }
+    }
+    Write-Host "[Severus] Launching native companion: $ReleaseExe" -ForegroundColor Cyan
+    Start-Process -FilePath $ReleaseExe -WorkingDirectory $DesktopDir
 }
 
 function Invoke-Status {
@@ -205,10 +202,14 @@ function Invoke-Build {
             $targetExe = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
             $progFilesDir = "C:\Program Files\Severus.ai"
             $progFiles = Join-Path $progFilesDir "severus-secondbrain.exe"
+            $appDataDir = "$env:LOCALAPPDATA\Severus.ai"
+            $appDataExe = Join-Path $appDataDir "severus-secondbrain.exe"
             if (Test-Path $targetExe) {
                 if (-not (Test-Path $progFilesDir)) { New-Item -ItemType Directory -Path $progFilesDir -Force | Out-Null }
+                if (-not (Test-Path $appDataDir)) { New-Item -ItemType Directory -Path $appDataDir -Force | Out-Null }
                 Copy-Item -Path $targetExe -Destination $progFiles -Force -ErrorAction SilentlyContinue
-                Write-Host "[Severus Build] Synced binary to $progFiles" -ForegroundColor DarkGray
+                Copy-Item -Path $targetExe -Destination $appDataExe -Force -ErrorAction SilentlyContinue
+                Write-Host "[Severus Build] Synced binary to $progFiles and $appDataExe" -ForegroundColor DarkGray
             }
         } else {
             Write-Host "[Severus Build] Build exited with code $LASTEXITCODE" -ForegroundColor Red

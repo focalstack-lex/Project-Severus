@@ -471,7 +471,7 @@ pub fn run() {
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.unminimize();
                                 let _ = w.show();
-                                let _ = w.maximize();
+                                let _ = w.center();
                                 let _ = w.set_focus();
                             }
                         }
@@ -481,19 +481,9 @@ pub fn run() {
             let notes_dir = app.state::<Paths>().notes_dir();
             watcher::start(app.handle().clone(), notes_dir);
 
-            // Initial top-center Dynamic Island positioning on primary monitor
+            // Center main desktop window on startup
             if let Some(w) = app.get_webview_window("main") {
-                if let Ok(Some(monitor)) = w.primary_monitor() {
-                    let m_pos = monitor.position();
-                    let m_size = monitor.size();
-                    let scale_factor = monitor.scale_factor();
-                    let w_size = w.outer_size().unwrap_or_else(|_| {
-                        tauri::PhysicalSize::new((780.0 * scale_factor) as u32, (110.0 * scale_factor) as u32)
-                    });
-                    let top_x = m_pos.x + ((m_size.width as i32 - w_size.width as i32) / 2);
-                    let top_y = m_pos.y;
-                    let _ = w.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(top_x, top_y)));
-                }
+                let _ = w.center();
                 let _ = w.unminimize();
                 let _ = w.show();
                 let _ = w.set_focus();
