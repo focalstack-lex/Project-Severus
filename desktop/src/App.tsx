@@ -1494,23 +1494,26 @@ export default function App() {
                   {/* Left: Hardware Sensor Punch-Hole & Status Beacon */}
                   <div
                     className="dynamic-island-hardware"
-                    title="Drag to reposition Dynamic Island"
-                    onMouseDown={(e) => {
-                      if (e.button !== 0) return;
-                      e.preventDefault();
-                      handleStartDragging();
+                    title="Click to toggle menu • Double-click to restore workstation"
+                    data-no-drag
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsIslandExpanded((prev) => !prev);
                     }}
-                    data-tauri-drag-region
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      void ensureWorkstation();
+                    }}
                   >
                     <span className="island-lens" title="Severus Optical Sensor" />
-                    <span className="island-pulse-wrap" title="System Online">
+                    <span className="island-pulse-wrap" title="System Online • Click to toggle menu" data-no-drag>
                       <span className="island-pulse-dot" />
                       <span className="island-pulse-ring" />
                     </span>
                   </div>
 
                   {/* Center: Brand Glance (Compact) vs Navigation Items (Expanded) */}
-                  <div className="dynamic-island-body" data-tauri-drag-region>
+                  <div className="dynamic-island-body">
                     <AnimatePresence mode="wait" initial={false}>
                       {!isIslandExpanded ? (
                         <motion.div
@@ -1520,11 +1523,28 @@ export default function App() {
                           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                           exit={{ opacity: 0, y: -3, filter: "blur(2px)" }}
                           transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
-                          data-tauri-drag-region
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsIslandExpanded((prev) => !prev);
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            void ensureWorkstation();
+                          }}
+                          title="Click to expand island menu • Double-click to restore workstation window"
+                          data-no-drag
                         >
-                          <span className="dynamic-island-title">Severus</span>
+                          <span className="dynamic-island-title" data-no-drag>Severus</span>
                           {stravaStats && (
-                            <span className="dynamic-island-metric-chip" title="Weekly Mileage">
+                            <span
+                              className="dynamic-island-metric-chip"
+                              title="Weekly Mileage • Click to open Running Mode"
+                              data-no-drag
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRunningModeOpen(true);
+                              }}
+                            >
                               {stravaStats.weeklyMileageKm.toFixed(1)} km
                             </span>
                           )}
@@ -1537,6 +1557,7 @@ export default function App() {
                           animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
                           exit={{ opacity: 0, scale: 0.98, filter: "blur(2px)" }}
                           transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                          data-no-drag
                         >
                           {[
                             { label: "Severus", id: "home" },
@@ -1552,7 +1573,9 @@ export default function App() {
                                 key={item.id}
                                 type="button"
                                 className={`dynamic-island-nav-link ${isActive ? "active" : ""}`}
-                                onClick={() => {
+                                data-no-drag
+                                onClick={(e) => {
+                                  e.stopPropagation();
                                   if (item.id === "running") {
                                     setRunningModeOpen(true);
                                     setIsIslandExpanded(false);
@@ -1579,9 +1602,17 @@ export default function App() {
                   </div>
 
                   {/* Right: Audio Wavebars & Action Controls */}
-                  <div className="dynamic-island-actions">
+                  <div className="dynamic-island-actions" data-no-drag>
                     {listeningActive && (
-                      <div className="island-audio-wavebars" title="Hands-free listening active">
+                      <div
+                        className="island-audio-wavebars"
+                        title="Hands-free listening active • Click to mute"
+                        data-no-drag
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleListening(undefined, true);
+                        }}
+                      >
                         <span className="island-wavebar bar-1" />
                         <span className="island-wavebar bar-2" />
                         <span className="island-wavebar bar-3" />
@@ -1590,7 +1621,11 @@ export default function App() {
                     <button
                       type="button"
                       className={`dynamic-island-btn ${listeningActive ? "active" : ""}`}
-                      onClick={() => handleToggleListening(undefined, true)}
+                      data-no-drag
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleListening(undefined, true);
+                      }}
                       title={
                         listeningActive
                           ? `Listening Active (Click to mute / ${MOD_KEY}+Shift+M)`
@@ -1604,13 +1639,30 @@ export default function App() {
                       <button
                         type="button"
                         className="dynamic-island-btn"
-                        onClick={() => void handleDockToTopIsland()}
+                        data-no-drag
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDockToTopIsland();
+                        }}
                         title="Snap flush to top center"
                         aria-label="Snap flush to top center"
                       >
                         <Icon name="arrow-up" size={13} />
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="dynamic-island-btn"
+                      data-no-drag
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void ensureWorkstation();
+                      }}
+                      title="Expand Workstation window"
+                      aria-label="Expand Workstation window"
+                    >
+                      <Icon name="maximize" size={13} />
+                    </button>
                     <div
                       role="button"
                       tabIndex={0}
