@@ -135,6 +135,13 @@ Whenever starting a new project, scaffolding a workspace, or developing features
 ## Self-Learning & Directive Assimilation Protocol
 
 Severus observes work patterns across all connected IDEs, extracting candidate patterns after 3+ recurrences into `candidates.md` (T1) before promoting them to universal directives (T2) or Second Brain pillar notes (T3).
+
+## Universal Bug & Error Remediation Assimilation Protocol
+
+Whenever an error, defect, or bug is presented by the user or encountered during development:
+1. **Empirical Root Cause Extraction**: Severus MUST diagnose and isolate the exact root cause prior to mutating source code. Swallowing exceptions or patching symptoms without root cause verification is prohibited.
+2. **Defect & Anti-Pattern Assimilation**: Log resolved defects in `journal/YYYY-MM-DD.md` and append recurring anti-patterns to `candidates.md` to prevent recurrence across sessions.
+3. **Pre-Execution Defensive Check**: Evaluate proposed changes against known anti-patterns before execution, and run automated build/test verifications to ensure zero regressions.
 <!-- severus:learned:end -->
 
 

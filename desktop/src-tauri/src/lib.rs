@@ -110,11 +110,36 @@ fn get_voice_audio(paths: State<Paths>, name: String) -> Result<String, String> 
     Ok(format!("data:audio/mp3;base64,{}", b64))
 }
 
+pub const TRAY_CLICK_EVENT: &'static str = "severus:open-workstation";
+
+pub fn tray_click_emitted_event(action: &str) -> Option<&'static str> {
+    match action {
+        "show" | "maximize" | "left_click" => Some(TRAY_CLICK_EVENT),
+        _ => None,
+    }
+}
+
+pub fn calculate_floating_mode_dimensions(floating: bool) -> (f64, f64) {
+    if floating {
+        (780.0, 110.0)
+    } else {
+        (1280.0, 820.0)
+    }
+}
+
+pub fn calculate_window_restore_bounds(_center: bool) -> (f64, f64, bool) {
+    (1280.0, 820.0, true)
+}
+
 #[tauri::command]
 fn restore_window(window: tauri::Window) -> Result<(), String> {
-    let _ = window.unminimize();
-    let _ = window.show();
-    let _ = window.maximize();
+    let (width, height, unhide) = calculate_window_restore_bounds(true);
+    if unhide {
+        let _ = window.unminimize();
+        let _ = window.show();
+    }
+    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+    let _ = window.center();
     let _ = window.set_focus();
     Ok(())
 }
@@ -133,14 +158,15 @@ pub struct PhysicalCoordinates {
 
 #[tauri::command]
 fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String> {
+    let (width, height) = calculate_floating_mode_dimensions(floating);
     if floating {
         let _ = window.set_fullscreen(false);
         let _ = window.unmaximize();
-        let _ = window.set_size(tauri::LogicalSize::new(780.0, 110.0));
+        let _ = window.set_size(tauri::LogicalSize::new(width, height));
         let _ = window.set_always_on_top(true);
     } else {
         let _ = window.set_always_on_top(false);
-        let _ = window.set_size(tauri::LogicalSize::new(1360.0, 860.0));
+        let _ = window.set_size(tauri::LogicalSize::new(width, height));
         let _ = window.center();
         let _ = window.maximize();
         let _ = window.set_focus();

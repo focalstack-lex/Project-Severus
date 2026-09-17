@@ -5,9 +5,9 @@ export interface CandidateItem {
   id: string;
   category: string;
   pattern: string;
-  recurrence: string; // e.g. "3/3" or "2/3"
-  source: string; // e.g. "Antigravity IDE", "ZCode"
-  status: "active" | "promoted";
+  recurrence: string; // e.g. "3/3", "2/3", or "T3 Node"
+  source: string; // e.g. "Antigravity IDE", "Second Brain Graph"
+  status: "active" | "promoted" | "node";
   tier: "T1" | "T2" | "T3";
   targetPath: string;
   evidence?: string;
@@ -20,6 +20,126 @@ interface Props {
 }
 
 const SAMPLE_LEARNING_ITEMS: CandidateItem[] = [
+  {
+    id: "N-001",
+    category: "Graph Node",
+    pattern: "Self-Learning Protocol (Second Brain Node)",
+    recurrence: "T3 Node",
+    source: "Second Brain Graph",
+    status: "node",
+    tier: "T3",
+    targetPath: "second-brain/notes/Self-Learning Protocol.md",
+    evidence: "Autonomous observation & candidate pattern extraction pipeline note linked to The Glorious Evolution.",
+    date: "2026-09-17",
+  },
+  {
+    id: "N-002",
+    category: "Graph Node",
+    pattern: "Security-First Deployment Gate (Second Brain Node)",
+    recurrence: "T3 Node",
+    source: "Second Brain Graph",
+    status: "node",
+    tier: "T3",
+    targetPath: "second-brain/notes/Security-First Deployment Gate.md",
+    evidence: "Pre-release security gate specification note linked to Glorious Evolution & Zero Hallucination.",
+    date: "2026-09-17",
+  },
+  {
+    id: "N-003",
+    category: "Graph Node",
+    pattern: "Severus Development Process (Second Brain Node)",
+    recurrence: "T3 Node",
+    source: "Second Brain Graph",
+    status: "node",
+    tier: "T3",
+    targetPath: "second-brain/notes/Severus Development Process.md",
+    evidence: "Universal multi-editor workflow directive note linked to Glorious Evolution & Session Journaling.",
+    date: "2026-09-17",
+  },
+  {
+    id: "N-004",
+    category: "Graph Node",
+    pattern: "Slash Command Secure (Second Brain Node)",
+    recurrence: "T3 Node",
+    source: "Second Brain Graph",
+    status: "node",
+    tier: "T3",
+    targetPath: "second-brain/notes/Slash Command Secure.md",
+    evidence: "Provisioned /secure slash command skill documentation node.",
+    date: "2026-09-17",
+  },
+  {
+    id: "N-007",
+    category: "Academic",
+    pattern: "DSP Discrete Transforms (Second Brain Node)",
+    recurrence: "T3 Node",
+    source: "Second Brain Graph",
+    status: "node",
+    tier: "T3",
+    targetPath: "second-brain/notes/DSP Discrete Transforms.md",
+    evidence: "Closed overdue 2026-09-14 DSP milestone: DFT/DCT/FFT mathematical foundations & spaced-repetition review cards.",
+    date: "2026-09-17",
+  },
+  {
+    id: "N-006",
+    category: "Graph Node",
+    pattern: "Error Prevention Protocol (Second Brain Node)",
+    recurrence: "T3 Node",
+    source: "Second Brain Graph",
+    status: "node",
+    tier: "T3",
+    targetPath: "second-brain/notes/Error Prevention Protocol.md",
+    evidence: "System-wide defect assimilation & empirical root cause prevention note linked to Glorious Evolution.",
+    date: "2026-09-17",
+  },
+  {
+    id: "P-008",
+    category: "Remediation",
+    pattern: "Universal Bug & Error Remediation Assimilation Protocol",
+    recurrence: "3/3",
+    source: "Workspace / User",
+    status: "promoted",
+    tier: "T2",
+    targetPath: ".agents/rules/error_prevention_protocol.md",
+    evidence: "Empirical root cause extraction, journal logging, and defensive pre-execution verification against defect recurrence.",
+    date: "2026-09-17",
+  },
+  {
+    id: "N-005",
+    category: "Graph Node",
+    pattern: "Impeccable Design Skills (Second Brain Node)",
+    recurrence: "T3 Node",
+    source: "Second Brain Graph",
+    status: "node",
+    tier: "T3",
+    targetPath: "second-brain/notes/impeccable_design_skills.md",
+    evidence: "Frontend UI/UX design intelligence & token architecture skill note.",
+    date: "2026-09-17",
+  },
+  {
+    id: "P-005",
+    category: "Architecture",
+    pattern: "Central Hub Node Celestial Saturn Orbital Ring Styling",
+    recurrence: "3/3",
+    source: "Antigravity IDE",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "desktop/src/components/GraphView.tsx",
+    evidence: "The Glorious Evolution central node styled with specular core & orbital wireframe rings.",
+    date: "2026-09-17",
+  },
+  {
+    id: "P-006",
+    category: "UI/UX",
+    pattern: "Minimalist Floating Glass Capsule Dock for Tags",
+    recurrence: "3/3",
+    source: "Antigravity IDE",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "desktop/src/styles.css",
+    evidence: "Tag filter bar wraps into multi-line glass dock without horizontal cut-off.",
+    date: "2026-09-17",
+  },
   {
     id: "P-004",
     category: "Meta-Learning",
@@ -69,47 +189,34 @@ const SAMPLE_LEARNING_ITEMS: CandidateItem[] = [
     date: "2026-09-17",
   },
   {
-    id: "P-005",
-    category: "Architecture",
-    pattern: "Central Hub Node Celestial Saturn Orbital Ring Styling",
-    recurrence: "2/3",
-    source: "Antigravity IDE",
+    id: "P-007",
+    category: "Window Shell",
+    pattern: "Borderless Dynamic Island Frameless Transparency Shell",
+    recurrence: "1/3",
+    source: "Tauri / Antigravity",
     status: "active",
     tier: "T1",
-    targetPath: "desktop/src/components/GraphView.tsx",
-    evidence: "The Glorious Evolution central node styled with specular core & orbital wireframe rings.",
-    date: "2026-09-17",
-  },
-  {
-    id: "P-006",
-    category: "UI/UX",
-    pattern: "Minimalist Floating Glass Capsule Dock for Tags",
-    recurrence: "2/3",
-    source: "Antigravity IDE",
-    status: "active",
-    tier: "T1",
-    targetPath: "desktop/src/styles.css",
-    evidence: "Tag filter bar wraps into multi-line glass dock without horizontal cut-off.",
+    targetPath: "desktop/src-tauri/tauri.conf.json",
+    evidence: "Fixed rectangular DWM border by setting min dimensions 0 & shadow false.",
     date: "2026-09-17",
   },
 ];
 
-export default function LearningHistoryModal({ isOpen, onClose }: Props) {
-  const [filterTab, setFilterTab] = useState<"all" | "active" | "promoted">("all");
-  const [searchQuery, setSearchQuery] = useState("");
+export function isCandidateEligibleForPromotion(item: CandidateItem): boolean {
+  if (item.tier === "T3" || item.status === "node" || item.status === "promoted") return false;
+  return item.recurrence === "3/3";
+}
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isOpen) return;
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
-  const filteredItems = SAMPLE_LEARNING_ITEMS.filter((item) => {
+export function filterLearningItems(
+  items: CandidateItem[],
+  filterTab: "all" | "t1" | "t2" | "t3" | "node" | "active" | "promoted",
+  searchQuery = ""
+): CandidateItem[] {
+  return items.filter((item) => {
+    if (filterTab === "t1" && item.tier !== "T1") return false;
+    if (filterTab === "t2" && item.tier !== "T2") return false;
+    if (filterTab === "t3" && item.tier !== "T3") return false;
+    if (filterTab === "node" && item.status !== "node") return false;
     if (filterTab === "active" && item.status !== "active") return false;
     if (filterTab === "promoted" && item.status !== "promoted") return false;
     if (searchQuery.trim()) {
@@ -123,6 +230,24 @@ export default function LearningHistoryModal({ isOpen, onClose }: Props) {
     }
     return true;
   });
+}
+
+export default function LearningHistoryModal({ isOpen, onClose }: Props) {
+  const [filterTab, setFilterTab] = useState<"all" | "t1" | "t2" | "t3" | "node">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const filteredItems = filterLearningItems(SAMPLE_LEARNING_ITEMS, filterTab, searchQuery);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -135,7 +260,7 @@ export default function LearningHistoryModal({ isOpen, onClose }: Props) {
             <div>
               <h2>Severus Learning History & Directive Audit</h2>
               <p className="modal-subtitle">
-                Observations, T1 candidate patterns, and promoted universal directives across all connected IDEs
+                Observations, T1 candidate patterns, promoted directives, and newly indexed Second Brain nodes
               </p>
             </div>
           </div>
@@ -151,21 +276,35 @@ export default function LearningHistoryModal({ isOpen, onClose }: Props) {
               className={`learning-tab ${filterTab === "all" ? "active" : ""}`}
               onClick={() => setFilterTab("all")}
             >
-              All Patterns ({SAMPLE_LEARNING_ITEMS.length})
+              All ({SAMPLE_LEARNING_ITEMS.length})
             </button>
             <button
               type="button"
-              className={`learning-tab ${filterTab === "active" ? "active" : ""}`}
-              onClick={() => setFilterTab("active")}
+              className={`learning-tab ${filterTab === "t1" ? "active" : ""}`}
+              onClick={() => setFilterTab("t1")}
             >
-              Active Candidates T1 ({SAMPLE_LEARNING_ITEMS.filter((i) => i.status === "active").length})
+              T1 Buffer ({SAMPLE_LEARNING_ITEMS.filter((i) => i.tier === "T1").length})
             </button>
             <button
               type="button"
-              className={`learning-tab ${filterTab === "promoted" ? "active" : ""}`}
-              onClick={() => setFilterTab("promoted")}
+              className={`learning-tab ${filterTab === "t2" ? "active" : ""}`}
+              onClick={() => setFilterTab("t2")}
             >
-              Promoted Directives T2/T3 ({SAMPLE_LEARNING_ITEMS.filter((i) => i.status === "promoted").length})
+              T2 Directives ({SAMPLE_LEARNING_ITEMS.filter((i) => i.tier === "T2").length})
+            </button>
+            <button
+              type="button"
+              className={`learning-tab ${filterTab === "t3" ? "active" : ""}`}
+              onClick={() => setFilterTab("t3")}
+            >
+              T3 Pillar Notes ({SAMPLE_LEARNING_ITEMS.filter((i) => i.tier === "T3").length})
+            </button>
+            <button
+              type="button"
+              className={`learning-tab ${filterTab === "node" ? "active" : ""}`}
+              onClick={() => setFilterTab("node")}
+            >
+              Recent Nodes ({SAMPLE_LEARNING_ITEMS.filter((i) => i.status === "node").length})
             </button>
           </div>
 
@@ -190,7 +329,12 @@ export default function LearningHistoryModal({ isOpen, onClose }: Props) {
                 </div>
                 <div className="learning-badges">
                   <span className={`badge-tier badge-${item.tier.toLowerCase()}`}>
-                    {item.tier} {item.status === "promoted" ? "Directive" : `Candidate [${item.recurrence}]`}
+                    {item.tier}{" "}
+                    {item.status === "node"
+                      ? "Graph Node"
+                      : item.status === "promoted"
+                        ? "Directive"
+                        : `Candidate [${item.recurrence}]`}
                   </span>
                   <span className="badge-category">{item.category}</span>
                 </div>

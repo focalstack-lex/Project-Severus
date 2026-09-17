@@ -49,10 +49,17 @@ export type IconName =
   | "search"
   | "send"
   | "spark"
+  | "tag"
   | "volume"
   | "waveform";
 
 const PATHS: Record<IconName, React.ReactNode> = {
+  tag: (
+    <>
+      <path d="M20.5 11.5 12.5 3.5H4.5v8l8 8 8-8z" />
+      <circle cx="7.5" cy="6.5" r="1.5" fill="currentColor" />
+    </>
+  ),
   activity: <path d="M3 12h4l3-8 4 16 3-8h4" />,
   alert: (
     <>
