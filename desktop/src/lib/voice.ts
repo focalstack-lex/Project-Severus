@@ -340,41 +340,49 @@ export function getScriptForSound(soundName: string): string {
   return formatReplyWithSir(withoutExt.replace(/[\._\-]/g, " ").trim());
 }
 
-async function playElevenLabsPhrase(
+async function playVoiceboxPhrase(
   phrase: string,
-  config: ElevenLabsConfig,
+  config: VoiceboxConfig,
 ): Promise<boolean> {
-  const cleanKey = config.apiKey?.trim().replace(/^["']|["']$/g, "");
-  const voiceId = config.voiceId?.trim().replace(/^["']|["']$/g, "");
-  if (!cleanKey || !voiceId) return false;
+  const baseUrl = (config.baseUrl || "http://127.0.0.1:17493").replace(/\/+$/, "");
+  const profileId = config.profileId || config.voiceId || "default";
 
-  const cacheKey = `${voiceId}_${phrase}`;
+  const cacheKey = `${baseUrl}_${profileId}_${phrase}`;
   let audioUrl = elevenAudioCache.get(cacheKey);
 
   if (!audioUrl) {
     try {
-      const modelId = config.modelId || "eleven_flash_v2_5";
-      const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+      // 1. Try Voicebox /generate endpoint first
+      let res = await fetch(`${baseUrl}/generate`, {
         method: "POST",
         headers: {
-          "xi-api-key": cleanKey,
           "Content-Type": "application/json",
-          Accept: "audio/mpeg",
+          ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
         },
         body: JSON.stringify({
           text: phrase,
-          model_id: modelId,
-          voice_settings: {
-            stability: 0.52,
-            similarity_boost: 0.85,
-            style: 0.0,
-            use_speaker_boost: true,
-          },
+          profile_id: profileId,
         }),
-      });
+      }).catch(() => null);
 
-      if (!res.ok) {
-        console.warn(`[VoiceManager] ElevenLabs TTS returned ${res.status} for '${phrase}', using local voice fallback.`);
+      // 2. Try OpenAI-compatible /v1/audio/speech endpoint if /generate is unavailable
+      if (!res || !res.ok) {
+        res = await fetch(`${baseUrl}/v1/audio/speech`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+          },
+          body: JSON.stringify({
+            input: phrase,
+            voice: profileId,
+            model: "tts-1",
+          }),
+        }).catch(() => null);
+      }
+
+      if (!res || !res.ok) {
+        console.warn(`[VoiceManager] Voicebox local TTS returned error for '${phrase}', using local voice fallback.`);
         return false;
       }
 
@@ -382,7 +390,7 @@ async function playElevenLabsPhrase(
       audioUrl = URL.createObjectURL(blob);
       elevenAudioCache.set(cacheKey, audioUrl);
     } catch (err) {
-      console.warn(`[VoiceManager] ElevenLabs network error for '${phrase}', using local voice fallback:`, err);
+      console.warn(`[VoiceManager] Voicebox server network error for '${phrase}', using local voice fallback:`, err);
       return false;
     }
   }
@@ -422,7 +430,7 @@ async function playElevenLabsPhrase(
   } catch (err) {
     isSpeakingVoice = false;
     lastPlaybackEndTime = Date.now();
-    console.warn(`[VoiceManager] Failed playing ElevenLabs audio for '${phrase}':`, err);
+    console.warn(`[VoiceManager] Failed playing Voicebox audio for '${phrase}':`, err);
     return false;
   }
 }
@@ -479,14 +487,13 @@ export async function playVoice(soundName: string): Promise<void> {
   const phrase = getScriptForSound(soundName);
   recordSpokenPhrase(phrase);
 
-  // 1. If ElevenLabs is configured and enabled, speak dynamically via ElevenLabs Neural Voice
-  const elevenConfig = loadElevenLabsConfig();
+  // 1. If Voicebox is configured and enabled, speak dynamically via Voicebox Local AI Engine
+  const voiceboxCfg = loadVoiceboxConfig();
   if (
-    elevenConfig.enabled !== false &&
-    elevenConfig.apiKey?.trim() &&
-    elevenConfig.voiceId?.trim()
+    voiceboxCfg.enabled !== false &&
+    voiceboxCfg.baseUrl?.trim()
   ) {
-    const success = await playElevenLabsPhrase(phrase, elevenConfig);
+    const success = await playVoiceboxPhrase(phrase, voiceboxCfg);
     if (success) return;
   }
 
@@ -498,28 +505,31 @@ export async function playTimeGreeting(): Promise<void> {
   if (getVoiceMuted()) return;
   const greetingData = getTimeGreetingData();
 
-  // 1. If ElevenLabs is configured and enabled, speak tailored time greeting
-  const elevenConfig = loadElevenLabsConfig();
+  // 1. If Voicebox is configured and enabled, speak tailored time greeting
+  const voiceboxCfg = loadVoiceboxConfig();
   if (
-    elevenConfig.enabled !== false &&
-    elevenConfig.apiKey?.trim() &&
-    elevenConfig.voiceId?.trim()
+    voiceboxCfg.enabled !== false &&
+    voiceboxCfg.baseUrl?.trim()
   ) {
     recordSpokenPhrase(greetingData.extendedScript);
-    const success = await playElevenLabsPhrase(greetingData.extendedScript, elevenConfig);
+    const success = await playVoiceboxPhrase(greetingData.extendedScript, voiceboxCfg);
     if (success) return;
   }
 
-  // 2. Fall back to local hardcoded MP3 if ElevenLabs is unconfigured or offline
+  // 2. Fall back to local hardcoded MP3 if Voicebox is unconfigured or offline
   await playLocalVoiceFallback(greetingData.soundFile);
 }
 
-export interface ElevenLabsConfig {
-  apiKey?: string;
+export interface VoiceboxConfig {
+  baseUrl?: string;
+  profileId?: string;
   voiceId?: string;
+  apiKey?: string;
   modelId?: string;
   enabled?: boolean;
 }
+
+export type ElevenLabsConfig = VoiceboxConfig;
 
 export interface VoicePreset {
   id: string;
@@ -531,121 +541,110 @@ export interface VoicePreset {
 
 export const FREE_PREMADE_VOICES: VoicePreset[] = [
   {
-    id: "JBFqnCBsd6RMkjVDRZzb",
-    name: "George",
-    category: "premade",
-    accent: "British Male",
-    description: "Warm, captivating British storyteller. Deep raspy tone closest to Severus (Free Tier API allowed).",
+    id: "default",
+    name: "Voicebox Default (Local)",
+    category: "custom",
+    accent: "Neural Local",
+    description: "Default voice profile running on your local Voicebox engine (http://127.0.0.1:17493).",
   },
   {
-    id: "onwK4e9ZLuTAKqWW03F9",
-    name: "Daniel",
-    category: "premade",
+    id: "severus",
+    name: "Severus Snape (Local Clone)",
+    category: "cloned",
     accent: "Deep British Male",
-    description: "Deep, authoritative and articulate British broadcaster (Free Tier API allowed).",
-  },
-  {
-    id: "nPczCjzI2devNBz1zQrb",
-    name: "Brian",
-    category: "premade",
-    accent: "Deep Male Narrator",
-    description: "Resonant, deep male narration voice (Free Tier API allowed).",
-  },
-  {
-    id: "IKne3meq5aSn9XLyUdCD",
-    name: "Charlie",
-    category: "premade",
-    accent: "Deep Male",
-    description: "Deep, confident male cadence (Free Tier API allowed).",
-  },
-  {
-    id: "CwhRBWXzGAHq8TQ4Fs17",
-    name: "Roger",
-    category: "premade",
-    accent: "Classy Male",
-    description: "Laid-back, classy resonant male (Free Tier API allowed).",
-  },
-  {
-    id: "N2lVS1w4EtoT3dr4eOWO",
-    name: "Callum",
-    category: "premade",
-    accent: "Husky Male",
-    description: "Intense, husky male tone (Free Tier API allowed).",
+    description: "Cloned Severus voice profile running on local Voicebox server.",
   },
 ];
 
-const ELEVENLABS_STORAGE_KEY = "severus_elevenlabs_config";
+export const VOICEBOX_STORAGE_KEY = "severus_voicebox_config";
+export const ELEVENLABS_STORAGE_KEY = "severus_elevenlabs_config";
 
-export function loadElevenLabsConfig(): ElevenLabsConfig {
+export function loadVoiceboxConfig(): VoiceboxConfig {
   try {
-    const raw = localStorage.getItem(ELEVENLABS_STORAGE_KEY);
+    const raw = localStorage.getItem(VOICEBOX_STORAGE_KEY) || localStorage.getItem(ELEVENLABS_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : {};
     const metaEnv = (import.meta as any).env || {};
     return {
-      apiKey: parsed.apiKey || metaEnv.VITE_ELEVENLABS_API_KEY || "",
-      voiceId: parsed.voiceId || metaEnv.VITE_ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb",
-      modelId: parsed.modelId || metaEnv.VITE_ELEVENLABS_MODEL_ID || "eleven_flash_v2_5",
+      baseUrl: parsed.baseUrl || metaEnv.VITE_VOICEBOX_BASE_URL || "http://127.0.0.1:17493",
+      profileId: parsed.profileId || parsed.voiceId || metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
+      voiceId: parsed.profileId || parsed.voiceId || metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
+      apiKey: parsed.apiKey || metaEnv.VITE_VOICEBOX_API_KEY || "",
       enabled: parsed.enabled !== false,
     };
   } catch {
     const metaEnv = (import.meta as any).env || {};
     return {
-      apiKey: metaEnv.VITE_ELEVENLABS_API_KEY || "",
-      voiceId: metaEnv.VITE_ELEVENLABS_VOICE_ID || "JBFqnCBsd6RMkjVDRZzb",
-      modelId: metaEnv.VITE_ELEVENLABS_MODEL_ID || "eleven_flash_v2_5",
+      baseUrl: metaEnv.VITE_VOICEBOX_BASE_URL || "http://127.0.0.1:17493",
+      profileId: metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
+      voiceId: metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
+      apiKey: metaEnv.VITE_VOICEBOX_API_KEY || "",
       enabled: true,
     };
   }
 }
 
-export function saveElevenLabsConfig(cfg: ElevenLabsConfig): void {
+export const loadElevenLabsConfig = loadVoiceboxConfig;
+
+export function saveVoiceboxConfig(cfg: VoiceboxConfig): void {
   try {
+    localStorage.setItem(VOICEBOX_STORAGE_KEY, JSON.stringify(cfg));
     localStorage.setItem(ELEVENLABS_STORAGE_KEY, JSON.stringify(cfg));
   } catch (err) {
-    console.error("Failed saving ElevenLabs config:", err);
+    console.error("Failed saving Voicebox config:", err);
   }
 }
 
-export async function fetchElevenLabsVoices(
-  apiKey: string,
+export const saveElevenLabsConfig = saveVoiceboxConfig;
+
+export async function fetchVoiceboxProfiles(
+  baseUrlOverride?: string,
 ): Promise<VoicePreset[]> {
-  const cleanKey = apiKey.trim().replace(/^["']|["']$/g, "");
-  if (!cleanKey) return FREE_PREMADE_VOICES;
+  const cfg = loadVoiceboxConfig();
+  const baseUrl = (baseUrlOverride || cfg.baseUrl || "http://127.0.0.1:17493").replace(/\/+$/, "");
 
   try {
-    const res = await fetch("https://api.elevenlabs.io/v1/voices", {
-      headers: {
-        "xi-api-key": cleanKey,
-      },
-    });
-    if (!res.ok) return FREE_PREMADE_VOICES;
-    const data = await res.json();
-    if (Array.isArray(data.voices)) {
-      return data.voices.map((v: any) => ({
-        id: v.voice_id,
-        name: v.name,
-        category: (v.category as any) || "premade",
-        accent: v.labels?.accent || v.labels?.gender || "",
-        description: v.labels?.description || v.labels?.use_case || v.category || "",
-      }));
+    let res = await fetch(`${baseUrl}/profiles`, {
+      headers: cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {},
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      res = await fetch(`${baseUrl}/v1/models`).catch(() => null);
     }
-    return FREE_PREMADE_VOICES;
-  } catch {
-    return FREE_PREMADE_VOICES;
+
+    if (res && res.ok) {
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : data.profiles || data.data || [];
+      if (Array.isArray(list) && list.length > 0) {
+        return list.map((p: any) => ({
+          id: p.id || p.profile_id || p.name || "default",
+          name: p.name || p.id || "Voicebox Profile",
+          category: "custom" as const,
+          accent: p.engine || p.language || "Local AI",
+          description: p.description || p.model || "Local Voicebox Voice Profile",
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn("[Voicebox] Profile fetch failed:", err);
   }
+
+  return FREE_PREMADE_VOICES;
 }
 
-export async function speakWithElevenLabs(
+export const fetchElevenLabsVoices = fetchVoiceboxProfiles;
+
+export async function speakWithVoicebox(
   text: string,
-  config: ElevenLabsConfig,
+  config: VoiceboxConfig,
   onStart?: () => void,
   onEnd?: () => void,
 ): Promise<boolean> {
-  const cleanKey = config.apiKey?.trim().replace(/^["']|["']$/g, "");
-  const voiceId = config.voiceId?.trim().replace(/^["']|["']$/g, "");
-  if (!cleanKey || !voiceId || config.enabled === false) {
+  if (config.enabled === false) {
     return false;
   }
+
+  const baseUrl = (config.baseUrl || "http://127.0.0.1:17493").replace(/\/+$/, "");
+  const profileId = config.profileId || config.voiceId || "default";
 
   const clean = text
     .replace(/```[\s\S]*?```/g, "Code block omitted.")
@@ -664,46 +663,41 @@ export async function speakWithElevenLabs(
   try {
     recordSpokenPhrase(clean);
 
-    const modelId = config.modelId || "eleven_flash_v2_5";
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
+    let res = await fetch(`${baseUrl}/generate`, {
       method: "POST",
       headers: {
-        "xi-api-key": cleanKey,
         "Content-Type": "application/json",
-        Accept: "audio/mpeg",
+        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       },
       body: JSON.stringify({
         text: clean,
-        model_id: modelId,
-        voice_settings: {
-          stability: 0.52,
-          similarity_boost: 0.85,
-          style: 0.0,
-          use_speaker_boost: true,
-        },
+        profile_id: profileId,
       }),
-    });
+    }).catch(() => null);
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      let detail = errText;
-      try {
-        const json = JSON.parse(errText);
-        detail = json.detail?.message || json.detail?.status || json.message || errText;
-      } catch {
-        // Ignored
-      }
-      console.warn(`[ElevenLabs] TTS returned HTTP ${res.status}: ${detail}`);
+    if (!res || !res.ok) {
+      res = await fetch(`${baseUrl}/v1/audio/speech`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          input: clean,
+          voice: profileId,
+          model: "tts-1",
+        }),
+      }).catch(() => null);
+    }
+
+    if (!res || !res.ok) {
+      console.warn(`[Voicebox] Local TTS returned error for '${clean}'`);
       if (typeof window !== "undefined") {
-        let msg = `ElevenLabs HTTP ${res.status}`;
-        if (res.status === 401) msg = "ElevenLabs: Invalid API Key (401)";
-        else if (res.status === 402)
-          msg =
-            "ElevenLabs Free Tier (402): Library & cloned voices require paid plan. Switch to a Premade voice (e.g. George) in Voice Settings.";
-        else if (res.status === 403) msg = "ElevenLabs: Key Permission Denied (403) — set Text to Speech to Access";
-        else if (res.status === 404) msg = `ElevenLabs: Voice ID '${voiceId}' not found (404)`;
-        else if (res.status === 429) msg = "ElevenLabs: Quota / Rate limit reached (429)";
-        window.dispatchEvent(new CustomEvent("severus-toast", { detail: `${msg} — using local voice fallback.` }));
+        window.dispatchEvent(
+          new CustomEvent("severus-toast", {
+            detail: `Voicebox server unavailable at ${baseUrl}. Ensure jamiepine/voicebox is running.`,
+          }),
+        );
       }
       return false;
     }
@@ -722,6 +716,7 @@ export async function speakWithElevenLabs(
     }
 
     isSpeakingVoice = true;
+    startSpeechFrameLoop();
     const audio = new Audio(objectUrl);
     activeAudio = audio;
 
@@ -745,11 +740,11 @@ export async function speakWithElevenLabs(
     await audio.play();
     return true;
   } catch (err) {
-    console.warn("[ElevenLabs] Failed streaming audio:", err);
+    console.warn("[Voicebox] Failed streaming audio:", err);
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("severus-toast", {
-          detail: `ElevenLabs connection error (${String(err)}) — using local voice.`,
+          detail: `Voicebox connection error (${String(err)}) — using local voice fallback.`,
         }),
       );
     }
@@ -757,89 +752,65 @@ export async function speakWithElevenLabs(
   }
 }
 
-export async function testElevenLabsVoice(
-  config: ElevenLabsConfig,
+export const speakWithElevenLabs = speakWithVoicebox;
+
+export async function testVoiceboxConnection(
+  config: VoiceboxConfig,
 ): Promise<{ ok: boolean; message: string }> {
-  const cleanKey = config.apiKey?.trim().replace(/^["']|["']$/g, "");
-  const voiceId = config.voiceId?.trim().replace(/^["']|["']$/g, "");
-  if (!cleanKey) {
-    return { ok: false, message: "Please enter your ElevenLabs API Key." };
-  }
-  if (!voiceId) {
-    return { ok: false, message: "Please enter your ElevenLabs Voice ID." };
-  }
+  const baseUrl = (config.baseUrl || "http://127.0.0.1:17493").replace(/\/+$/, "");
 
   try {
-    const modelId = config.modelId || "eleven_flash_v2_5";
-    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
-      method: "POST",
-      headers: {
-        "xi-api-key": cleanKey,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text: "A remarkable development, Sir. ElevenLabs neural voice synthesis is operational.",
-        model_id: modelId,
-        voice_settings: {
-          stability: 0.52,
-          similarity_boost: 0.85,
-          style: 0.0,
-          use_speaker_boost: true,
-        },
-      }),
-    });
+    const healthRes = await fetch(`${baseUrl}/health`).catch(() => null);
+    if (healthRes && healthRes.ok) {
+      const genRes = await fetch(`${baseUrl}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: "Voicebox connection verified, Sir.", profile_id: config.profileId || "default" }),
+      }).catch(() => null);
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      let detail = errText;
-      try {
-        const json = JSON.parse(errText);
-        detail = json.detail?.message || json.detail?.status || json.message || errText;
-      } catch {
-        // Ignored
+      if (genRes && genRes.ok) {
+        const blob = await genRes.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const audio = new Audio(objectUrl);
+        await audio.play();
+        return { ok: true, message: "Connected! Voicebox local AI engine verified and audio played." };
       }
-      if (res.status === 401) {
-        return { ok: false, message: "Invalid ElevenLabs API Key (401 Unauthorized)." };
-      }
-      if (res.status === 402) {
-        return {
-          ok: false,
-          message:
-            "HTTP 402: ElevenLabs Free Tier accounts cannot use Community Library voices or custom clones via the API. Select a Free Premade Voice below (e.g., George: JBFqnCBsd6RMkjVDRZzb) or upgrade to ElevenLabs Starter.",
-        };
-      }
-      if (res.status === 403) {
-        return {
-          ok: false,
-          message: "Permission Denied (403): In ElevenLabs, set 'Text to Speech' to 'Access' or toggle off 'Restrict Key'.",
-        };
-      }
-      if (res.status === 404) {
-        return { ok: false, message: `Voice ID '${voiceId}' not found (404). Check that the Voice ID was copied correctly.` };
-      }
-      return { ok: false, message: `ElevenLabs returned HTTP ${res.status}: ${detail}` };
+      return { ok: true, message: `Connected to Voicebox server at ${baseUrl}!` };
     }
 
-    const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
-    const audio = new Audio(objectUrl);
-    await audio.play();
-    return { ok: true, message: "Connected! ElevenLabs voice verified and audio played." };
+    const speechRes = await fetch(`${baseUrl}/v1/audio/speech`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: "Voicebox connection verified, Sir.", voice: config.profileId || "default" }),
+    }).catch(() => null);
+
+    if (speechRes && speechRes.ok) {
+      const blob = await speechRes.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const audio = new Audio(objectUrl);
+      await audio.play();
+      return { ok: true, message: "Connected! Voicebox speech endpoint verified." };
+    }
+
+    return {
+      ok: false,
+      message: `Unable to connect to Voicebox at ${baseUrl}. Launch Voicebox (jamiepine/voicebox) to enable local AI voice.`,
+    };
   } catch (err) {
-    return { ok: false, message: `Connection error: ${String(err)}` };
+    return { ok: false, message: `Voicebox connection error: ${String(err)}` };
   }
 }
 
+export const testElevenLabsVoice = testVoiceboxConnection;
+
 /**
- * Dynamic speech synthesis: powered exclusively by ElevenLabs Neural Voice API.
- * Web Speech API synthesis has been completely removed system-wide.
+ * Dynamic speech synthesis: powered by local Voicebox AI engine (jamiepine/voicebox).
  */
 export function speakText(
   text: string,
   onStart?: () => void,
   onEnd?: () => void,
-  customElevenLabsConfig?: ElevenLabsConfig,
+  customVoiceboxConfig?: VoiceboxConfig,
 ): void {
   if (getVoiceMuted()) {
     onEnd?.();
@@ -848,14 +819,12 @@ export function speakText(
 
   const formattedText = formatReplyWithSir(text);
 
-  // ElevenLabs Neural Voice API only
-  const elevenConfig = customElevenLabsConfig || loadElevenLabsConfig();
+  const voiceboxCfg = customVoiceboxConfig || loadVoiceboxConfig();
   if (
-    elevenConfig.apiKey?.trim() &&
-    elevenConfig.voiceId?.trim() &&
-    elevenConfig.enabled !== false
+    voiceboxCfg.baseUrl?.trim() &&
+    voiceboxCfg.enabled !== false
   ) {
-    void speakWithElevenLabs(formattedText, elevenConfig, onStart, onEnd).then((success) => {
+    void speakWithVoicebox(formattedText, voiceboxCfg, onStart, onEnd).then((success) => {
       if (!success) {
         onEnd?.();
       }
@@ -863,7 +832,6 @@ export function speakText(
     return;
   }
 
-  // If ElevenLabs is unconfigured or disabled, do not speak (no robotic web voice fallback)
   onEnd?.();
 }
 

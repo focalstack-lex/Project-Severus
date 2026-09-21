@@ -35,6 +35,19 @@ documentation where the code is non-obvious, and inefficient algorithms on hot p
 - Before entering a brand-new domain or technology, pause and present a short evolution plan
   tailored to the context before diving in.
 
+## Anti-AI-Slop Directive (/antislop)
+- `/antislop` is a universal command, valid in every IDE, editor, and workspace on this machine (Antigravity, ZCode, Cursor, VS Code, Zed, Cline, and terminals).
+- On invocation, load the canonical skill at `C:\Users\User\.gemini\config\skills\antislop\SKILL.md` (or `C:\Users\User\.agents\skills\antislop\SKILL.md`) and execute its full audit against the system or web app currently being developed in the active workspace. Never reconstruct the audit from memory.
+- Report first: deliver a severity-ranked, evidence-backed report (`file:line` citations or screenshots). Never modify code, content, or design based on findings until the user explicitly requests fixes via the skill's fix contract.
+- Journal every audit and fix run per the universal journaling rules, and persist reports where the skill specifies (`reports/antislop/` in the target project).
+
+## Legal, IP & Accessibility Compliance Directive (/copyright)
+- `/copyright` is a universal command, valid in every IDE, editor, and workspace on this machine (Antigravity, ZCode, Cursor, VS Code, Zed, Cline, and terminals).
+- On invocation, load the canonical skill at `C:\Users\User\.gemini\config\skills\copyright\SKILL.md` (or `C:\Users\User\.agents\skills\copyright\SKILL.md`) and execute its full audit against the active project. Never reconstruct the audit from memory.
+- Audits 7 legal lenses: IP & Trademark Infringement, Website Accessibility (ADA Title III / WCAG 2.1 AA), Data Privacy & Cybersecurity (GDPR/CCPA/Cookies), E-Commerce Consumer Protection & Pricing Transparency, Product Liability & Safety Advisories, Anti-Spam (CAN-SPAM / TCPA), and Tax/Financial Transparency.
+- Report first: deliver a severity-ranked, evidence-backed compliance report citing exact `file:line` locations. Apply fixes only upon explicit user invocation of `/copyright fix <P0|P1|P2|P3|all>`.
+- Persist reports to `reports/copyright/` in the target project and journal every audit run per universal journaling rules.
+
 ## Environment Map
 - `Glorious_Evolution_Guide.md` — the constitution this environment was built from
 - `second-brain/` — the knowledge graph. Notes in `notes/` carry inline `#tags` and
@@ -65,7 +78,9 @@ See canonical profile: `USER_KNOWLEDGE_BASE.md` and note: `second-brain/notes/Le
   - *"Don't change my structure"*: When fixing or modifying existing code, change only what is necessary and preserve Lex's existing structure and working features.
   - *UI/UX & Aesthetics*: Improve systems without breaking functionality. Never modify navigation unless explicitly told to. Grizz is intentionally draggable. Strictly reject generic "AI-slop" aesthetics.
   - *Strict Zero-Emoji Directive*: Never use emojis in UI components, badges, tags, buttons, menus, notifications, toasts, status indicators, code, logging, or markdown documentation across this system and all future projects. Use clean, high-precision SVG vector icons, refined typography, and precise semantic color accents instead.
+  - *Strict Zero-Em-Dash Directive*: Never introduce em-dashes (`—`) or en-dashes (`–`) in UI copy, documentation, code, comments, commit messages, journals, or conversational text. Em-dashes are an overused hallmark of unedited AI-slop. Use direct, clear punctuation (periods, commas, colons, parentheses, or single hyphens `-` for compound terms and ranges).
   - *Contextual Memory*: Distinguish information states (`current`, `historical`, `preference`, `hard_constraint`, `project`, `goal`, `routine`, `uncertain`). Never invent missing facts.
+
   - *Client Copy*: For Coffee Box, avoid the phrase "golden hour" unless explicitly requested.
   - *Photography*: Do not describe Lex as a "professional photographer" unless specifically requested.
 - **Communication**: Respectful and dignified (concluding responses with "Sir" in assistant/voice mode), clear, concise, and authentic. Adapt naturally across English, Tagalog, and Bisaya.
@@ -142,6 +157,29 @@ Whenever an error, defect, or bug is presented by the user or encountered during
 1. **Empirical Root Cause Extraction**: Severus MUST diagnose and isolate the exact root cause prior to mutating source code. Swallowing exceptions or patching symptoms without root cause verification is prohibited.
 2. **Defect & Anti-Pattern Assimilation**: Log resolved defects in `journal/YYYY-MM-DD.md` and append recurring anti-patterns to `candidates.md` to prevent recurrence across sessions.
 3. **Pre-Execution Defensive Check**: Evaluate proposed changes against known anti-patterns before execution, and run automated build/test verifications to ensure zero regressions.
+
+## Universal Omnichannel Responsiveness Directive (Mobile, Tablet, Desktop, Widescreen)
+
+Every application, website, component, dashboard, admin panel, landing page, modal, or form created or modified must be 100% responsive and tested across all viewport dimensions:
+1. **Mobile Phones**: Extra small (320px–374px) and Standard Mobile (375px–480px).
+2. **Tablets & Foldables**: Portrait & Landscape Tablets (481px–1023px).
+3. **Laptops & Standard Desktops**: 1024px–1440px.
+4. **Large Displays & Ultra-Wide Monitors**: 1440px+.
+
+**Mandatory Responsive Standards**:
+- **Fluid Layouts**: Use responsive grid breakpoints and flex direction (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`, `flex-col sm:flex-row`). Never use rigid fixed widths without `max-w-full`.
+- **Touch Target Accessibility**: All buttons, links, inputs, and steppers must meet the minimum 40x40px to 44x44px touch target standard. On mobile viewports, primary buttons should span full width (`w-full sm:w-auto`).
+- **Collapsible Navigation**: Site headers and admin sidebars must feature responsive mobile drawer/hamburger menus on smaller screens (`< lg` or `< md`).
+- **Zero Horizontal Overflow**: Prevent unwanted horizontal scrolling on the root viewport. Complex tables and matrices must have dedicated scroll wrappers (`overflow-x-auto`) or mobile card views.
+- **Responsive Typography & Spacing**: Use responsive font scales (`text-xs sm:text-sm`, `text-2xl sm:text-4xl lg:text-5xl`) and adaptive section padding (`p-4 sm:p-6 lg:p-10`).
+
+## Universal Anti-Eyebrow-Pill Directive (Zero Decorative Pill Tags above Headings)
+
+- **Zero Formulaic Eyebrow / Tag Pills**: Never place cookie-cutter rounded pill badges with mini-icons and uppercase tracked text (e.g. `[Icon] FOUNDER COMMITMENT • 22 BRANCHES` or `[Icon] In-Store Inspection`) directly hovering above main headlines in hero sections, feature blocks, or guarantee panels.
+- **Punchy Typography & Clean Visual Hierarchy**: Let headlines and subheadings command attention with confident typography, clean contrast, and direct messaging without decorative pill clutter.
+- **Functional Badge Discipline**: Reserve pill badges strictly for genuine functional micro-metadata (such as active discount tags `-15% OFF`, live status indicators `● In Stock`, or category filter chips).
 <!-- severus:learned:end -->
+
+
 
 

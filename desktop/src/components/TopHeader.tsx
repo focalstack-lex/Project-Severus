@@ -438,7 +438,7 @@ export default function TopHeader({
                         <Icon name="activity" size={13} />
                         Neural Voice
                       </span>
-                      <span className="item-sub">ElevenLabs TTS</span>
+                      <span className="item-sub">Voicebox Local TTS</span>
                     </div>
                     <span className={`toggle-pill ${voiceMuted ? "off" : "on"}`}>
                       {voiceMuted ? "Muted" : "Active"}

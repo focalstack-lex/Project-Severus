@@ -6,6 +6,7 @@ import { MapCanvas } from '../components/MapCanvas';
 import { CategoryPillBar } from '../components/CategoryPillBar';
 import { EventCapsuleDrawer } from '../components/EventCapsuleDrawer';
 import { QuickSnapModal } from '../components/QuickSnapModal';
+import { PinDetailDrawer } from '../components/PinDetailDrawer';
 import { BottomNav } from '../components/BottomNav';
 import { SpatialPin } from '../lib/mapUtils';
 import { CapsuleItem } from '../lib/categoryFilter';
@@ -14,6 +15,7 @@ export default function HomePage() {
   const [currentTab, setCurrentTab] = useState('home');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isQuickSnapOpen, setIsQuickSnapOpen] = useState(false);
+  const [selectedPin, setSelectedPin] = useState<SpatialPin | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const [pins, setPins] = useState<SpatialPin[]>([
@@ -90,7 +92,11 @@ export default function HomePage() {
           </h2>
         </div>
         <div className="h-[380px] sm:h-[450px]">
-          <MapCanvas pins={pins} selectedCategory={selectedCategory} />
+          <MapCanvas
+            pins={pins}
+            selectedCategory={selectedCategory}
+            onSelectPin={(pin) => setSelectedPin(pin)}
+          />
         </div>
       </section>
 
@@ -102,6 +108,12 @@ export default function HomePage() {
           onSelectCapsule={(item) => console.log('Selected capsule:', item)}
         />
       </section>
+
+      {/* Pin Detail Drawer */}
+      <PinDetailDrawer
+        pin={selectedPin}
+        onClose={() => setSelectedPin(null)}
+      />
 
       {/* Quick Snap Modal */}
       <QuickSnapModal

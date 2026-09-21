@@ -2,12 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { type AIConfig, testAIConnection } from "../lib/ai";
 import {
-  loadElevenLabsConfig,
-  saveElevenLabsConfig,
-  testElevenLabsVoice,
-  fetchElevenLabsVoices,
+  loadVoiceboxConfig,
+  saveVoiceboxConfig,
+  testVoiceboxConnection,
+  fetchVoiceboxProfiles,
   FREE_PREMADE_VOICES,
-  type ElevenLabsConfig,
+  type VoiceboxConfig,
   type VoicePreset,
 } from "../lib/voice";
 import {
@@ -123,8 +123,8 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
-  // ElevenLabs Voice State
-  const [elevenForm, setElevenForm] = useState<ElevenLabsConfig>(loadElevenLabsConfig);
+  // Voicebox Voice State
+  const [elevenForm, setElevenForm] = useState<VoiceboxConfig>(loadVoiceboxConfig);
   const [showElevenKey, setShowElevenKey] = useState(false);
   const [testingEleven, setTestingEleven] = useState(false);
   const [elevenTestResult, setElevenTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -336,10 +336,9 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
   }, [activeTab]);
 
   const handleFetchVoices = async () => {
-    if (!elevenForm.apiKey) return;
     setFetchingVoices(true);
     try {
-      const list = await fetchElevenLabsVoices(elevenForm.apiKey);
+      const list = await fetchVoiceboxProfiles(elevenForm.baseUrl);
       if (list.length > 0) {
         setVoices(list);
       }
@@ -378,7 +377,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
     setTestingEleven(true);
     setElevenTestResult(null);
     try {
-      const res = await testElevenLabsVoice(elevenForm);
+      const res = await testVoiceboxConnection(elevenForm);
       setElevenTestResult(res);
     } catch (err) {
       setElevenTestResult({
@@ -537,7 +536,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
       selectedMicId,
       activeDevice?.label ?? (selectedMicId ? "Selected Microphone" : "System Default Microphone")
     );
-    saveElevenLabsConfig(elevenForm);
+    saveVoiceboxConfig(elevenForm);
     saveStravaConfig(stravaForm);
     persistGmailForm();
     onSave(form);
@@ -588,7 +587,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             onClick={() => setActiveTab("voice")}
           >
             <Icon name="spark" size={13} />
-            <span>ElevenLabs Voice</span>
+            <span>Voicebox Neural Voice</span>
           </button>
           <button
             type="button"
@@ -735,14 +734,14 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             {/* Free Presets Quick Select */}
             <div className="ai-presets-wrap">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 4 }}>
-                <span className="ai-field-label">VOICE SELECTOR (FREE PREMADES &amp; ACCOUNT):</span>
+                <span className="ai-field-label">VOICE PROFILES (LOCAL VOICEBOX SERVER):</span>
                 <button
                   type="button"
                   className="ai-text-toggle"
                   onClick={handleFetchVoices}
-                  disabled={fetchingVoices || !elevenForm.apiKey}
+                  disabled={fetchingVoices}
                 >
-                  {fetchingVoices ? "FETCHING…" : "SYNC ACCOUNT VOICES"}
+                  {fetchingVoices ? "FETCHING…" : "SYNC LOCAL PROFILES"}
                 </button>
               </div>
               <div className="ai-presets-list">
@@ -751,11 +750,12 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                     key={v.id}
                     type="button"
                     className={`ai-preset-btn ${
-                      elevenForm.voiceId === v.id ? "active" : ""
+                      (elevenForm.profileId || elevenForm.voiceId || "default") === v.id ? "active" : ""
                     }`}
                     onClick={() =>
-                      setElevenForm((prev) => ({
+                      setElevenForm((prev: VoiceboxConfig) => ({
                         ...prev,
+                        profileId: v.id,
                         voiceId: v.id,
                       }))
                     }
@@ -769,21 +769,45 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
 
             <div className="ai-tip-box" style={{ marginBottom: 12 }}>
               <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
-                ElevenLabs Free Tier vs. Custom Clones:
+                Local Voicebox Studio (jamiepine/voicebox):
               </div>
               <div>
-                • <strong>Free Tier (10,000 characters/mo):</strong> ElevenLabs allows using <strong>Premade Default Voices</strong> via API at zero cost. <strong>George</strong> (British storyteller) is the closest tone to Severus.
+                • <strong>100% Local &amp; Private:</strong> Runs locally on your machine at <code style={{ color: "#38bdf8" }}>http://127.0.0.1:17493</code>. Unlimited neural speech synthesis with 0 cloud API tokens.
               </div>
               <div style={{ marginTop: 5 }}>
-                • <strong>Why HTTP 402 Occurs:</strong> Free accounts cannot use Community Library voices or custom Instant Clones via the API. Upgrading to ElevenLabs Starter ($1 for 1st mo, then $5/mo) unlocks API access for your custom cloned voice from <code style={{ color: "#c084fc" }}>Severus/Voices/*.mp3</code>.
+                • <strong>Voice Cloning &amp; Profiles:</strong> Supports Kokoro, Qwen3-TTS, and custom voice clones. Select your desired profile or sync running profiles below.
               </div>
             </div>
 
-            {/* ElevenLabs API Key */}
+            {/* Voicebox Base URL */}
+            <div className="ai-form-group">
+              <label className="ai-field-label">VOICEBOX BASE URL</label>
+              <input
+                type="text"
+                className="ai-input"
+                value={elevenForm.baseUrl || "http://127.0.0.1:17493"}
+                placeholder="http://127.0.0.1:17493"
+                onChange={(e) => setElevenForm({ ...elevenForm, baseUrl: e.target.value })}
+              />
+            </div>
+
+            {/* Voice Profile ID */}
+            <div className="ai-form-group">
+              <label className="ai-field-label">VOICE PROFILE ID</label>
+              <input
+                type="text"
+                className="ai-input"
+                value={elevenForm.profileId || elevenForm.voiceId || "default"}
+                placeholder="e.g. default or severus"
+                onChange={(e) => setElevenForm({ ...elevenForm, profileId: e.target.value, voiceId: e.target.value })}
+              />
+            </div>
+
+            {/* API Key / Token */}
             <div className="ai-form-group">
               <div className="ai-field-header">
                 <label className="ai-field-label">
-                  ELEVENLABS API KEY <span className="dim">(xi-api-key)</span>
+                  API KEY / BEARER TOKEN <span className="dim">(Optional)</span>
                 </label>
                 <button
                   type="button"
@@ -797,36 +821,9 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 type={showElevenKey ? "text" : "password"}
                 className="ai-input"
                 value={elevenForm.apiKey || ""}
-                placeholder="sk_... from elevenlabs.io"
+                placeholder="Optional Bearer token if local server requires authentication"
                 onChange={(e) => setElevenForm({ ...elevenForm, apiKey: e.target.value })}
               />
-            </div>
-
-            {/* Voice ID */}
-            <div className="ai-form-group">
-              <label className="ai-field-label">VOICE ID</label>
-              <input
-                type="text"
-                className="ai-input"
-                value={elevenForm.voiceId || ""}
-                placeholder="e.g. 21m00Tcm4TlvDq8ikWAM"
-                onChange={(e) => setElevenForm({ ...elevenForm, voiceId: e.target.value })}
-              />
-            </div>
-
-            {/* Model Selector */}
-            <div className="ai-form-group">
-              <label className="ai-field-label">TTS MODEL</label>
-              <select
-                className="ai-input"
-                value={elevenForm.modelId || "eleven_flash_v2_5"}
-                onChange={(e) => setElevenForm({ ...elevenForm, modelId: e.target.value })}
-                style={{ cursor: "pointer" }}
-              >
-                <option value="eleven_flash_v2_5">Eleven Flash v2.5 (Fastest ~100ms latency, recommended for Thinking Mode)</option>
-                <option value="eleven_turbo_v2_5">Eleven Turbo v2.5 (High quality &amp; fast)</option>
-                <option value="eleven_multilingual_v2">Eleven Multilingual v2 (Rich emotional cadence)</option>
-              </select>
             </div>
 
             {/* Test connection output */}
@@ -1348,7 +1345,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
                 "Verifying…"
               ) : (
                 <>
-                  <Icon name="activity" size={12} /> Test ElevenLabs Voice
+                  <Icon name="activity" size={12} /> Test Voicebox Connection
                 </>
               )}
             </button>

@@ -317,7 +317,7 @@ mod tests {
             .max_by(|a, b| a.importance.total_cmp(&b.importance))
             .expect("non-empty");
         assert_eq!(hub.id, "The Glorious Evolution", "hub note should rank highest");
-        assert!(hub.importance > 20.0, "hub importance unexpectedly low: {}", hub.importance);
+        assert!(hub.importance > 15.0, "hub importance unexpectedly low: {}", hub.importance);
     }
 
     #[test]

@@ -1588,3 +1588,31 @@ The system should not attempt to replace Lex's judgment.
 Its purpose is to make Lex's own thinking:
 
 **faster, clearer, more organized, and more consistent.**
+
+---
+
+# 39. Universal Omnichannel Responsiveness Standard
+
+All software, web applications, portals, dashboards, landing pages, mobile interfaces, and digital products built by or with Lex MUST be engineered to be 100% responsive across all device tiers:
+
+* **Mobile Phones**: Extra-small (320px–374px) and Standard Mobile (375px–480px).
+* **Tablets & Foldables**: Portrait & Landscape Tablets (481px–1023px).
+* **Laptops & Standard Desktops**: 1024px–1440px.
+* **Large Displays & Ultra-Wide Monitors**: 1440px+.
+
+### Non-Negotiable Core Rules:
+1. **Fluid Grids & Auto-Fit Flexbox**: Use responsive breakpoint grids (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-4`, `flex-col sm:flex-row`) rather than rigid pixel dimensions.
+2. **Touch-First Accessibility**: Ensure 40px–44px minimum touch targets on mobile viewports. Make primary mobile action buttons full-width (`w-full sm:w-auto`) for thumb reach.
+3. **Collapsible Navigation Drawers**: All headers and admin sidebars must feature responsive mobile drawer/hamburger menus on smaller viewports (`< lg` or `< md`).
+4. **Zero Horizontal Page Overflow**: Never permit unintentional horizontal scrollbars on mobile viewports. Data tables and matrix editors must provide dedicated horizontal scroll containers (`overflow-x-auto`) or transform into stacked mobile cards.
+5. **Responsive Typography & Adaptive Spacing**: Utilize responsive typography scales (`text-xs sm:text-sm`, `text-2xl sm:text-4xl lg:text-5xl`) and adaptive section padding (`p-4 sm:p-6 lg:p-10`).
+
+---
+
+# 40. Universal Anti-Eyebrow-Pill Standard
+
+* **Zero Formulaic Eyebrow / Tag Pills**: Never place cookie-cutter rounded pill badges with mini-icons and uppercase tracked text (e.g. `[Icon] FOUNDER COMMITMENT • 22 BRANCHES` or `[Icon] In-Store Inspection`) directly hovering above main headlines in hero sections, feature blocks, or guarantee panels.
+* **Punchy Typography & Clean Visual Hierarchy**: Let headlines and subheadings command attention with confident typography, clean contrast, and direct messaging without decorative pill clutter.
+* **Functional Badge Discipline**: Reserve pill badges strictly for genuine functional micro-metadata (such as active discount tags `-15% OFF`, live status indicators `● In Stock`, or category filter chips).
+
+
