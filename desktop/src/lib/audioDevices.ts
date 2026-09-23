@@ -116,24 +116,48 @@ export async function getMicrophoneDevices(): Promise<AudioDevice[]> {
 }
 
 /**
+ * Build capture constraints for a target device.
+ *
+ * `raw` keeps browser DSP off, which transient analysis (clap detection) needs:
+ * echo cancellation, noise suppression and automatic gain control all erase the
+ * impulse peaks the detector looks for.
+ */
+function buildAudioConstraints(targetId: string, raw: boolean): MediaTrackConstraints {
+  const processing: MediaTrackConstraints = raw
+    ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    : { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  return targetId ? { ...processing, deviceId: { ideal: targetId } } : processing;
+}
+
+/**
+ * Single acquisition policy for every microphone consumer: prefer the requested
+ * device and fall back to the system default when it is stale or unavailable, so
+ * a changed device id cannot disable voice input entirely.
+ */
+async function acquireMicrophone(targetId: string, raw: boolean): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: buildAudioConstraints(targetId, raw) });
+  } catch (err) {
+    console.warn(
+      "[audioDevices] Constrained acquisition failed, falling back to the system default microphone:",
+      err,
+    );
+    return await navigator.mediaDevices.getUserMedia({ audio: buildAudioConstraints("", raw) });
+  }
+}
+
+/**
  * Acquire a MediaStream specifically from the selected microphone deviceId.
  */
 export async function getMicrophoneStream(deviceId?: string): Promise<MediaStream> {
   const targetId = deviceId !== undefined ? deviceId : getSelectedMicrophoneId();
-  const constraints: MediaStreamConstraints = {
-    audio: targetId
-      ? {
-          deviceId: { exact: targetId },
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        }
-      : {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-  };
+  return acquireMicrophone(targetId, false);
+}
 
-  return await navigator.mediaDevices.getUserMedia(constraints);
+/**
+ * Acquire a DSP-free capture stream for transient/impulse analysis.
+ */
+export async function getRawMicrophoneStream(deviceId?: string): Promise<MediaStream> {
+  const targetId = deviceId !== undefined ? deviceId : getSelectedMicrophoneId();
+  return acquireMicrophone(targetId, true);
 }

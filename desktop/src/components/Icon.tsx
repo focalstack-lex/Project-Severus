@@ -321,9 +321,11 @@ const PATHS: Record<IconName, React.ReactNode> = {
 interface IconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
   name: IconName;
   size?: number;
+  strokeWidth?: number | string;
 }
 
-export default function Icon({ name, size = 16, ...rest }: IconProps) {
+export default function Icon({ name, size = 16, strokeWidth, className, ...rest }: IconProps) {
+  const computedStrokeWidth = strokeWidth ?? (size <= 14 ? 2.0 : 1.75);
   return (
     <svg
       width={size}
@@ -331,11 +333,12 @@ export default function Icon({ name, size = 16, ...rest }: IconProps) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth={computedStrokeWidth}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
+      className={className}
       {...rest}
     >
       {PATHS[name]}

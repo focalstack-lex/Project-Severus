@@ -6,6 +6,7 @@ import type { AIConfig } from "../lib/ai";
 import type { GitStatusData } from "../types";
 import { toggleMaximize } from "../lib/tauri";
 import { loadCachedStravaStats, type StravaAthleteStats } from "../lib/strava";
+import { voiceDiagSummary } from "../lib/voiceDiagnostics";
 
 export type NavSection = "home" | "knowledge" | "ai";
 export type KnowledgeSubTab = "notes" | "graph" | "tags";
@@ -36,7 +37,6 @@ interface Props {
   copilotActive: boolean;
   listeningActive?: boolean;
   onToggleListening?: () => void;
-  onToggleFloatingMode?: () => void;
   onToggleMaximize?: () => void;
   isMaximized?: boolean;
   onEnterThinkingMode?: () => void;
@@ -77,7 +77,6 @@ export default function TopHeader({
   copilotActive,
   listeningActive = true,
   onToggleListening,
-  onToggleFloatingMode,
   onToggleMaximize,
   isMaximized,
   onEnterThinkingMode,
@@ -276,9 +275,10 @@ export default function TopHeader({
               className={`assistant-listening-btn ${listeningActive ? "active" : "paused"}`}
               onClick={onToggleListening}
               title={
-                listeningActive
+                (listeningActive
                   ? `Listening Active (Say "Stop listening" / ${MOD_KEY}+Shift+M)`
-                  : `Listening Paused (Say "Start listening" / ${MOD_KEY}+Shift+M)`
+                  : `Listening Paused (Say "Start listening" / ${MOD_KEY}+Shift+M)`) +
+                `\nLast voice event: ${voiceDiagSummary()}`
               }
             >
               <Icon name={listeningActive ? "mic" : "mic-off"} size={12} />
@@ -546,14 +546,14 @@ export default function TopHeader({
 
         {/* Window Controls: Icon Flank */}
         <div className="nav-window-controls">
-          {onToggleFloatingMode && (
+          {onEnterThinkingMode && (
             <button
               type="button"
               className="nav-icon-window-btn"
-              onClick={onToggleFloatingMode}
-              title="Minimize to Dynamic Island Pill"
+              onClick={onEnterThinkingMode}
+              title="Open 3D Holographic JARVIS Thinking Mode"
             >
-              <Icon name="minimize" size={12} />
+              <Icon name="spark" size={14} />
             </button>
           )}
 
@@ -564,7 +564,7 @@ export default function TopHeader({
               onClick={onToggleMaximize}
               title={isMaximized ? "Restore window size" : "Maximize to full screen"}
             >
-              <Icon name={isMaximized ? "minimize" : "maximize"} size={12} />
+              <Icon name={isMaximized ? "minimize" : "maximize"} size={14} />
             </button>
           )}
 
@@ -575,7 +575,7 @@ export default function TopHeader({
               onClick={onHideToTray}
               title="Minimize to System Tray (actively listening in background)"
             >
-              <Icon name="close" size={12} />
+              <Icon name="close" size={14} />
             </button>
           )}
         </div>

@@ -6,6 +6,7 @@ import {
   saveVoiceboxConfig,
   testVoiceboxConnection,
   fetchVoiceboxProfiles,
+  fetchElevenLabsVoices,
   FREE_PREMADE_VOICES,
   type VoiceboxConfig,
   type VoicePreset,
@@ -17,6 +18,7 @@ import {
   getMicrophoneStream,
   type AudioDevice,
 } from "../lib/audioDevices";
+import { applySpeechEngine, getSpeechRecognitionCtor, recoverSpeechEngine } from "../lib/speechEngine";
 import { openSoundSettings, openExternalUrl } from "../lib/tauri";
 import {
   loadStravaConfig,
@@ -142,6 +144,7 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
   const vuStreamRef = useRef<MediaStream | null>(null);
   const vuAudioCtxRef = useRef<AudioContext | null>(null);
   const testRecognitionRef = useRef<any>(null);
+  const isAbortingTestRef = useRef(false);
 
   // Strava Telemetry State
   const [stravaForm, setStravaForm] = useState<StravaConfig>(loadStravaConfig);
@@ -321,10 +324,11 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
     };
   }, [open, activeTab, selectedMicId, refreshDevices]);
 
-  // Clean up recognition on unmount or tab change
+  // Clean up recognition on modal close or tab change
   useEffect(() => {
-    return () => {
+    if (!open) {
       if (testRecognitionRef.current) {
+        isAbortingTestRef.current = true;
         try {
           testRecognitionRef.current.abort();
         } catch {
@@ -332,15 +336,37 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
         }
         testRecognitionRef.current = null;
       }
+      setTestListening(false);
+      window.dispatchEvent(
+        new CustomEvent("severus:voice-listener-pause", { detail: { paused: false } })
+      );
+    }
+    return () => {
+      if (testRecognitionRef.current) {
+        isAbortingTestRef.current = true;
+        try {
+          testRecognitionRef.current.abort();
+        } catch {
+          // ignore
+        }
+        testRecognitionRef.current = null;
+      }
+      setTestListening(false);
+      window.dispatchEvent(
+        new CustomEvent("severus:voice-listener-pause", { detail: { paused: false } })
+      );
     };
-  }, [activeTab]);
+  }, [open, activeTab]);
 
   const handleFetchVoices = async () => {
     setFetchingVoices(true);
     try {
-      const list = await fetchVoiceboxProfiles(elevenForm.baseUrl);
-      if (list.length > 0) {
-        setVoices(list);
+      if (elevenForm.provider === "elevenlabs" || (!elevenForm.baseUrl?.includes("127.0.0.1") && elevenForm.apiKey)) {
+        const list = await fetchElevenLabsVoices(elevenForm.apiKey);
+        if (list.length > 0) setVoices(list);
+      } else {
+        const list = await fetchVoiceboxProfiles(elevenForm.baseUrl);
+        if (list.length > 0) setVoices(list);
       }
     } catch {
       // Ignored
@@ -389,45 +415,86 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
     }
   };
 
-  const handleTestRecognition = () => {
-    const SpeechRec =
-      (window as unknown as { webkitSpeechRecognition?: any; SpeechRecognition?: any })
-        .webkitSpeechRecognition ||
-      (window as unknown as { SpeechRecognition?: any }).SpeechRecognition;
+  const handleTestRecognition = async () => {
+    const SpeechRec = getSpeechRecognitionCtor();
     if (!SpeechRec) {
-      setTestTranscript("Speech Recognition not supported in this window.");
+      setTestTranscript("Speech Recognition is not supported in this window.");
       return;
     }
 
     if (testListening) {
-      testRecognitionRef.current?.abort();
+      isAbortingTestRef.current = true;
+      try {
+        testRecognitionRef.current?.abort();
+      } catch {
+        // ignore
+      }
+      testRecognitionRef.current = null;
       setTestListening(false);
+      setTestTranscript("Microphone test stopped.");
+      window.dispatchEvent(
+        new CustomEvent("severus:voice-listener-pause", { detail: { paused: false } })
+      );
       return;
     }
 
+    // Pause background voice listener during direct microphone testing to avoid Web Speech API collisions
+    window.dispatchEvent(
+      new CustomEvent("severus:voice-listener-pause", { detail: { paused: true } })
+    );
+
     try {
+      isAbortingTestRef.current = false;
       const rec = new SpeechRec();
       rec.continuous = false;
       rec.interimResults = true;
       rec.lang = "en-US";
 
+      // Test the engine that command listening actually uses, on-device included.
+      const strategy = applySpeechEngine(rec, rec.lang);
+
       setTestListening(true);
-      setTestTranscript("Listening… speak now into your microphone.");
+      setTestTranscript(`Listening... speak now into your microphone. (${strategy.reason})`);
 
       rec.onresult = (e: any) => {
         const transcript = Array.from(e.results)
           .map((r: any) => r[0].transcript)
           .join(" ");
-        setTestTranscript(`“${transcript}”`);
+        setTestTranscript(`"${transcript}"`);
       };
 
       rec.onerror = (e: any) => {
-        setTestTranscript(`Recognition error: ${e.error || "No speech detected"}`);
+        const errType = e.error || "unknown";
+        if (errType === "aborted") {
+          if (!isAbortingTestRef.current) {
+            setTestTranscript("Speech recognition stopped.");
+          }
+        } else if (errType === "no-speech") {
+          setTestTranscript("No speech detected. Please speak into your microphone.");
+        } else if (errType === "audio-capture" || errType === "not-allowed") {
+          setTestTranscript("Microphone access unavailable or denied in Windows.");
+        } else if (errType === "network") {
+          // This is the signature of a runtime without a cloud speech service.
+          // The on-device model is the way out, so say so instead of guessing.
+          setTestTranscript(
+            "No speech service in this window. Downloading the offline voice model; this test will work once it finishes.",
+          );
+          void recoverSpeechEngine(rec.lang);
+        } else {
+          setTestTranscript(`Recognition notice: ${errType}`);
+        }
         setTestListening(false);
+        window.dispatchEvent(
+          new CustomEvent("severus:voice-listener-pause", { detail: { paused: false } })
+        );
       };
 
       rec.onend = () => {
         setTestListening(false);
+        testRecognitionRef.current = null;
+        window.dispatchEvent(
+          new CustomEvent("severus:voice-listener-pause", { detail: { paused: false } })
+        );
       };
 
       rec.start();
@@ -435,6 +502,9 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
     } catch (err) {
       setTestTranscript(`Failed to start test: ${String(err)}`);
       setTestListening(false);
+      window.dispatchEvent(
+        new CustomEvent("severus:voice-listener-pause", { detail: { paused: false } })
+      );
     }
   };
 
@@ -731,17 +801,58 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
             transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
             className="ai-form-body"
           >
-            {/* Free Presets Quick Select */}
+            {/* Voice Engine Provider Switcher */}
+            <div className="ai-presets-wrap">
+              <span className="ai-field-label">VOICE ENGINE PROVIDER:</span>
+              <div className="ai-presets-list">
+                <button
+                  type="button"
+                  className={`ai-preset-btn ${
+                    (elevenForm.provider || "local") === "local" ? "active" : ""
+                  }`}
+                  onClick={() =>
+                    setElevenForm((prev: VoiceboxConfig) => ({
+                      ...prev,
+                      provider: "local",
+                      baseUrl: "http://127.0.0.1:17493",
+                    }))
+                  }
+                >
+                  Local Neural Engine (Voicebox / CosyVoice)
+                </button>
+                <button
+                  type="button"
+                  className={`ai-preset-btn ${
+                    elevenForm.provider === "elevenlabs" ? "active" : ""
+                  }`}
+                  onClick={() =>
+                    setElevenForm((prev: VoiceboxConfig) => ({
+                      ...prev,
+                      provider: "elevenlabs",
+                      baseUrl: "https://api.elevenlabs.io/v1",
+                    }))
+                  }
+                >
+                  ElevenLabs Cloud API
+                </button>
+              </div>
+            </div>
+
+            {/* Presets & Voices Quick Select */}
             <div className="ai-presets-wrap">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", marginBottom: 4 }}>
-                <span className="ai-field-label">VOICE PROFILES (LOCAL VOICEBOX SERVER):</span>
+                <span className="ai-field-label">
+                  {(elevenForm.provider || "local") === "local"
+                    ? "LOCAL VOICE PROFILES (COSYVOICE / SAMPLES):"
+                    : "ELEVENLABS CLOUD VOICES:"}
+                </span>
                 <button
                   type="button"
                   className="ai-text-toggle"
                   onClick={handleFetchVoices}
                   disabled={fetchingVoices}
                 >
-                  {fetchingVoices ? "FETCHING…" : "SYNC LOCAL PROFILES"}
+                  {fetchingVoices ? "FETCHING…" : "SYNC VOICES"}
                 </button>
               </div>
               <div className="ai-presets-list">
@@ -767,64 +878,101 @@ export default function AISettingsModal({ open, config, onSave, onClose }: Props
               </div>
             </div>
 
-            <div className="ai-tip-box" style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
-                Local Voicebox Studio (jamiepine/voicebox):
-              </div>
-              <div>
-                • <strong>100% Local &amp; Private:</strong> Runs locally on your machine at <code style={{ color: "#38bdf8" }}>http://127.0.0.1:17493</code>. Unlimited neural speech synthesis with 0 cloud API tokens.
-              </div>
-              <div style={{ marginTop: 5 }}>
-                • <strong>Voice Cloning &amp; Profiles:</strong> Supports Kokoro, Qwen3-TTS, and custom voice clones. Select your desired profile or sync running profiles below.
-              </div>
-            </div>
+            {(elevenForm.provider || "local") === "local" ? (
+              <>
+                <div className="ai-tip-box" style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
+                    Local Neural Voice &amp; CosyVoice 2 (Hugging Face):
+                  </div>
+                  <div>
+                    • <strong>100% Local &amp; Private:</strong> Runs locally on your machine at <code style={{ color: "#38bdf8" }}>http://127.0.0.1:17493</code>. Unlimited neural speech synthesis with 0 cloud API tokens.
+                  </div>
+                  <div style={{ marginTop: 5 }}>
+                    • <strong>Hugging Face Zero-Shot Cloning:</strong> Powered by <code style={{ color: "#38bdf8" }}>FunAudioLLM/CosyVoice2-0.5B</code>. Drop 3-second speaker samples into <code style={{ color: "#38bdf8" }}>Voices/</code> for instant voice duplication.
+                  </div>
+                </div>
 
-            {/* Voicebox Base URL */}
-            <div className="ai-form-group">
-              <label className="ai-field-label">VOICEBOX BASE URL</label>
-              <input
-                type="text"
-                className="ai-input"
-                value={elevenForm.baseUrl || "http://127.0.0.1:17493"}
-                placeholder="http://127.0.0.1:17493"
-                onChange={(e) => setElevenForm({ ...elevenForm, baseUrl: e.target.value })}
-              />
-            </div>
+                {/* Voicebox Base URL */}
+                <div className="ai-form-group">
+                  <label className="ai-field-label">VOICEBOX BASE URL</label>
+                  <input
+                    type="text"
+                    className="ai-input"
+                    value={elevenForm.baseUrl || "http://127.0.0.1:17493"}
+                    placeholder="http://127.0.0.1:17493"
+                    onChange={(e) => setElevenForm({ ...elevenForm, baseUrl: e.target.value })}
+                  />
+                </div>
 
-            {/* Voice Profile ID */}
-            <div className="ai-form-group">
-              <label className="ai-field-label">VOICE PROFILE ID</label>
-              <input
-                type="text"
-                className="ai-input"
-                value={elevenForm.profileId || elevenForm.voiceId || "default"}
-                placeholder="e.g. default or severus"
-                onChange={(e) => setElevenForm({ ...elevenForm, profileId: e.target.value, voiceId: e.target.value })}
-              />
-            </div>
+                {/* Voice Profile ID */}
+                <div className="ai-form-group">
+                  <label className="ai-field-label">VOICE PROFILE ID</label>
+                  <input
+                    type="text"
+                    className="ai-input"
+                    value={elevenForm.profileId || elevenForm.voiceId || "default"}
+                    placeholder="e.g. default, Michael Caine Voice, or Jeremy Irons Voice"
+                    onChange={(e) => setElevenForm({ ...elevenForm, profileId: e.target.value, voiceId: e.target.value })}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="ai-tip-box" style={{ marginBottom: 12 }}>
+                  <div style={{ fontWeight: 600, color: "var(--text-primary)", marginBottom: 4 }}>
+                    ElevenLabs Cloud Speech Synthesis:
+                  </div>
+                  <div>
+                    • <strong>Cloud Voices &amp; Custom Clones:</strong> Enter your ElevenLabs API Key to access custom voice clones and premium cloud voices.
+                  </div>
+                </div>
 
-            {/* API Key / Token */}
-            <div className="ai-form-group">
-              <div className="ai-field-header">
-                <label className="ai-field-label">
-                  API KEY / BEARER TOKEN <span className="dim">(Optional)</span>
-                </label>
-                <button
-                  type="button"
-                  className="ai-text-toggle"
-                  onClick={() => setShowElevenKey(!showElevenKey)}
-                >
-                  {showElevenKey ? "HIDE" : "SHOW"}
-                </button>
-              </div>
-              <input
-                type={showElevenKey ? "text" : "password"}
-                className="ai-input"
-                value={elevenForm.apiKey || ""}
-                placeholder="Optional Bearer token if local server requires authentication"
-                onChange={(e) => setElevenForm({ ...elevenForm, apiKey: e.target.value })}
-              />
-            </div>
+                {/* ElevenLabs API Key */}
+                <div className="ai-form-group">
+                  <div className="ai-field-header">
+                    <label className="ai-field-label">ELEVENLABS API KEY</label>
+                    <button
+                      type="button"
+                      className="ai-text-toggle"
+                      onClick={() => setShowElevenKey(!showElevenKey)}
+                    >
+                      {showElevenKey ? "HIDE" : "SHOW"}
+                    </button>
+                  </div>
+                  <input
+                    type={showElevenKey ? "text" : "password"}
+                    className="ai-input"
+                    value={elevenForm.apiKey || ""}
+                    placeholder="sk_..."
+                    onChange={(e) => setElevenForm({ ...elevenForm, apiKey: e.target.value })}
+                  />
+                </div>
+
+                {/* ElevenLabs Voice ID */}
+                <div className="ai-form-group">
+                  <label className="ai-field-label">ELEVENLABS VOICE ID</label>
+                  <input
+                    type="text"
+                    className="ai-input"
+                    value={elevenForm.profileId || elevenForm.voiceId || "21m00Tcm4TlvDq8ikWAM"}
+                    placeholder="e.g. 21m00Tcm4TlvDq8ikWAM or custom cloned Voice ID"
+                    onChange={(e) => setElevenForm({ ...elevenForm, profileId: e.target.value, voiceId: e.target.value })}
+                  />
+                </div>
+
+                {/* ElevenLabs Model ID */}
+                <div className="ai-form-group">
+                  <label className="ai-field-label">ELEVENLABS MODEL</label>
+                  <input
+                    type="text"
+                    className="ai-input"
+                    value={elevenForm.modelId || "eleven_multilingual_v2"}
+                    placeholder="e.g. eleven_multilingual_v2 or eleven_monolingual_v1"
+                    onChange={(e) => setElevenForm({ ...elevenForm, modelId: e.target.value })}
+                  />
+                </div>
+              </>
+            )}
 
             {/* Test connection output */}
             {elevenTestResult && (

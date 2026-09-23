@@ -16,7 +16,7 @@ import AISettingsModal from "./components/AISettingsModal";
 import QuickSwitcherModal from "./components/QuickSwitcherModal";
 import ContextAssemblerModal from "./components/ContextAssemblerModal";
 import NewNoteModal from "./components/NewNoteModal";
-import ThinkingModeCapsule from "./components/ThinkingModeCapsule";
+import ThinkingModeReactor from "./components/ThinkingModeReactor";
 import SystemConsoleModal, { type CommandOutcome } from "./components/SystemConsoleModal";
 import PasswordGateModal from "./components/PasswordGateModal";
 import DualPacingCockpit from "./components/DualPacingCockpit";
@@ -85,12 +85,15 @@ import {
   type VoiceCommandHandlers,
   getVoiceCmdEnabled,
   setVoiceCmdEnabled,
+  stripWakePrefix,
 } from "./lib/voiceCommands";
 import {
   fetchStravaAthleteStats,
   loadCachedStravaStats,
   type StravaAthleteStats,
 } from "./lib/strava";
+import { voiceDiagRecord } from "./lib/voiceDiagnostics";
+import { recoverSpeechEngine } from "./lib/speechEngine";
 
 const EMPTY_GRAPH: GraphData = { nodes: [], links: [], tags: [] };
 const IS_MAC =
@@ -151,23 +154,35 @@ export default function App() {
   const [clapEnabled, setClapEnabledState] = useState<boolean>(getClapEnabled);
   const [voiceCmdEnabled, setVoiceCmdEnabledState] = useState<boolean>(getVoiceCmdEnabled);
   const [listeningActive, setListeningActive] = useState<boolean>(true);
+  const listeningActiveRef = useRef(listeningActive);
+  listeningActiveRef.current = listeningActive;
   const voiceListenerRef = useRef<VoiceCommandListener | null>(null);
+  const clapDetectorRef = useRef<ClapDetector | null>(null);
 
+  /**
+   * Single authoritative microphone switch. The recognizer's standby gate is set
+   * here rather than inside a state updater, because React may invoke an updater
+   * more than once for the same transition.
+   */
   const handleToggleListening = useCallback((targetActive?: boolean, playAudio = false) => {
-    setListeningActive((prev) => {
-      const next = typeof targetActive === "boolean" ? targetActive : !prev;
-      if (voiceListenerRef.current) {
-        voiceListenerRef.current.setStandby(!next);
+    const previous = listeningActiveRef.current;
+    const next = typeof targetActive === "boolean" ? targetActive : !previous;
+    listeningActiveRef.current = next;
+
+    if (next !== previous) {
+      voiceDiagRecord("app", next ? "listening:resumed" : "listening:paused");
+    }
+
+    setListeningActive(next);
+    voiceListenerRef.current?.setStandby(!next);
+
+    if (playAudio && next !== previous) {
+      if (next) {
+        void playVoice("listening_resumed");
+      } else {
+        void playVoice("listening_paused");
       }
-      if (playAudio) {
-        if (next) {
-          void playVoice("listening_resumed");
-        } else {
-          void playVoice("listening_paused");
-        }
-      }
-      return next;
-    });
+    }
   }, []);
 
   // Modals
@@ -379,13 +394,18 @@ export default function App() {
     async (text: string): Promise<CommandOutcome> => {
       try {
         const normalized = text.toLowerCase().trim();
+        const stripped = stripWakePrefix(normalized);
+        const target = stripped || normalized;
+
         if (
           normalized === "stop listening" ||
           normalized === "turn off listening" ||
           normalized === "pause listening" ||
           normalized === "mute mic" ||
           normalized === "mute microphone" ||
-          normalized === "deafen"
+          normalized === "deafen" ||
+          target === "stop listening" ||
+          target === "mute mic"
         ) {
           handleToggleListening(false, true);
           return {
@@ -399,7 +419,9 @@ export default function App() {
           normalized === "resume listening" ||
           normalized === "unmute mic" ||
           normalized === "unmute microphone" ||
-          normalized === "wake up"
+          normalized === "wake up" ||
+          target === "start listening" ||
+          target === "unmute mic"
         ) {
           handleToggleListening(true, true);
           return {
@@ -416,7 +438,9 @@ export default function App() {
           normalized === "severus" ||
           normalized === "open severus" ||
           normalized === "open workstation" ||
-          normalized === "restore workstation"
+          normalized === "restore workstation" ||
+          target === "open workstation" ||
+          target === "open system"
         ) {
           void ensureWorkstation();
           void playVoice("system_initialized");
@@ -426,11 +450,210 @@ export default function App() {
           };
         }
 
-        let resolution = await resolveSystemCommand(text).catch(() => null);
+        // In-App Navigation & Workstation Intent Handlers
+        if (
+          target === "open copilot" ||
+          target === "copilot" ||
+          target === "show copilot" ||
+          target === "launch copilot" ||
+          target === "start copilot" ||
+          target === "bring up copilot" ||
+          target === "ask ai" ||
+          target === "open ai" ||
+          target === "open ai copilot" ||
+          target === "ai copilot" ||
+          target === "copilot view" ||
+          normalized === "open copilot" ||
+          normalized === "copilot"
+        ) {
+          void ensureWorkstation();
+          setActiveSection("knowledge");
+          setInspectorOpen(true);
+          setInspectorTab("copilot");
+          void playVoice("nav_copilot_open.mp3");
+          return { ok: true, message: "AI Copilot opened in workstation, Sir." };
+        }
+
+        if (
+          target === "open graph" ||
+          target === "show graph" ||
+          target === "graph" ||
+          target === "knowledge graph" ||
+          target === "mind map" ||
+          target === "open knowledge graph" ||
+          normalized === "open graph" ||
+          normalized === "knowledge graph"
+        ) {
+          void ensureWorkstation();
+          setActiveSection("knowledge");
+          setKnowledgeSubTab("graph");
+          void playVoice("nav_graph_open.mp3");
+          return { ok: true, message: "Knowledge graph opened in workstation, Sir." };
+        }
+
+        if (
+          target === "open notes" ||
+          target === "show notes" ||
+          target === "notes" ||
+          target === "notes drawer" ||
+          target === "open notes drawer" ||
+          target === "vault" ||
+          target === "open vault" ||
+          normalized === "open notes" ||
+          normalized === "vault"
+        ) {
+          void ensureWorkstation();
+          setActiveSection("knowledge");
+          setKnowledgeSubTab("notes");
+          setNotesDrawerOpen(true);
+          void playVoice("nav_notes_drawer.mp3");
+          return { ok: true, message: "Notes vault opened in workstation, Sir." };
+        }
+
+        if (
+          target === "new note" ||
+          target === "create note" ||
+          target === "create a note" ||
+          target === "add note" ||
+          target === "take a note" ||
+          target === "write note" ||
+          normalized === "new note" ||
+          normalized === "create note"
+        ) {
+          void ensureWorkstation();
+          setNewNoteModalOpen(true);
+          return { ok: true, message: "New note draft created, Sir." };
+        }
+
+        if (
+          target === "journal" ||
+          target === "open journal" ||
+          target === "capture journal" ||
+          target === "daily journal" ||
+          target === "log journal" ||
+          normalized === "journal" ||
+          normalized === "open journal"
+        ) {
+          void ensureWorkstation();
+          setJournalOpen(true);
+          return { ok: true, message: "Daily journal capture opened, Sir." };
+        }
+
+        if (
+          target === "search" ||
+          target === "quick switcher" ||
+          target === "open search" ||
+          target === "switcher" ||
+          target === "finder" ||
+          normalized === "quick switcher" ||
+          normalized === "open search"
+        ) {
+          void ensureWorkstation();
+          setQuickSwitcherOpen(true);
+          void playVoice("nav_quick_switcher.mp3");
+          return { ok: true, message: "Quick switcher opened, Sir." };
+        }
+
+        if (
+          target === "open running" ||
+          target === "open running mode" ||
+          target === "running mode" ||
+          target === "running cockpit" ||
+          target === "running dashboard" ||
+          normalized === "open running mode" ||
+          normalized === "running mode"
+        ) {
+          setRunningModeOpen(true);
+          void playVoice("action_copilot_ready.mp3");
+          return { ok: true, message: "Athletic running cockpit opened, Sir." };
+        }
+
+        if (
+          target === "thinking mode" ||
+          target === "start thinking" ||
+          target === "jarvis mode" ||
+          target === "open jarvis" ||
+          target === "hologram mode" ||
+          normalized === "thinking mode"
+        ) {
+          setIsThinkingMode(true);
+          void playVoice("action_copilot_ready.mp3");
+          return { ok: true, message: "Thinking mode activated, Sir." };
+        }
+
+        if (
+          target === "open grounding" ||
+          target === "grounding" ||
+          target === "context assembler" ||
+          target === "assembler" ||
+          normalized === "open grounding"
+        ) {
+          void ensureWorkstation();
+          setGroundingOpen(true);
+          void playVoice("nav_assembler_open.mp3");
+          return { ok: true, message: "Context assembler opened, Sir." };
+        }
+
+        if (
+          target === "learning history" ||
+          target === "open learning history" ||
+          target === "learning directives" ||
+          normalized === "learning history"
+        ) {
+          setLearningHistoryOpen(true);
+          return { ok: true, message: "Learning history opened, Sir." };
+        }
+
+        if (
+          target === "home" ||
+          target === "open home" ||
+          target === "dashboard" ||
+          target === "overview" ||
+          normalized === "home" ||
+          normalized === "open home"
+        ) {
+          void ensureWorkstation();
+          setActiveSection("home");
+          void playVoice("greeting_sir");
+          return { ok: true, message: "Home view opened, Sir." };
+        }
+
+        if (
+          target === "float" ||
+          target === "floating mode" ||
+          target === "pill mode" ||
+          target === "compact mode" ||
+          normalized === "floating mode"
+        ) {
+          void handleEnterFloatingMode();
+          return { ok: true, message: "Switched to floating companion mode, Sir." };
+        }
+
+        if (
+          target === "zen mode" ||
+          target === "zen" ||
+          target === "focus mode" ||
+          normalized === "zen mode"
+        ) {
+          void ensureWorkstation();
+          setZenMode((prev) => {
+            const next = !prev;
+            void toggleFullscreen();
+            return next;
+          });
+          void playVoice("nav_zen_on.mp3");
+          return { ok: true, message: "Zen mode toggled, Sir." };
+        }
+
+        let resolution = await resolveSystemCommand(target).catch(() => null);
+        if (!resolution && target !== normalized) {
+          resolution = await resolveSystemCommand(normalized).catch(() => null);
+        }
+
         if (!resolution) {
           // Deterministic grammar missed — the configured model maps the phrase
           // onto one of the same allowlisted intents, or nothing.
-          const mapped = await mapTextToIntent(text, aiConfig).catch(() => null);
+          const mapped = await mapTextToIntent(target, aiConfig).catch(() => null);
           if (!mapped) {
             void playVoice("alert_api_error.mp3");
             return {
@@ -896,17 +1119,22 @@ export default function App() {
         handlePlayGreeting(true);
       },
     });
+    clapDetectorRef.current = detector;
 
     void detector.start();
 
     return () => {
-      detector.stop();
+      clapDetectorRef.current = null;
+      detector.destroy();
     };
   }, [clapEnabled, handlePlayGreeting]);
 
   // Hands-free Voice Command Handlers ref (preserves active microphone stream across UI re-renders)
   const voiceHandlersRef = useRef<VoiceCommandHandlers>({});
   voiceHandlersRef.current = {
+    onHeard: (transcript: string, matchedAction?: string) => {
+      voiceDiagRecord("app", `heard:${matchedAction || "unmatched"}`, transcript);
+    },
     onOpenSystem: () => {
       if (startupGreetingTimerRef.current !== null) {
         window.clearTimeout(startupGreetingTimerRef.current);
@@ -1045,21 +1273,24 @@ export default function App() {
     },
     onSystemCommand: async (text: string) => {
       const outcome = await handleRunSystemCommand(text);
+      voiceDiagRecord(
+        "app",
+        outcome.ok ? "system-command:handled" : "system-command:unmatched",
+        outcome.message,
+        outcome.ok ? "info" : "warn",
+      );
       if (outcome.ok) {
         speakText(formatReplyWithSir(outcome.message));
       } else {
-        void playVoice("alert_api_error.mp3");
+        voiceHandlersRef.current.onGeneralQuery?.(text);
       }
     },
     onHideToTray: () => {
       void handleHideToTray();
     },
-    onOpenDynamicIsland: () => {
-      void handleEnterFloatingMode();
-    },
     onGeneralQuery: (query: string) => {
+      voiceDiagRecord("app", "general-query:thinking-mode", query);
       setAmbientQuery(query);
-      void handleEnterFloatingMode();
       setIsThinkingMode(true);
     },
   };
@@ -1096,7 +1327,6 @@ export default function App() {
       onCheckEmail: () => voiceHandlersRef.current.onCheckEmail?.(),
       onCheckClassroom: () => voiceHandlersRef.current.onCheckClassroom?.(),
       onHideToTray: () => voiceHandlersRef.current.onHideToTray?.(),
-      onOpenDynamicIsland: () => voiceHandlersRef.current.onOpenDynamicIsland?.(),
       onGeneralQuery: (query) => voiceHandlersRef.current.onGeneralQuery?.(query),
     });
 
@@ -1110,10 +1340,46 @@ export default function App() {
     };
   }, [voiceCmdEnabled]);
 
-  // Pause background command listener when Thinking Mode is actively listening to avoid mic collision
+  // Probe speech engine capabilities at startup and pull the offline voice model
+  // when the runtime offers one. WebView2 has no cloud speech service, so this
+  // decides whether listening can work at all before the first recognizer starts.
   useEffect(() => {
-    voiceListenerRef.current?.setPaused(isThinkingMode);
-  }, [isThinkingMode]);
+    void recoverSpeechEngine();
+  }, []);
+
+  // Pause the background command listener while another consumer owns the mic.
+  // When listening is muted the reactor no longer captures, so the listener keeps
+  // running in standby: that is what lets "start listening" recover by voice.
+  useEffect(() => {
+    const reactorOwnsMic = isThinkingMode && listeningActive;
+    voiceListenerRef.current?.setPaused(reactorOwnsMic || aiSettingsOpen);
+  }, [isThinkingMode, aiSettingsOpen, listeningActive]);
+
+  // Hand the microphone to whichever subsystem needs it exclusively.
+  useEffect(() => {
+    const detector = clapDetectorRef.current;
+    if (!detector) return;
+    const releaseForSpeech = isThinkingMode || aiSettingsOpen;
+    if (releaseForSpeech) {
+      detector.suspend();
+    } else {
+      detector.resume();
+    }
+  }, [isThinkingMode, aiSettingsOpen]);
+
+  // Handle explicit pause/resume requests from mic testing or secondary listeners
+  useEffect(() => {
+    const handlePauseEvent = (e: Event) => {
+      const custom = e as CustomEvent<{ paused: boolean }>;
+      if (typeof custom.detail?.paused === "boolean") {
+        voiceListenerRef.current?.setPaused(custom.detail.paused);
+      }
+    };
+    window.addEventListener("severus:voice-listener-pause", handlePauseEvent);
+    return () => {
+      window.removeEventListener("severus:voice-listener-pause", handlePauseEvent);
+    };
+  }, []);
 
   const handleOpenInEditor = useCallback(
     async (id: string) => {
@@ -1399,33 +1665,6 @@ export default function App() {
                     <span className="severus-boot-status">SYSTEMS ONLINE</span>
                   </div>
                 </motion.div>
-              ) : isThinkingMode ? (
-                <motion.div
-                  key="thinking-capsule-wrap"
-                  initial={{ opacity: 0, scale: 0.92, y: -12, filter: "blur(6px)" }}
-                  animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
-                  exit={{ opacity: 0, scale: 0.94, y: -8, filter: "blur(4px)" }}
-                  transition={{ type: "spring", stiffness: 400, damping: 28 }}
-                >
-                  <ThinkingModeCapsule
-                    open={isThinkingMode}
-                    onClose={() => {
-                      setIsThinkingMode(false);
-                      setAmbientQuery(undefined);
-                    }}
-                    onExpandWorkstation={() => {
-                      setIsThinkingMode(false);
-                      setAmbientQuery(undefined);
-                      void ensureWorkstation();
-                    }}
-                    onOpenRunningMode={() => setRunningModeOpen(true)}
-                    onOpenSettings={() => setAiSettingsOpen(true)}
-                    config={aiConfig}
-                    vaultNotes={notesList}
-                    onShowToast={showToast}
-                    initialQuery={ambientQuery}
-                  />
-                </motion.div>
               ) : (
                 <motion.div
                   key="floating-island-wrap"
@@ -1705,7 +1944,6 @@ export default function App() {
             }}
             onToggleMic={() => handleToggleListening(undefined, true)}
             onToggleThinkingMode={() => setIsThinkingMode((prev) => !prev)}
-            onDockIsland={() => void handleDockToTopIsland()}
             onClose={() => setQuickSwitcherOpen(false)}
           />
 
@@ -1826,11 +2064,9 @@ export default function App() {
               onToggleListening={() => handleToggleListening(undefined, true)}
               gitStatus={gitStatus}
               copilotActive={inspectorOpen && inspectorTab === "copilot"}
-              onToggleFloatingMode={handleEnterFloatingMode}
               onToggleMaximize={handleToggleMaximize}
               isMaximized={isMaximized}
               onEnterThinkingMode={() => {
-                void handleEnterFloatingMode();
                 setIsThinkingMode(true);
                 void playVoice("action_copilot_ready.mp3");
               }}
@@ -2125,6 +2361,7 @@ export default function App() {
                     await loadGraph();
                   }}
                   onShowToast={showToast}
+                  onRunCommand={handleRunSystemCommand}
                   inboxEmails={inboxEmails}
                   inboxLastSync={gmailMeta.lastSyncAt}
                   inboxConnected={isGmailConnected(gmailMeta)}
@@ -2206,6 +2443,8 @@ export default function App() {
         }}
         onToggleMic={() => handleToggleListening(undefined, true)}
         onToggleThinkingMode={() => setIsThinkingMode((prev) => !prev)}
+        onRunCommand={handleRunSystemCommand}
+        onShowToast={showToast}
         onClose={() => setQuickSwitcherOpen(false)}
       />
 
@@ -2243,6 +2482,57 @@ export default function App() {
       <LearningHistoryModal
         isOpen={learningHistoryOpen}
         onClose={() => setLearningHistoryOpen(false)}
+      />
+
+      <ThinkingModeReactor
+        open={isThinkingMode}
+        onClose={() => {
+          setIsThinkingMode(false);
+          setAmbientQuery(undefined);
+          if (isFloatingMode) {
+            void handleHideToTray();
+          }
+        }}
+        onExpandWorkstation={() => {
+          setIsThinkingMode(false);
+          setAmbientQuery(undefined);
+          void ensureWorkstation();
+        }}
+        onOpenRunningMode={() => setRunningModeOpen(true)}
+        onOpenSettings={() => setAiSettingsOpen(true)}
+        onOpenCopilot={() => {
+          setIsThinkingMode(false);
+          setAmbientQuery(undefined);
+          void ensureWorkstation();
+          setActiveSection("knowledge");
+          setInspectorOpen(true);
+          setInspectorTab("copilot");
+          void playVoice("nav_copilot_open.mp3");
+        }}
+        onOpenGraph={() => {
+          setActiveSection("knowledge");
+          setKnowledgeSubTab("graph");
+        }}
+        onOpenNotes={() => {
+          setActiveSection("knowledge");
+          setKnowledgeSubTab("notes");
+          setNotesDrawerOpen(true);
+        }}
+        onNewNote={() => handleNewNote()}
+        onJournal={() => setJournalOpen(true)}
+        onSystemCommand={async (cmdText) => {
+          const outcome = await handleRunSystemCommand(cmdText);
+          if (outcome.ok) {
+            return outcome.message;
+          }
+          return undefined;
+        }}
+        config={aiConfig}
+        vaultNotes={notesList}
+        onShowToast={showToast}
+        initialQuery={ambientQuery}
+        listeningActive={listeningActive}
+        onSetListening={(active) => handleToggleListening(active, false)}
       />
 
       <AnimatePresence>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import Icon from "./Icon";
+import { listNotes } from "../lib/tauri";
 
 export interface CandidateItem {
   id: string;
@@ -20,6 +21,78 @@ interface Props {
 }
 
 const SAMPLE_LEARNING_ITEMS: CandidateItem[] = [
+  {
+    id: "P-014",
+    category: "Voice Engine",
+    pattern: "Zero-Shot Neural Voice & Pitch Synthesis Directive",
+    recurrence: "3/3",
+    source: "Severus Core / Antigravity",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "tools/cosyvoice_severus_server.py",
+    evidence: "Microsoft Neural Voice engine (edge-tts) integration with custom pitch matching for JARVIS, Alfred, and Severus voice clones.",
+    date: "2026-09-23",
+  },
+  {
+    id: "P-013",
+    category: "Release Build",
+    pattern: "Universal Automatic System Build & Installer Synchronization Directive",
+    recurrence: "3/3",
+    source: "Severus Protocol",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "AGENTS.md",
+    evidence: "Mandatory automatic compilation of release binary and installer packages (MSI/NSIS) upon system updates without requiring user prompting.",
+    date: "2026-09-23",
+  },
+  {
+    id: "P-012",
+    category: "Storage",
+    pattern: "Single Canonical Binary Target via Windows Directory Junctions",
+    recurrence: "3/3",
+    source: "Phase 1 Hardening",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "tools/setup_junctions.ps1",
+    evidence: "Directory Junctions link Program Files and AppData/Local to target/release binary.",
+    date: "2026-09-17",
+  },
+  {
+    id: "P-011",
+    category: "Linter",
+    pattern: "Directive Linter & Contradiction Gate",
+    recurrence: "3/3",
+    source: "Phase 1 Hardening",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "tools/lint_directives.py",
+    evidence: "Automated verification gate detecting directive conflicts across project markdown files.",
+    date: "2026-09-17",
+  },
+  {
+    id: "P-010",
+    category: "Checkpoint",
+    pattern: "Pre-Build Checkpoint & Rollback Dispatcher",
+    recurrence: "3/3",
+    source: "Phase 1 Hardening",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "tools/severus.ps1",
+    evidence: "Automated git tag checkpoints and one-step binary rollback dispatcher.",
+    date: "2026-09-17",
+  },
+  {
+    id: "P-009",
+    category: "Verification",
+    pattern: "Behavioural Verification Harness",
+    recurrence: "3/3",
+    source: "Phase 1 Hardening",
+    status: "promoted",
+    tier: "T2",
+    targetPath: "tools/severus.ps1",
+    evidence: "End-to-end telemetry and verification runner for system capabilities.",
+    date: "2026-09-17",
+  },
   {
     id: "N-001",
     category: "Graph Node",
@@ -235,6 +308,36 @@ export function filterLearningItems(
 export default function LearningHistoryModal({ isOpen, onClose }: Props) {
   const [filterTab, setFilterTab] = useState<"all" | "t1" | "t2" | "t3" | "node">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [items, setItems] = useState<CandidateItem[]>(SAMPLE_LEARNING_ITEMS);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    listNotes()
+      .then((notes) => {
+        if (!notes || !Array.isArray(notes)) return;
+        const todayStr = new Date().toISOString().split("T")[0];
+        const dynamicNodes: CandidateItem[] = notes.map((n, idx) => ({
+          id: `N-${String(idx + 1).padStart(3, "0")}`,
+          category: "Graph Node",
+          pattern: `${n.title} (Second Brain Node)`,
+          recurrence: "T3 Node",
+          source: "Second Brain Graph",
+          status: "node",
+          tier: "T3",
+          targetPath: `second-brain/notes/${n.id}.md`,
+          evidence: `Indexed Second Brain node tagged with ${n.tags?.slice(0, 3).join(", ") || "knowledge"}.`,
+          date: todayStr,
+        }));
+
+        setItems((prev) => {
+          const nonNodes = prev.filter((i) => i.status !== "node");
+          const existingTargets = new Set(nonNodes.map((i) => i.targetPath));
+          const newNodes = dynamicNodes.filter((dn) => !existingTargets.has(dn.targetPath));
+          return [...nonNodes, ...newNodes];
+        });
+      })
+      .catch((err) => console.warn("[LearningHistory] Dynamic note fetch notice:", err));
+  }, [isOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -247,7 +350,7 @@ export default function LearningHistoryModal({ isOpen, onClose }: Props) {
 
   if (!isOpen) return null;
 
-  const filteredItems = filterLearningItems(SAMPLE_LEARNING_ITEMS, filterTab, searchQuery);
+  const filteredItems = filterLearningItems(items, filterTab, searchQuery);
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -276,35 +379,35 @@ export default function LearningHistoryModal({ isOpen, onClose }: Props) {
               className={`learning-tab ${filterTab === "all" ? "active" : ""}`}
               onClick={() => setFilterTab("all")}
             >
-              All ({SAMPLE_LEARNING_ITEMS.length})
+              All ({items.length})
             </button>
             <button
               type="button"
               className={`learning-tab ${filterTab === "t1" ? "active" : ""}`}
               onClick={() => setFilterTab("t1")}
             >
-              T1 Buffer ({SAMPLE_LEARNING_ITEMS.filter((i) => i.tier === "T1").length})
+              T1 Buffer ({items.filter((i) => i.tier === "T1").length})
             </button>
             <button
               type="button"
               className={`learning-tab ${filterTab === "t2" ? "active" : ""}`}
               onClick={() => setFilterTab("t2")}
             >
-              T2 Directives ({SAMPLE_LEARNING_ITEMS.filter((i) => i.tier === "T2").length})
+              T2 Directives ({items.filter((i) => i.tier === "T2").length})
             </button>
             <button
               type="button"
               className={`learning-tab ${filterTab === "t3" ? "active" : ""}`}
               onClick={() => setFilterTab("t3")}
             >
-              T3 Pillar Notes ({SAMPLE_LEARNING_ITEMS.filter((i) => i.tier === "T3").length})
+              T3 Pillar Notes ({items.filter((i) => i.tier === "T3").length})
             </button>
             <button
               type="button"
               className={`learning-tab ${filterTab === "node" ? "active" : ""}`}
               onClick={() => setFilterTab("node")}
             >
-              Recent Nodes ({SAMPLE_LEARNING_ITEMS.filter((i) => i.status === "node").length})
+              Recent Nodes ({items.filter((i) => i.status === "node").length})
             </button>
           </div>
 

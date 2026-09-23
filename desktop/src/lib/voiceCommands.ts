@@ -3,7 +3,22 @@ import {
   isVoiceInEchoCooldown,
   isEchoOfSeverus,
 } from "./voice";
-import { onMicrophoneChanged, getMicrophoneStream } from "./audioDevices";
+import { onMicrophoneChanged } from "./audioDevices";
+import {
+  voiceDiagRecord,
+  voiceDiagFatalRecognitionError,
+  voiceDiagIsFatalRecognitionError,
+} from "./voiceDiagnostics";
+import {
+  applySpeechEngine,
+  getSpeechRecognitionCtor,
+  recoverSpeechEngine,
+  refreshSpeechEngineStatus,
+  type SpeechRecognitionCtor as SpeechRecognitionConstructor,
+  type SpeechRecognitionEventLike as SpeechRecognitionEvent,
+  type SpeechRecognitionInstance,
+} from "./speechEngine";
+import { checkSttServer, LocalSpeechRecognizer } from "./localSpeechRecognizer";
 
 // Phonetic spelling variations recognized by Web Speech API for "Severus" (Severus Snape)
 export const SEVERUS_NAME_ALIASES = [
@@ -109,8 +124,7 @@ export const SYSTEM_OPEN_COMMANDS = [
   "online",
 ];
 
-export const STANDALONE_HAILS = [
-  "system",
+export const STANDALONE_HAILS = [  "system",
   "hey system",
   "hi system",
   "hello system",
@@ -170,18 +184,106 @@ export const RESUME_LISTENING_KEYWORDS = [
   "wake system",
 ];
 
+function normalizeVoiceText(text: string): string {
+  return text.toLowerCase().replace(/[,.?!]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Leading address words, including the spellings recognizers actually produce.
+ * The offline Whisper model renders "Severus" as "Severe us", so these have to
+ * keep pace with {@link SEVERUS_NAME_ALIASES} rather than being guessed.
+ */
+const WAKE_PREFIX_ALIASES = [
+  "professor snape",
+  "severe us",
+  "several us",
+  "sever us",
+  "server us",
+  "severeus",
+  "severous",
+  "severus",
+  "severis",
+  "sevrus",
+  "severos",
+  "sewerus",
+  "seberus",
+  "ceverus",
+  "cerberus",
+  "snape",
+  "system",
+  "computer",
+  "assistant",
+  "companion",
+];
+
+const WAKE_PREFIX_REGEX = new RegExp(
+  `^(?:hey|hi|hello|ok|okay|good morning|good afternoon|good evening)?\\s*(?:${WAKE_PREFIX_ALIASES.map(escapeRegExp).join("|")})\\s*,?\\s*`,
+  "i",
+);
+
+/**
+ * Remove a leading greeting and address word ("hey severus,", "system", ...).
+ * Over-stripping is harmless because command matching tests both the raw and the
+ * stripped transcript.
+ */
+export function stripWakePrefix(text: string): string {
+  return text.replace(WAKE_PREFIX_REGEX, "").replace(/^please\s+/i, "").trim();
+}
+
+/**
+ * Microphone-directed mute phrasing. Anchored on purpose: a generic audio mute
+ * ("mute the volume", "mute spotify", "unmute") must reach the OS system-command
+ * grammar instead of switching the recognizer off.
+ */
+const MIC_MUTE_PATTERNS: RegExp[] = [
+  /^(?:please\s+)?(?:mute|silence|stop|disable|turn off|kill)\s+(?:your\s+|the\s+)?(?:mic|microphone|microphone input|listening|listening mode)\b/,
+  /^(?:stop|pause|disable|turn off)\s+listening(?:\s+mode)?$/,
+  /^(?:go to sleep|sleep mode|deafen|deafened|standby|standby mode)$/,
+];
+
+/** Mirror of {@link MIC_MUTE_PATTERNS} for restoring the microphone. */
+const MIC_UNMUTE_PATTERNS: RegExp[] = [
+  /^(?:please\s+)?(?:unmute|un-mute|resume|restore|re-?enable|enable|turn on|start)\s+(?:your\s+|the\s+)?(?:mic|microphone|microphone input|listening|listening mode)\b/,
+  /^(?:start|resume|enable|turn on)\s+listening(?:\s+mode)?$/,
+  /^(?:wake up|wake up now|are you awake|are you listening)$/,
+];
+
+/** True only for explicit microphone-mute phrasing (never for audio volume mute). */
+export function matchesMicMuteCommand(text: string): boolean {
+  const clean = normalizeVoiceText(text);
+  if (!clean) return false;
+  return MIC_MUTE_PATTERNS.some((pattern) => pattern.test(clean));
+}
+
+/** True only for explicit microphone-resume phrasing. */
+export function matchesMicUnmuteCommand(text: string): boolean {
+  const clean = normalizeVoiceText(text);
+  if (!clean) return false;
+  return MIC_UNMUTE_PATTERNS.some((pattern) => pattern.test(clean));
+}
+
 export function matchesStopListening(text: string): boolean {
-  const clean = text.toLowerCase().replace(/[,.?!]/g, " ").replace(/\s+/g, " ").trim();
-  return STOP_LISTENING_KEYWORDS.some((kw) => clean === kw || clean.includes(kw));
+  const clean = normalizeVoiceText(text);
+  return (
+    STOP_LISTENING_KEYWORDS.some((kw) => clean === kw || clean.includes(kw)) ||
+    matchesMicMuteCommand(clean)
+  );
 }
 
 export function matchesResumeListening(text: string): boolean {
-  const clean = text.toLowerCase().replace(/[,.?!]/g, " ").replace(/\s+/g, " ").trim();
-  return RESUME_LISTENING_KEYWORDS.some((kw) => clean === kw || clean.includes(kw));
+  const clean = normalizeVoiceText(text);
+  return (
+    RESUME_LISTENING_KEYWORDS.some((kw) => clean === kw || clean.includes(kw)) ||
+    matchesMicUnmuteCommand(clean)
+  );
 }
 
 export function matchesWakePhrase(text: string): boolean {
-  const clean = text.toLowerCase().replace(/[,.?!]/g, " ").replace(/\s+/g, " ").trim();
+  const clean = normalizeVoiceText(text);
   if (!clean) return false;
 
   // 1. Explicitly reject phrases that are Severus's own speech echoes
@@ -201,8 +303,13 @@ export function matchesWakePhrase(text: string): boolean {
     return false;
   }
 
-  // 2. Explicit open system / wake commands (e.g. "open system", "wake system", "start system")
-  if (SYSTEM_OPEN_COMMANDS.some((kw) => clean === kw || clean.includes(kw))) {
+  // 2. Explicit open system / wake commands (e.g. "open system", "wake system", "start system").
+  // Single generic tokens ("wake", "listen", "online") must stand alone, otherwise any
+  // sentence merely containing them would read as a wake phrase.
+  if (SYSTEM_OPEN_COMMANDS.some((kw) => clean === kw)) {
+    return true;
+  }
+  if (SYSTEM_OPEN_COMMANDS.some((kw) => kw.includes(" ") && clean.includes(kw))) {
     return true;
   }
 
@@ -247,7 +354,6 @@ export interface VoiceCommandHandlers {
   onFloat?: () => void;
   onClose?: () => void;
   onHideToTray?: () => void;
-  onOpenDynamicIsland?: () => void;
   onGeneralQuery?: (query: string) => void;
   onMoveMonitor?: (target: "left" | "right" | "next" | "primary") => void;
   onThinkingMode?: () => void;
@@ -275,43 +381,8 @@ export function getVoiceCmdEnabled(): boolean {
   return true;
 }
 
-interface SpeechRecognitionItem {
-  transcript: string;
-}
-
-interface SpeechRecognitionResultItem {
-  length: number;
-  [index: number]: SpeechRecognitionItem;
-}
-
-interface SpeechRecognitionEvent {
-  resultIndex?: number;
-  results: {
-    length: number;
-    [index: number]: SpeechRecognitionResultItem;
-  };
-}
-
-interface SpeechRecognitionInstance {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
-
 function getSpeechRecognition(): SpeechRecognitionConstructor | null {
-  const win = window as unknown as {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-  return win.SpeechRecognition || win.webkitSpeechRecognition || null;
+  return getSpeechRecognitionCtor();
 }
 
 export class VoiceCommandListener {
@@ -323,6 +394,10 @@ export class VoiceCommandListener {
   private restartTimeout: number | null = null;
   private handlers: VoiceCommandHandlers;
   private unsubMic: (() => void) | null = null;
+  private consecutiveEngineFailures = 0;
+  private engineUnavailableNotified = false;
+  private localRecognizer: LocalSpeechRecognizer | null = null;
+  private engineMode: "pending" | "local" | "webspeech" = "pending";
 
   constructor(handlers: VoiceCommandHandlers) {
     this.handlers = handlers;
@@ -349,24 +424,15 @@ export class VoiceCommandListener {
     if (this.isPaused === paused) return;
     this.isPaused = paused;
     if (paused) {
-      if (this.restartTimeout !== null) {
-        window.clearTimeout(this.restartTimeout);
-        this.restartTimeout = null;
-      }
-      if (this.recognition) {
-        try {
-          this.recognition.onend = null;
-          this.recognition.onerror = null;
-          this.recognition.onresult = null;
-          this.recognition.abort();
-        } catch {
-          // Ignore
-        }
-        this.recognition = null;
-      }
+      this.stopWebSpeech();
+      void this.stopLocalRecognition();
     } else {
       if (this.isListening && getVoiceCmdEnabled()) {
-        this.scheduleRestart(200);
+        if (this.engineMode === "local") {
+          this.startLocalRecognition();
+        } else {
+          this.scheduleRestart(200);
+        }
       }
     }
   }
@@ -374,7 +440,151 @@ export class VoiceCommandListener {
   public start(): boolean {
     this.isListening = true;
     this.isPaused = false;
+    // Probe the runtime's available engines up front so the first recognizer
+    // already knows which one to use.
+    void refreshSpeechEngineStatus();
+    void this.selectEngine();
     return this.initRecognition();
+  }
+
+  /**
+   * Prefer the local offline bridge when it is running. The Web Speech path stays
+   * as the fallback for environments that do have a working speech service.
+   */
+  private async selectEngine(): Promise<void> {
+    const health = await checkSttServer();
+    const useLocal = health.online && health.backendAvailable !== false;
+    const previous = this.engineMode;
+    this.engineMode = useLocal ? "local" : "webspeech";
+
+    if (previous === this.engineMode) return;
+
+    voiceDiagRecord(
+      "listener",
+      useLocal ? "engine:local-bridge" : "engine:webspeech",
+      useLocal ? `${health.engine} model=${health.model}` : health.detail || "local bridge offline",
+    );
+
+    if (!this.isListening || this.isPaused) return;
+
+    // Swap onto the newly selected engine.
+    if (useLocal) {
+      this.stopWebSpeech();
+      this.startLocalRecognition();
+    } else {
+      void this.stopLocalRecognition();
+      this.initRecognition();
+    }
+  }
+
+  private stopWebSpeech(): void {
+    if (this.restartTimeout !== null) {
+      window.clearTimeout(this.restartTimeout);
+      this.restartTimeout = null;
+    }
+    if (this.recognition) {
+      try {
+        this.recognition.onend = null;
+        this.recognition.onerror = null;
+        this.recognition.onresult = null;
+        this.recognition.abort();
+      } catch {
+        // ignore
+      }
+      this.recognition = null;
+    }
+  }
+
+  private startLocalRecognition(): boolean {
+    if (this.localRecognizer?.isRunning()) return true;
+
+    const recognizer = new LocalSpeechRecognizer({
+      // Never capture or transcribe Severus's own speech coming back through the
+      // speakers: that is wasted CPU and a source of self-triggered commands.
+      shouldIgnoreAudio: () => isVoiceSpeaking() || isVoiceInEchoCooldown(200),
+      onTranscript: (text) => {
+        const cleaned = text.toLowerCase().replace(/[,.?!]/g, " ").replace(/\s+/g, " ").trim();
+        if (!cleaned) return;
+        if (isVoiceSpeaking() || isVoiceInEchoCooldown(350)) {
+          voiceDiagRecord("listener", "drop:self-echo-window", cleaned);
+          return;
+        }
+        voiceDiagRecord("listener", "transcript", cleaned);
+        this.processCommand(cleaned);
+      },
+      onStatus: (message) => {
+        console.warn(`[VoiceCommandListener] ${message}`);
+      },
+    });
+
+    this.localRecognizer = recognizer;
+    void recognizer.start().then((ok) => {
+      if (ok) return;
+      // Capture failed: fall back rather than leaving voice silently dead.
+      this.localRecognizer = null;
+      if (this.isListening && !this.isPaused && getVoiceCmdEnabled()) {
+        this.engineMode = "webspeech";
+        voiceDiagRecord("listener", "engine:local-capture-failed", "falling back to the standard engine", "warn");
+        this.initRecognition();
+      }
+    });
+    return true;
+  }
+
+  private async stopLocalRecognition(): Promise<void> {
+    const recognizer = this.localRecognizer;
+    this.localRecognizer = null;
+    if (recognizer) {
+      await recognizer.stop();
+    }
+  }
+
+  /**
+   * The standard engine could not reach a speech service. WebView2 has none, so
+   * re-probe capabilities, pull the on-device model, and report plainly when this
+   * window truly has no engine rather than looping in silence.
+   */
+  private handleEngineFailure(lang: string): void {
+    // A network failure is the signature of a runtime with no speech service, so
+    // first check whether the local offline bridge can take over.
+    void checkSttServer().then((health) => {
+      if (health.online && health.backendAvailable !== false) {
+        voiceDiagRecord("listener", "engine:local-bridge-available", `${health.engine} model=${health.model}`);
+        this.engineMode = "local";
+        if (this.isListening && !this.isPaused) {
+          this.stopWebSpeech();
+          this.startLocalRecognition();
+        }
+        return;
+      }
+
+      void recoverSpeechEngine(lang).then((recovery) => {
+        if (recovery.retryNow) {
+          voiceDiagRecord("listener", "engine:recovered", recovery.reason);
+          if (this.isListening && !this.isPaused) {
+            this.scheduleRestart(150);
+          }
+          return;
+        }
+
+        if (recovery.installable) {
+          voiceDiagRecord("listener", "engine:awaiting-on-device-model", recovery.reason, "warn");
+          return;
+        }
+
+        if (!this.engineUnavailableNotified) {
+          this.engineUnavailableNotified = true;
+          voiceDiagRecord("listener", "engine:none-available", recovery.reason, "error");
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("severus-toast", {
+                detail: "No speech engine available. Start the offline voice bridge to enable listening.",
+              }),
+            );
+          }
+        }
+      });
+    });
   }
 
   private scheduleRestart(delayMs = 200): void {
@@ -394,9 +604,14 @@ export class VoiceCommandListener {
       return false;
     }
 
+    if (this.engineMode === "local") {
+      return this.startLocalRecognition();
+    }
+
     const SpeechRec = getSpeechRecognition();
     if (!SpeechRec) {
       console.warn("[VoiceCommandListener] Web Speech API is not supported in this environment.");
+      voiceDiagRecord("listener", "api-missing", "webspeech recognition unavailable", "error");
       return false;
     }
 
@@ -413,20 +628,30 @@ export class VoiceCommandListener {
       this.recognition = null;
     }
 
-    // Bind media stream for chosen microphone
-    void getMicrophoneStream().catch(() => {});
-
     try {
       const rec = new SpeechRec();
       rec.continuous = true;
       rec.interimResults = false;
       rec.lang = "en-US";
 
+      // WebView2 has no cloud speech service, so the standard engine fails with a
+      // network error forever. Prefer fully on-device recognition when the runtime
+      // offers it, downloading the model if it is only available for download.
+      const strategy = applySpeechEngine(rec, rec.lang);
+      voiceDiagRecord(
+        "listener",
+        strategy.useLocal ? "engine:on-device" : "engine:standard",
+        strategy.reason,
+      );
+
       rec.onresult = (event: SpeechRecognitionEvent) => {
         // Drop audio if Severus is currently speaking or in acoustic cooldown (350ms)
         if (isVoiceSpeaking() || isVoiceInEchoCooldown(350)) {
+          voiceDiagRecord("listener", "drop:self-echo-window");
           return;
         }
+
+        this.consecutiveEngineFailures = 0;
 
         const results = event.results;
         const lastIndex = results.length - 1;
@@ -441,6 +666,7 @@ export class VoiceCommandListener {
             .trim();
           if (cleaned) {
             console.log(`[VoiceCommandListener] Speech recognized transcript: "${cleaned}"`);
+            voiceDiagRecord("listener", "transcript", cleaned);
             this.processCommand(cleaned);
           }
         }
@@ -451,27 +677,49 @@ export class VoiceCommandListener {
         if (errorType !== "no-speech" && errorType !== "network" && errorType !== "aborted") {
           console.warn("[VoiceCommandListener] Speech recognition error:", errorType);
         }
-        if (this.isListening && !this.isPaused) {
-          const delay = errorType === "network" ? 3000 : 400;
+        // Recorded for every type, including the ones that used to be swallowed:
+        // an unlogged failure is the reason earlier voice fixes were unverifiable.
+        voiceDiagFatalRecognitionError("listener", errorType);
+        this.recognition = null;
+
+        if (errorType === "network") {
+          this.consecutiveEngineFailures += 1;
+          this.handleEngineFailure(rec.lang);
+        }
+
+        if (this.isListening && !this.isPaused && getVoiceCmdEnabled()) {
+          // Network failures used to retry every three seconds forever, which
+          // burned cycles without ever succeeding. Back off instead.
+          const baseDelay = voiceDiagIsFatalRecognitionError(errorType) ? 4000 : errorType === "network" ? 3000 : 350;
+          const delay =
+            errorType === "network"
+              ? Math.min(baseDelay * Math.pow(2, Math.min(this.consecutiveEngineFailures - 1, 3)), 30000)
+              : baseDelay;
+          voiceDiagRecord("listener", "restart-scheduled", `${errorType} in ${delay}ms`);
           this.scheduleRestart(delay);
         }
       };
 
       rec.onend = () => {
+        this.recognition = null;
         // Auto-restart continuous listening with a fresh instance after audio thread reset
-        if (this.isListening && !this.isPaused) {
-          this.scheduleRestart(200);
+        if (this.isListening && !this.isPaused && getVoiceCmdEnabled()) {
+          voiceDiagRecord("listener", "session-ended-restart");
+          this.scheduleRestart(250);
         }
       };
 
       rec.start();
       this.recognition = rec;
+      voiceDiagRecord("listener", "recognition-started");
       return true;
     } catch (err) {
       console.warn("[VoiceCommandListener] Failed starting voice recognition:", err);
+      voiceDiagRecord("listener", "start-failed", String(err), "error");
+      this.recognition = null;
       // Auto-retry after a moment if device was temporarily busy
-      if (this.isListening && !this.isPaused) {
-        this.scheduleRestart(600);
+      if (this.isListening && !this.isPaused && getVoiceCmdEnabled()) {
+        this.scheduleRestart(800);
       }
       return false;
     }
@@ -484,66 +732,65 @@ export class VoiceCommandListener {
       this.unsubMic();
       this.unsubMic = null;
     }
-    if (this.restartTimeout !== null) {
-      window.clearTimeout(this.restartTimeout);
-      this.restartTimeout = null;
-    }
-    if (this.recognition) {
-      try {
-        this.recognition.onend = null;
-        this.recognition.onerror = null;
-        this.recognition.onresult = null;
-        this.recognition.stop();
-      } catch {
-        // Ignore stop errors
-      }
-      this.recognition = null;
-    }
+    this.stopWebSpeech();
+    void this.stopLocalRecognition();
   }
 
   private processCommand(text: string): void {
     // 1. Check if Severus is currently speaking or in acoustic cooldown (350ms)
     if (isVoiceSpeaking() || isVoiceInEchoCooldown(350)) {
+      voiceDiagRecord("listener", "drop:self-echo-window", text);
       return;
     }
 
     // 2. Filter out self-echo phrases or words spoken by Severus himself
     if (isEchoOfSeverus(text)) {
+      voiceDiagRecord("listener", "drop:echo-of-severus", text);
       return;
     }
 
     // 3. Command execution cooldown buffer (400ms)
     const now = Date.now();
     if (now - this.lastCommandTime < 400) {
+      voiceDiagRecord("listener", "drop:command-cooldown", text);
       return;
     }
 
     console.log(`[VoiceCommandListener] Processing command: "${text}"`);
 
-    // Priority 0A: If in Standby mode (deafened/sleep), ignore ALL regular speech and video audio!
-    // ONLY explicit resume listening / wake up commands will reactivate Severus.
+    // Priority 0A: If in Standby mode (deafened/sleep), ignore regular speech
     if (this.isStandby) {
       if (matchesResumeListening(text)) {
         this.lastCommandTime = now;
         this.isStandby = false;
+        voiceDiagRecord("listener", "standby-resumed", text);
         this.handlers.onHeard?.(text, "resume listening");
         this.handlers.onToggleListening?.(true);
+      } else {
+        voiceDiagRecord("listener", "drop:standby", text);
       }
       return;
     }
 
-    // Priority 0B: Stop / Pause listening commands (e.g. "stop listening", "go to sleep", "mute mic")
+    // Priority 0B: Stop / Pause listening commands
     if (matchesStopListening(text)) {
       this.lastCommandTime = now;
       this.isStandby = true;
+      voiceDiagRecord("listener", "standby-entered", text);
       this.handlers.onHeard?.(text, "stop listening");
       this.handlers.onToggleListening?.(false);
       return;
     }
 
-    // Priority 1: Specific action intents (checked BEFORE general wake phrase so "Severus, open copilot" executes the copilot command!)
+    // Strip conversational wake prefixes: "hey severus", "system", "okay system", "hey computer", "please"
+    const strippedText = stripWakePrefix(text);
+
+    const targetText = strippedText.length > 0 ? strippedText : text;
+    const checkMatch = (keywords: string[]) => matchesKeywords(text, keywords) || (strippedText.length > 0 && matchesKeywords(strippedText, keywords));
+
+    // Priority 1: Specific action intents
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "new note",
         "create note",
         "create a note",
@@ -564,7 +811,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "journal",
         "quick journal",
         "daily journal",
@@ -584,7 +831,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "training block",
         "training blocks",
         "my training block",
@@ -596,12 +843,12 @@ export class VoiceCommandListener {
     ) {
       this.lastCommandTime = now;
       this.handlers.onHeard?.(text, "training block");
-      this.handlers.onGeneralQuery?.(text);
+      this.handlers.onGeneralQuery?.(targetText);
       return;
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "strava",
         "running status",
         "run status",
@@ -621,7 +868,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "open running mode",
         "start running mode",
         "running mode",
@@ -639,7 +886,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "thinking mode",
         "start thinking",
         "enter thinking",
@@ -650,7 +897,14 @@ export class VoiceCommandListener {
         "conversation mode",
         "companion chat",
         "start conversation",
-        "thinking pill",
+        "hologram mode",
+        "holographic mode",
+        "reactor mode",
+        "open dynamic island",
+        "dynamic island",
+        "open island",
+        "jarvis mode",
+        "open jarvis",
       ])
     ) {
       this.lastCommandTime = now;
@@ -660,18 +914,28 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "copilot",
         "co pilot",
         "co-pilot",
-        "assistant",
+        "open copilot",
+        "open the copilot",
+        "show copilot",
+        "launch copilot",
+        "start copilot",
+        "bring up copilot",
+        "switch to copilot",
+        "go to copilot",
+        "ai copilot",
+        "open ai copilot",
+        "copilot view",
         "ask ai",
         "open ai",
         "ask severus",
         "talk to severus",
         "chat with severus",
-        "ai copilot",
-        "copilot view",
+        "assistant",
+        "open assistant",
       ])
     ) {
       this.lastCommandTime = now;
@@ -682,9 +946,7 @@ export class VoiceCommandListener {
 
     if (
       (() => {
-        // Web search phrasing ("search cats on youtube") names a non-vault
-        // target → belongs to the system grammar. Vault phrasing stays here.
-        const webSearch = /^(search|google|youtube|bing|duckduckgo|ddg|wikipedia|wiki|github|look up)\s+(for\s+)?(\S.*)$/.exec(text);
+        const webSearch = /^(search|google|youtube|bing|duckduckgo|ddg|wikipedia|wiki|github|look up)\s+(for\s+)?(\S.*)$/.exec(targetText);
         if (!webSearch) return false;
         const target = webSearch[3].trim().toLowerCase();
         const vaultVocab = ["note", "notes", "my notes", "the vault", "vault", "graph"];
@@ -693,12 +955,12 @@ export class VoiceCommandListener {
     ) {
       this.lastCommandTime = now;
       this.handlers.onHeard?.(text, "web search");
-      this.handlers.onSystemCommand?.(text);
+      this.handlers.onSystemCommand?.(targetText);
       return;
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "search",
         "find note",
         "search note",
@@ -717,7 +979,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "check my email",
         "check email",
         "any new emails",
@@ -737,7 +999,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "whats due",
         "what is due",
         "due this week",
@@ -763,7 +1025,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "grounding",
         "assembler",
         "context assembler",
@@ -779,7 +1041,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "graph",
         "knowledge graph",
         "knowledge map",
@@ -797,7 +1059,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "notes",
         "open notes",
         "show notes",
@@ -816,7 +1078,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "home",
         "dashboard",
         "main view",
@@ -832,7 +1094,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "zen mode",
         "zen",
         "focus mode",
@@ -848,13 +1110,12 @@ export class VoiceCommandListener {
 
     if (
       (() => {
-        // "maximize chrome" names a target window → system grammar.
-        const named = /^(maximize|restore|unminimize|enlarge)\s+(the\s+)?(\S+)/.exec(text);
+        const named = /^(maximize|restore|unminimize|enlarge)\s+(the\s+)?(\S+)/.exec(targetText);
         const inAppTargets = ["window", "it", "this", "that", "severus", "view", "workstation", "screen"];
         const isNamedAppMaximize = named !== null && !inAppTargets.includes(named[3]);
         return (
           !isNamedAppMaximize &&
-          matchesKeywords(text, [
+          checkMatch([
             "maximize",
             "maximize window",
             "maximize screen",
@@ -888,7 +1149,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "float",
         "floating",
         "companion",
@@ -906,7 +1167,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "left monitor",
         "left screen",
         "left display",
@@ -928,7 +1189,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "right monitor",
         "right screen",
         "right display",
@@ -950,7 +1211,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "next monitor",
         "switch monitor",
         "switch screen",
@@ -971,7 +1232,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "primary monitor",
         "main monitor",
         "main screen",
@@ -989,9 +1250,7 @@ export class VoiceCommandListener {
 
     if (
       (() => {
-        // "close chrome" names an app → belongs to the system grammar, not
-        // the in-app close (which dismisses dialogs / hides to tray).
-        const named = /^(close|quit|kill)\s+(the\s+)?(\S+)/.exec(text);
+        const named = /^(close|quit|kill)\s+(the\s+)?(\S+)/.exec(targetText);
         const inAppTargets = [
           "it", "this", "that", "all", "them", "everything", "severus", "views", "dialogs",
           "modals", "overlays", "popovers", "window", "windows",
@@ -999,7 +1258,7 @@ export class VoiceCommandListener {
         const isNamedAppClose = named !== null && !inAppTargets.includes(named[3]);
         return (
           !isNamedAppClose &&
-          matchesKeywords(text, [
+          checkMatch([
             "close",
             "cancel",
             "dismiss",
@@ -1019,7 +1278,7 @@ export class VoiceCommandListener {
     }
 
     // Priority 2: Explicit Open System Commands vs General Wake Phrases
-    const isExplicitOpen = SYSTEM_OPEN_COMMANDS.some((kw) => text === kw || text.includes(kw));
+    const isExplicitOpen = SYSTEM_OPEN_COMMANDS.some((kw) => text === kw || text.includes(kw) || (strippedText.length > 0 && (strippedText === kw || strippedText.includes(kw))));
     if (isExplicitOpen) {
       this.lastCommandTime = now;
       this.handlers.onHeard?.(text, "open system");
@@ -1033,20 +1292,13 @@ export class VoiceCommandListener {
 
     if (matchesWakePhrase(text)) {
       this.lastCommandTime = now;
+      voiceDiagRecord("listener", "matched:wake-phrase", text);
       this.handlers.onHeard?.(text, "wake phrase");
       this.handlers.onWakePhrase?.();
       return;
     }
 
-    // Strip conversational wake prefixes: "hey severus", "system", "okay system", "hey computer", "please"
-    const prefixRegex =
-      /^(hey|hi|hello|ok|okay|good morning|good afternoon|good evening)?\s*(severus|professor snape|snape|system|computer|assistant|companion|server|sewerus|seberus|severis)\s*,?\s*/i;
-    const strippedText = text
-      .replace(prefixRegex, "")
-      .replace(/^please\s+/i, "")
-      .trim();
-
-    // Priority 3: system-control grammar — verb-led phrases (e.g. "open opera", "close chrome")
+    // Priority 3: system-control grammar — verb-led phrases
     const SYSTEM_VERB_PREFIX =
       /^(open|launch|start|run|snap|switch to|focus|bring|go to|close|quit|kill|maximize|restore|unminimize|minimize|volume|mute|unmute|louder|quieter|play|pause|resume|stop the|skip|screenshot|screen capture|clipboard|read clipboard|lock|list windows|show windows|what windows|which windows|window list|open windows|minimize all|show desktop|take a shot|next (track|song|desktop)|previous (track|song|desktop)|back a song)\b/;
 
@@ -1062,7 +1314,7 @@ export class VoiceCommandListener {
     }
 
     if (
-      matchesKeywords(text, [
+      checkMatch([
         "close system",
         "close the system",
         "exit system",
@@ -1085,37 +1337,14 @@ export class VoiceCommandListener {
       return;
     }
 
-    if (
-      matchesKeywords(text, [
-        "open dynamic island",
-        "show dynamic island",
-        "open island",
-        "show island",
-        "wake dynamic island",
-        "dock island",
-        "dynamic island",
-        "reveal island",
-      ])
-    ) {
-      this.lastCommandTime = now;
-      this.handlers.onHeard?.(text, "open dynamic island");
-      this.handlers.onOpenDynamicIsland?.();
-      return;
-    }
-
-    // Priority 4: Wake Phrase on stripped text (if user said e.g. "please open system")
-    if (strippedText.length > 0 && matchesWakePhrase(strippedText)) {
-      this.lastCommandTime = now;
-      this.handlers.onHeard?.(text, "wake phrase");
-      this.handlers.onWakePhrase?.();
-      return;
-    }
-
-    // Fallback: notify that phrase was heard and dispatch ambient cognitive query to Thinking Mode
+    // Fallback: dispatch to conversational AI query engine
     this.handlers.onHeard?.(text, undefined);
-    if (text.trim().length > 3) {
+    if (targetText.length > 2) {
       this.lastCommandTime = now;
-      this.handlers.onGeneralQuery?.(text);
+      voiceDiagRecord("listener", "fallback:general-query", targetText);
+      this.handlers.onGeneralQuery?.(targetText);
+    } else {
+      voiceDiagRecord("listener", "drop:too-short", text);
     }
   }
 }

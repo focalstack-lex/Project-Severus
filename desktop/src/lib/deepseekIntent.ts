@@ -13,14 +13,14 @@ import type { SystemIntent } from "./systemControl";
 const INTENT_PROMPT = `You translate a user's Windows-control request into exactly one system action.
 
 Respond with ONLY a JSON object, no prose, no code fences:
-{"action": "<name>", "arg": <string | number | {"target": string|null, "position": string}>}
+{"action": "<name>", "arg": <string | number | {"target": string|null, "position": string} | {"query": string, "engine": string}>}
 
 Allowed actions and their arg shapes:
-- launch_app: app name (e.g. "chrome", "notepad", "explorer")
+- launch_app: app name (e.g. "chrome", "notepad", "explorer", "spotify", "cursor", "figma")
 - open_known_folder: one of "shell:Personal", "shell:Downloads", "shell:Desktop", "shell:My Pictures", "shell:My Music", "shell:My Video", "@workspace", "@notes"
-- open_path: a Windows file or folder path
+- open_path: a Windows file or folder path (e.g. "C:\\Users", "~/Documents")
 - volume_set: integer 0-100
-- volume_step: integer 10 or -10
+- volume_step: integer step (e.g. 10, -10, 20, -20)
 - mute_toggle: no arg
 - media_key: "play_pause" | "next" | "prev" | "stop"
 - screenshot: no arg
@@ -30,15 +30,17 @@ Allowed actions and their arg shapes:
 - minimize_all: no arg
 - switch_desktop: "next" | "prev"
 - close_window: app or window title to close
+- web_search: {"query": "<search query>", "engine": "google"|"youtube"|"bing"|"duckduckgo"|"github"|"wikipedia"}
+- lock_workstation: no arg
 
 If the request is not a Windows control action, or maps to none of these, respond {"action": "none"}. The user may speak loosely — interpret "put the music thing on" as media play/pause, "wake the screen up" as focus the current window — but never choose an action outside the list.`;
 
-interface RawIntent {
+export interface RawIntent {
   action?: string;
   arg?: unknown;
 }
 
-function validIntent(raw: RawIntent): SystemIntent | null {
+export function validIntent(raw: RawIntent): SystemIntent | null {
   const str = (value: unknown): string => (typeof value === "string" ? value : "");
   switch (raw.action) {
     case "launch_app":
@@ -53,11 +55,22 @@ function validIntent(raw: RawIntent): SystemIntent | null {
     }
     case "volume_set": {
       const n = Number(raw.arg);
-      return Number.isFinite(n) ? { action: "volume_set", arg: Math.round(n) } : null;
+      return Number.isFinite(n) ? { action: "volume_set", arg: Math.max(0, Math.min(100, Math.round(n))) } : null;
     }
     case "volume_step": {
       const n = Number(raw.arg);
-      return n === 10 || n === -10 ? { action: "volume_step", arg: n } : null;
+      if (!Number.isFinite(n) || n === 0) return null;
+      const clamped = Math.max(-100, Math.min(100, Math.round(n)));
+      return { action: "volume_step", arg: clamped };
+    }
+    case "web_search": {
+      if (typeof raw.arg !== "object" || raw.arg === null) return null;
+      const arg = raw.arg as { query?: unknown; engine?: unknown };
+      const query = str(arg.query).trim();
+      if (!query) return null;
+      const engineStr = str(arg.engine).trim().toLowerCase();
+      const engine = ["google", "youtube", "bing", "duckduckgo", "github", "wikipedia"].includes(engineStr) ? engineStr : "google";
+      return { action: "web_search", arg: { query, engine } };
     }
     case "snap_window": {
       if (typeof raw.arg !== "object" || raw.arg === null) return null;
@@ -72,6 +85,7 @@ function validIntent(raw: RawIntent): SystemIntent | null {
     case "screenshot":
     case "list_windows":
     case "minimize_all":
+    case "lock_workstation":
       return { action: raw.action } as SystemIntent;
     case "clipboard_write": {
       const arg = str(raw.arg);

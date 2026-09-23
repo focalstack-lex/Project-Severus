@@ -516,6 +516,54 @@ pub fn run() {
             let notes_dir = app.state::<Paths>().notes_dir();
             watcher::start(app.handle().clone(), notes_dir);
 
+            // Auto-spawn the local voice daemons when their ports are inactive.
+            // 17493 renders speech, 17494 recognizes it offline: WebView2 has no
+            // speech service, so recognition depends entirely on the bridge.
+            let root_dir = app.state::<Paths>().root.clone();
+            std::thread::spawn(move || {
+                let daemons = [
+                    (17493u16, "cosyvoice_severus_server.py", Vec::<String>::new()),
+                    (17494u16, "whisper_severus_server.py", Vec::<String>::new()),
+                ];
+
+                for (port, script_name, extra_args) in daemons {
+                    let addr = format!("127.0.0.1:{}", port);
+                    let parse_result = addr.parse();
+                    if parse_result.is_err() {
+                        eprintln!("[Severus Tauri] Warning: invalid daemon address {}", addr);
+                        continue;
+                    }
+                    let socket_addr = parse_result.unwrap();
+                    if std::net::TcpStream::connect_timeout(&socket_addr, std::time::Duration::from_millis(500)).is_ok() {
+                        continue;
+                    }
+
+                    let script = root_dir.join("tools").join(script_name);
+                    if !script.exists() {
+                        eprintln!("[Severus Tauri] Warning: daemon script missing: {:?}", script);
+                        continue;
+                    }
+
+                    let mut cmd = std::process::Command::new("python");
+                    cmd.arg(&script);
+                    for arg in &extra_args {
+                        cmd.arg(arg);
+                    }
+                    #[cfg(target_os = "windows")]
+                    {
+                        use std::os::windows::process::CommandExt;
+                        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+                    }
+                    match cmd.spawn() {
+                        Ok(_) => println!("[Severus Tauri] Started local voice daemon {} on port {}", script_name, port),
+                        Err(e) => eprintln!(
+                            "[Severus Tauri] Warning: Failed to spawn {} on port {}: {}",
+                            script_name, port, e
+                        ),
+                    }
+                }
+            });
+
             // Center main desktop window on startup
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.center();

@@ -1,5 +1,6 @@
 import { isVoiceSpeaking, isVoiceInEchoCooldown } from "./voice";
-import { getSelectedMicrophoneId, onMicrophoneChanged } from "./audioDevices";
+import { getRawMicrophoneStream, onMicrophoneChanged } from "./audioDevices";
+import { voiceDiagRecord } from "./voiceDiagnostics";
 
 /**
  * Acoustic Double-Clap Detector using Web Audio API.
@@ -41,6 +42,8 @@ export class ClapDetector {
   private analyser: AnalyserNode | null = null;
   private micStream: MediaStream | null = null;
   private isListening = false;
+  /** True while the microphone is deliberately handed to another consumer. */
+  private suspended = false;
   private lastClapTime = 0;
   private animFrameId: number | null = null;
   private startTime = 0;
@@ -61,6 +64,7 @@ export class ClapDetector {
     this.onClapSingle = options.onClapSingle;
 
     this.unsubMic = onMicrophoneChanged(() => {
+      if (this.suspended) return;
       if (this.isListening) {
         this.stop();
         void this.start();
@@ -72,35 +76,66 @@ export class ClapDetector {
     if (this.isListening) return true;
     if (!getClapEnabled()) return false;
 
+    this.suspended = false;
+    let stream: MediaStream | null = null;
+
     try {
-      const selectedMicId = getSelectedMicrophoneId();
-      this.micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: selectedMicId ? { exact: selectedMicId } : undefined,
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
+      stream = await getRawMicrophoneStream();
 
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      this.audioContext = new AudioCtx();
-      const source = this.audioContext.createMediaStreamSource(this.micStream);
-      
-      this.analyser = this.audioContext.createAnalyser();
-      this.analyser.fftSize = 512;
-      this.analyser.smoothingTimeConstant = 0.1;
+      const audioContext = new AudioCtx();
+      const source = audioContext.createMediaStreamSource(stream);
 
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.1;
+
+      // Commit only once every step succeeded, so a failure part way through
+      // cannot leave an open capture handle behind holding the microphone.
+      this.micStream = stream;
+      this.audioContext = audioContext;
+      this.analyser = analyser;
       this.startTime = Date.now();
-      source.connect(this.analyser);
+      source.connect(analyser);
       this.isListening = true;
       this.loop();
+      voiceDiagRecord("clap", "listening-started");
       return true;
     } catch (err) {
       console.warn("[ClapDetector] Microphone access unavailable or denied:", err);
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      voiceDiagRecord("clap", "listening-failed", String(err), "warn");
       this.isListening = false;
       return false;
     }
+  }
+
+  /**
+   * Release the microphone without tearing the detector down, so another
+   * consumer (speech recognition) can own the device exclusively.
+   */
+  public suspend(): void {
+    if (!this.isListening) {
+      this.suspended = true;
+      return;
+    }
+    this.stop();
+    this.suspended = true;
+    voiceDiagRecord("clap", "suspended", "microphone released for speech recognition");
+  }
+
+  /** Re-acquire the microphone after a suspension. */
+  public resume(): void {
+    if (!this.suspended) return;
+    this.suspended = false;
+    voiceDiagRecord("clap", "resuming");
+    void this.start();
+  }
+
+  public isSuspended(): boolean {
+    return this.suspended;
   }
 
   public stop(): void {
@@ -116,10 +151,12 @@ export class ClapDetector {
       void this.audioContext.close();
       this.audioContext = null;
     }
+    this.analyser = null;
     this.isListening = false;
   }
 
   public destroy(): void {
+    this.suspended = false;
     this.stop();
     if (this.unsubMic) {
       this.unsubMic();

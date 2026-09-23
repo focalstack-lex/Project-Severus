@@ -8,7 +8,7 @@
     "dev": "tauri dev",
     "start": "tauri dev",
     "build": "tsc && vite build",
-    "build:release": "powershell -NoProfile -Command \"Stop-Process -Name severus-secondbrain -Force -ErrorAction SilentlyContinue\"; npm run build && tauri build",
+    "build:release": "powershell -NoProfile -Command \"Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like 'severus*secondbrain' } | Stop-Process -Force -ErrorAction SilentlyContinue\"; npm run build && tauri build",
     "preview": "vite preview",
     "tauri": "tauri"
   },

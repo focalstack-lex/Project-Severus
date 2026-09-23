@@ -460,16 +460,16 @@ pub fn parse_command(text: &str) -> Option<Resolution> {
             None
         };
         if let Some(position) = position {
-        let remainder = ["left", "right", "maximize", "minimize", "half", "side", "screen", "window", "to", "the"]
-            .iter()
-            .fold(rest.to_string(), |acc, word| acc.replace(word, " "))
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
+            let remainder = ["left", "right", "maximize", "minimize", "half", "side", "screen", "window", "to", "the"]
+                .iter()
+                .fold(rest.to_string(), |acc, word| acc.replace(word, " "))
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
             let target = if remainder.is_empty() {
                 None
             } else {
-                app_alias(&remainder).map(str::to_string)
+                Some(resolve_app_name(&remainder).unwrap_or(remainder))
             };
             let description = match &target {
                 Some(app) => format!("Snap {app} to the {position} half"),
@@ -486,15 +486,20 @@ pub fn parse_command(text: &str) -> Option<Resolution> {
     // --- close window (destructive; requires an explicit app target) ---
     for verb in ["close", "quit", "kill"] {
         if let Some(rest) = text.strip_prefix(verb) {
+            let trimmed = rest.trim();
+            if trimmed.is_empty()
+                || ["it", "this", "that", "all", "them", "everything", "window", "windows", "system", "severus", "workstation"]
+                    .contains(&trimmed)
+            {
+                continue;
+            }
             if let Some(app) = resolve_app_name(rest) {
-                if app_alias(&app).is_some() {
-                    let description = format!("Close the {app} window");
-                    return Some(Resolution {
-                        intent: SystemIntent::CloseWindow(app),
-                        requires_password: true,
-                        description,
-                    });
-                }
+                let description = format!("Close the {app} window");
+                return Some(Resolution {
+                    intent: SystemIntent::CloseWindow(app),
+                    requires_password: true,
+                    description,
+                });
             }
         }
     }
@@ -502,7 +507,12 @@ pub fn parse_command(text: &str) -> Option<Resolution> {
     // --- maximize / minimize with optional target ---
     for (verb, position) in [("maximize", "maximize"), ("minimize", "minimize")] {
         if let Some(rest) = text.strip_prefix(verb) {
-            let target = resolve_app_name(rest).filter(|name| app_alias(name).is_some());
+            let trimmed = rest.trim();
+            let target = if trimmed.is_empty() || ["window", "it", "this", "that", "screen", "workstation"].contains(&trimmed) {
+                None
+            } else {
+                resolve_app_name(rest)
+            };
             let description = match &target {
                 Some(app) => format!("{verb} the {app} window"),
                 None => format!("{verb} the focused window"),
@@ -547,14 +557,12 @@ pub fn parse_command(text: &str) -> Option<Resolution> {
     for verb in ["switch to", "focus", "bring up", "bring", "go to"] {
         if let Some(rest) = text.strip_prefix(verb) {
             if let Some(app) = resolve_app_name(rest) {
-                if app_alias(&app).is_some() {
-                    let description = format!("Bring {app} to the foreground");
-                    return Some(Resolution {
-                        intent: SystemIntent::FocusApp(app),
-                        requires_password: false,
-                        description,
-                    });
-                }
+                let description = format!("Bring {app} to the foreground");
+                return Some(Resolution {
+                    intent: SystemIntent::FocusApp(app),
+                    requires_password: false,
+                    description,
+                });
             }
         }
     }
@@ -566,8 +574,17 @@ pub fn parse_command(text: &str) -> Option<Resolution> {
             if rest.is_empty() {
                 continue;
             }
-            // Typed paths: open "C:\foo" / open C:\foo / open %USERPROFILE%\x
-            if rest.starts_with('"') || rest.contains(":\\") || rest.starts_with('%') {
+            // Typed paths: open "C:\foo" / open C:\foo / open C:/foo / open %USERPROFILE%\x / open ~/foo
+            let is_path = rest.starts_with('"')
+                || rest.contains(":\\")
+                || rest.contains(":/")
+                || rest.starts_with('%')
+                || rest.starts_with("~/")
+                || rest.starts_with("~\\")
+                || rest.starts_with(".\\")
+                || rest.starts_with("./")
+                || rest.starts_with("\\\\");
+            if is_path {
                 let path = rest.trim_matches('"').to_string();
                 let description = format!("Open {path}");
                 return Some(Resolution {
@@ -775,7 +792,29 @@ mod win32 {
                 .spawn()
                 .map(|_| ())
                 .map_err(|e| format!("cannot launch '{app_path}': {e}"))
+        } else if target.starts_with("http://") || target.starts_with("https://") || target.starts_with("ms-settings:") {
+            std::process::Command::new("cmd")
+                .args(["/C", "start", "", target])
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("cannot launch '{target}': {e}"))
+        } else if std::path::Path::new(target).exists() {
+            std::process::Command::new("explorer")
+                .arg(target)
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .map(|_| ())
+                .map_err(|e| format!("cannot open path '{target}': {e}"))
         } else {
+            // First attempt direct spawn (e.g. if in PATH like code, wt, notepad, calc)
+            if std::process::Command::new(target)
+                .creation_flags(CREATE_NO_WINDOW)
+                .spawn()
+                .is_ok()
+            {
+                return Ok(());
+            }
             std::process::Command::new("cmd")
                 .args(["/C", "start", "", target])
                 .creation_flags(CREATE_NO_WINDOW)
@@ -818,11 +857,20 @@ mod win32 {
     }
 
     fn expand_env(path: &str) -> Result<String, String> {
-        if !path.contains('%') {
-            return Ok(path.to_string());
+        let home = std::env::var("USERPROFILE").unwrap_or_else(|_| ".".to_string());
+        let mut path_str = if path.starts_with("~/") || path.starts_with("~\\") {
+            format!("{}{}", home, &path[1..])
+        } else {
+            path.to_string()
+        };
+        if !path_str.starts_with("http://") && !path_str.starts_with("https://") {
+            path_str = path_str.replace('/', "\\");
+        }
+        if !path_str.contains('%') {
+            return Ok(path_str);
         }
         let mut result = String::new();
-        let mut rest = path;
+        let mut rest = path_str.as_str();
         while let Some(start) = rest.find('%') {
             result.push_str(&rest[..start]);
             let after = &rest[start + 1..];
@@ -1408,6 +1456,10 @@ mod tests {
     fn parses_focus_and_screenshot() {
         assert_eq!(intent_of("switch to chrome"), SystemIntent::FocusApp("chrome".into()));
         assert_eq!(intent_of("focus vscode"), SystemIntent::FocusApp("code".into()));
+        assert_eq!(intent_of("switch to cursor"), SystemIntent::FocusApp("cursor".into()));
+        assert_eq!(intent_of("focus figma"), SystemIntent::FocusApp("figma".into()));
+        assert_eq!(intent_of("focus notion"), SystemIntent::FocusApp("notion".into()));
+        assert_eq!(intent_of("close notion"), SystemIntent::CloseWindow("notion".into()));
         assert_eq!(intent_of("screenshot"), SystemIntent::Screenshot);
         assert_eq!(intent_of("take a screenshot"), SystemIntent::Screenshot);
         assert_eq!(intent_of("list windows"), SystemIntent::ListWindows);
@@ -1415,9 +1467,23 @@ mod tests {
     }
 
     #[test]
+    fn parses_forward_slash_and_home_paths() {
+        assert_eq!(
+            intent_of("open C:/Users/lex/demo"),
+            SystemIntent::OpenPath("c:/users/lex/demo".into())
+        );
+        assert_eq!(
+            intent_of("open ~/documents/notes"),
+            SystemIntent::OpenPath("~/documents/notes".into())
+        );
+    }
+
+    #[test]
     fn rejects_non_commands() {
         assert!(parse_command("what did you have for breakfast").is_none());
         assert!(parse_command("close").is_none(), "bare close belongs to the in-app handler");
+        assert!(parse_command("close it").is_none(), "in-app close reference");
+        assert!(parse_command("close window").is_none(), "in-app close reference");
         assert!(parse_command("").is_none());
         assert!(parse_command("hey severus").is_none());
     }

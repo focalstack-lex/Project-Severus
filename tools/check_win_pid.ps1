@@ -48,9 +48,11 @@ public class WinPidFinder {
 "@
 
 if ($TargetPid -eq 0) {
-    $procs = Get-Process -Name "severus-secondbrain" -ErrorAction SilentlyContinue
-    if ($procs) { $TargetPid = $procs[0].Id }
-    else { Write-Host "No severus-secondbrain process found"; exit 1 }
+    $procs = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessName -like 'severus*secondbrain' -or $_.ProcessName -like 'severus.ai*'
+    }
+    if ($procs) { $TargetPid = @($procs)[0].Id }
+    else { Write-Host "No severus-secondbrain / severus_secondbrain process found"; exit 1 }
 }
 
 Write-Host "Scanning windows for PID $TargetPid..."

@@ -34,6 +34,7 @@ interface Props {
   onSaveAsNote?: (title: string, content: string) => Promise<void>;
   onShowToast?: (msg: string) => void;
   onAskCopilotQuery?: (prompt: string) => void;
+  onRunCommand?: (text: string) => Promise<{ ok: boolean; message: string }>;
   // Inbox (Gmail school updates)
   inboxEmails?: EmailUpdate[] | null;
   inboxLastSync?: number | null;
@@ -64,6 +65,7 @@ export default function ContextInspector({
   onSaveAsNote,
   onShowToast,
   onAskCopilotQuery,
+  onRunCommand,
   inboxEmails = null,
   inboxLastSync = null,
   inboxConnected = false,
@@ -279,6 +281,7 @@ export default function ContextInspector({
                 onSaveAsNote={onSaveAsNote}
                 onShowToast={onShowToast}
                 onOpenNote={onOpenNote}
+                onRunCommand={onRunCommand}
               />
             </motion.div>
           )}

@@ -18,7 +18,8 @@ interface Props {
   onOpenSchoolHub?: () => void;
   onToggleMic?: () => void;
   onToggleThinkingMode?: () => void;
-  onDockIsland?: () => void;
+  onRunCommand?: (text: string) => Promise<{ ok: boolean; message: string }>;
+  onShowToast?: (msg: string) => void;
   onClose: () => void;
 }
 
@@ -56,7 +57,8 @@ export default function QuickSwitcherModal({
   onOpenSchoolHub,
   onToggleMic,
   onToggleThinkingMode,
-  onDockIsland,
+  onRunCommand,
+  onShowToast,
   onClose,
 }: Props) {
   const [query, setQuery] = useState("");
@@ -75,12 +77,12 @@ export default function QuickSwitcherModal({
   const actions: ActionItem[] = useMemo(
     () => [
       {
-        id: "action-dock-island",
+        id: "action-thinking-mode",
         type: "action",
-        title: "Snap Dynamic Island to Top",
-        sub: "Dock Severus back to the top-center edge of the active display",
-        shortcut: "Island",
-        execute: () => onDockIsland?.(),
+        title: "Open JARVIS Thinking Mode",
+        sub: "Summon the centered 3D Holographic Particle Waveform Reactor HUD",
+        shortcut: "Thinking",
+        execute: () => onToggleThinkingMode?.(),
       },
       {
         id: "action-new-note",
@@ -129,14 +131,6 @@ export default function QuickSwitcherModal({
         sub: "Turn live speech recognition on or off for voice commands",
         shortcut: "Ctrl+Shift+M",
         execute: () => onToggleMic?.(),
-      },
-      {
-        id: "action-thinking-mode",
-        type: "action",
-        title: "Toggle Autonomous Thinking Mode",
-        sub: "Continuous cognitive loop analyzing codebase, notes, and academic load",
-        shortcut: "Thinking",
-        execute: () => onToggleThinkingMode?.(),
       },
       {
         id: "action-grounding",
@@ -216,8 +210,36 @@ export default function QuickSwitcherModal({
         note: n,
       }));
 
-    return [...matchedActions, ...matchedNotes];
-  }, [query, actions, notes]);
+    const dynamicCmdItems: ActionItem[] = [];
+    const isExplicitCmd = q.startsWith(">");
+    const cmdText = isExplicitCmd ? q.slice(1).trim() : q;
+    if (
+      onRunCommand &&
+      cmdText.length > 0 &&
+      (isExplicitCmd ||
+        (matchedActions.length === 0 && matchedNotes.length === 0) ||
+        /^(open|launch|start|run|snap|focus|switch to|close|screenshot|volume|mute|search|google|youtube)\b/.test(cmdText))
+    ) {
+      dynamicCmdItems.push({
+        id: "action-run-dynamic-cmd",
+        type: "action",
+        title: `Execute Command: "${cmdText}"`,
+        sub: "Run action through Windows System Control engine",
+        shortcut: "↵ Run",
+        execute: async () => {
+          const outcome = await onRunCommand(cmdText);
+          if (outcome && onShowToast) {
+            onShowToast(outcome.message);
+          }
+        },
+      });
+    }
+
+    if (isExplicitCmd) {
+      return [...dynamicCmdItems, ...matchedActions, ...matchedNotes];
+    }
+    return [...matchedActions, ...matchedNotes, ...dynamicCmdItems];
+  }, [query, actions, notes, onRunCommand, onShowToast]);
 
   useEffect(() => {
     setSelectedIndex(0);

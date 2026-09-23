@@ -19,13 +19,67 @@ if ($env:SEVERUS_ROOT -and (Test-Path $env:SEVERUS_ROOT)) {
 }
 $DesktopDir = Join-Path $SeverusRoot "desktop"
 $ToolsDir = Join-Path $SeverusRoot "tools"
-$ReleaseExe = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
-if (-not (Test-Path $ReleaseExe)) {
-    $ReleaseExe = "C:\Program Files\Severus.ai\severus-secondbrain.exe"
-}
 $JournalDir = Join-Path $SeverusRoot "journal"
 $TodayStr = Get-Date -Format "yyyy-MM-dd"
 $TodayJournal = Join-Path $JournalDir "$TodayStr.md"
+
+# Cargo emits the binary as severus-secondbrain.exe from the package name, but
+# Tauri's bundling step has also produced severus_secondbrain.exe inside deps/.
+# Resolve the real artifact instead of trusting one hardcoded path.
+function Get-SeverusBinaryTargets {
+    $rel = "src-tauri\target\release"
+    return @(
+        (Join-Path $DesktopDir "$rel\severus-secondbrain.exe"),
+        (Join-Path $DesktopDir "$rel\severus_secondbrain.exe"),
+        (Join-Path $DesktopDir "$rel\deps\severus_secondbrain.exe"),
+        (Join-Path $DesktopDir "$rel\deps\severus-secondbrain.exe"),
+        "C:\Program Files\Severus.ai\severus-secondbrain.exe",
+        "C:\Program Files\Severus.ai\severus_secondbrain.exe",
+        "C:\Program Files\Severus.ai\deps\severus_secondbrain.exe",
+        "$env:LOCALAPPDATA\Severus.ai\severus-secondbrain.exe",
+        "$env:LOCALAPPDATA\Severus.ai\severus_secondbrain.exe",
+        "$env:LOCALAPPDATA\Severus.ai\deps\severus_secondbrain.exe"
+    )
+}
+
+function Resolve-SeverusExe {
+    foreach ($candidate in Get-SeverusBinaryTargets) {
+        if ($candidate -and (Test-Path $candidate)) { return $candidate }
+    }
+    return $null
+}
+
+# PowerShell matches process names exactly, so the underscore and hyphen variants
+# both have to be considered when looking for a running companion.
+function Get-SeverusProcesses {
+    return @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessName -like 'severus*secondbrain' -or $_.ProcessName -like 'severus.ai*'
+    })
+}
+
+# Shortcuts, junctions and the sync/rollback helpers all expect the hyphenated
+# name at the root of target\release. Tauri's bundling has been leaving the
+# artifact in deps\ instead, which silently broke every one of those launchers.
+function Ensure-CanonicalBinary {
+    $canonical = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
+    if (Test-Path $canonical) { return $canonical }
+
+    foreach ($fallback in @(
+        (Join-Path $DesktopDir "src-tauri\target\release\severus_secondbrain.exe"),
+        (Join-Path $DesktopDir "src-tauri\target\release\deps\severus_secondbrain.exe"),
+        (Join-Path $DesktopDir "src-tauri\target\release\deps\severus-secondbrain.exe")
+    )) {
+        if (-not (Test-Path $fallback)) { continue }
+        Copy-Item -Path $fallback -Destination $canonical -Force -ErrorAction SilentlyContinue
+        if (Test-Path $canonical) {
+            Write-Host "[Severus Build] Normalized release binary to canonical path: $canonical" -ForegroundColor DarkCyan
+            return $canonical
+        }
+    }
+    return $null
+}
+
+$ReleaseExe = Resolve-SeverusExe
 
 function Show-Help {
     Write-Host ""
@@ -53,21 +107,43 @@ function Show-Help {
 }
 
 function Invoke-Open {
-    $proc = Get-Process severus-secondbrain -ErrorAction SilentlyContinue | Select-Object -First 1
+    $proc = Get-SeverusProcesses | Select-Object -First 1
     if ($proc) {
         Write-Host "[Severus] Restarting active companion process (PID $($proc.Id)) to bring window to center..." -ForegroundColor Green
         $proc | Stop-Process -Force -ErrorAction SilentlyContinue
         Start-Sleep -Milliseconds 300
     }
-    if (-not (Test-Path $ReleaseExe)) {
-        $altProgFiles = "C:\Program Files\Severus.ai\severus-secondbrain.exe"
-        if (Test-Path $altProgFiles) {
-            $ReleaseExe = $altProgFiles
-        } else {
-            Write-Host "[Severus] Executable not found at $ReleaseExe. Run 'severus build' first." -ForegroundColor Red
-            return
-        }
+    if (-not $ReleaseExe -or -not (Test-Path $ReleaseExe)) {
+        $ReleaseExe = Resolve-SeverusExe
     }
+    if (-not $ReleaseExe) {
+        Write-Host "[Severus] Executable not found. Run 'severus build' first." -ForegroundColor Red
+        Write-Host "[Severus] Looked in: $($DesktopDir)\src-tauri\target\release (and deps)" -ForegroundColor DarkGray
+        return
+    }
+    # Auto-start the local voice daemons if their ports are inactive.
+    # 17493 renders speech, 17494 recognizes it offline. The Tauri window has no
+    # speech service, so recognition depends entirely on the 17494 bridge.
+    try {
+        $voiceDaemons = @(
+            @{ Port = 17493; Script = "cosyvoice_severus_server.py"; Label = "CosyVoice 2 (Hugging Face)" },
+            @{ Port = 17494; Script = "whisper_severus_server.py"; Label = "Whisper offline recognition" }
+        )
+        foreach ($daemon in $voiceDaemons) {
+            $conn = Test-NetConnection -ComputerName 127.0.0.1 -Port $daemon.Port -WarningAction SilentlyContinue
+            if ($conn.TcpTestSucceeded) { continue }
+            $daemonScript = Join-Path $ToolsDir $daemon.Script
+            if (-not (Test-Path $daemonScript)) {
+                Write-Host "[Severus] Warning: voice daemon script missing: $daemonScript" -ForegroundColor Yellow
+                continue
+            }
+            Write-Host "[Severus] Auto-starting $($daemon.Label) voice engine on port $($daemon.Port)..." -ForegroundColor DarkCyan
+            python -c "import subprocess, sys; subprocess.Popen([sys.executable, r'$daemonScript'], creationflags=0x08000000)" | Out-Null
+        }
+    } catch {
+        Write-Host "[Severus] Warning: Auto-start of local voice daemons failed: $_" -ForegroundColor Yellow
+    }
+
     Write-Host "[Severus] Launching native companion: $ReleaseExe" -ForegroundColor Cyan
     try {
         python -c "import subprocess; subprocess.Popen([r'$ReleaseExe'], cwd=r'$DesktopDir')" | Out-Null
@@ -85,7 +161,7 @@ function Invoke-Status {
     Write-Host "=== SEVERUS SYSTEM TELEMETRY DEBRIEF ===" -ForegroundColor Cyan
     
     # Process Status
-    $proc = Get-Process severus-secondbrain -ErrorAction SilentlyContinue | Select-Object -First 1
+    $proc = Get-SeverusProcesses | Select-Object -First 1
     if ($proc) {
         $memMB = [math]::Round($proc.WorkingSet64 / 1MB, 1)
         $procId = $proc.Id
@@ -217,7 +293,10 @@ function New-Checkpoint {
     }
 
     # 2. Backup Canonical Binary if exists
-    $targetExe = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
+    $targetExe = Resolve-SeverusExe
+    if (-not $targetExe) {
+        $targetExe = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
+    }
     $backupExe = Join-Path $checkDir "$tagName.exe"
     $binarySha = "none"
     if (Test-Path $targetExe) {
@@ -276,21 +355,22 @@ function Invoke-Rollback {
     # Stop active processes
     Invoke-Stop | Out-Null
 
-    # Restore binary from backup
+    # Restore binary from backup across every known install location
     if (Test-Path $manifest.backupExe) {
-        $targetExe = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
-        $progFilesExe = "C:\Program Files\Severus.ai\severus-secondbrain.exe"
-        $appDataExe = "$env:LOCALAPPDATA\Severus.ai\severus-secondbrain.exe"
-
-        Copy-Item -Path $manifest.backupExe -Destination $targetExe -Force -ErrorAction SilentlyContinue
-        if (Test-Path (Split-Path -Parent $progFilesExe)) {
-            Copy-Item -Path $manifest.backupExe -Destination $progFilesExe -Force -ErrorAction SilentlyContinue
+        $restoredAny = $false
+        foreach ($targetExe in Get-SeverusBinaryTargets) {
+            $parent = Split-Path -Parent $targetExe
+            if (-not (Test-Path $parent)) { continue }
+            Copy-Item -Path $manifest.backupExe -Destination $targetExe -Force -ErrorAction SilentlyContinue
+            if (Test-Path $targetExe) { $restoredAny = $true }
         }
-        if (Test-Path (Split-Path -Parent $appDataExe)) {
-            Copy-Item -Path $manifest.backupExe -Destination $appDataExe -Force -ErrorAction SilentlyContinue
+        $canonicalExe = Resolve-SeverusExe
+        if ($restoredAny -and $canonicalExe) {
+            $restoredSha = (Get-FileHash -Path $canonicalExe -Algorithm SHA256).Hash
+            Write-Host "[Rollback] Successfully restored binary SHA-256: $restoredSha across all targets." -ForegroundColor Green
+        } else {
+            Write-Host "[Rollback] Warning: Backup binary $($manifest.backupExe) could not be restored to any known location." -ForegroundColor Yellow
         }
-        $restoredSha = (Get-FileHash -Path $targetExe -Algorithm SHA256).Hash
-        Write-Host "[Rollback] Successfully restored binary SHA-256: $restoredSha across all targets." -ForegroundColor Green
     } else {
         Write-Host "[Rollback] Warning: Backup binary $($manifest.backupExe) not found." -ForegroundColor Yellow
     }
@@ -308,16 +388,16 @@ function Invoke-Build {
     Write-Host "[Severus Build] Executing Tauri release compilation..." -ForegroundColor Cyan
     Push-Location $DesktopDir
     try {
-        Write-Host "[Severus Build] Building frontend assets (tsc && vite build)..." -ForegroundColor Cyan
-        npm run build
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[Severus Build] Frontend build failed with code $LASTEXITCODE" -ForegroundColor Red
-            return
-        }
         npx tauri build
         if ($LASTEXITCODE -eq 0) {
             Write-Host "[Severus Build] Compilation & installer bundling successful." -ForegroundColor Green
-            $targetExe = Join-Path $DesktopDir "src-tauri\target\release\severus-secondbrain.exe"
+            $builtExe = Ensure-CanonicalBinary
+            if (-not $builtExe) { $builtExe = Resolve-SeverusExe }
+            if ($builtExe) {
+                Write-Host "[Severus Build] Verified release binary: $builtExe" -ForegroundColor DarkCyan
+            } else {
+                Write-Host "[Severus Build] Warning: no release binary found in target\release (checked deps too)." -ForegroundColor Yellow
+            }
             $msiBundle = Join-Path $DesktopDir "src-tauri\target\release\bundle\msi\Severus.ai_0.1.0_x64_en-US.msi"
             $nsisBundle = Join-Path $DesktopDir "src-tauri\target\release\bundle\nsis\Severus.ai_0.1.0_x64-setup.exe"
             
@@ -393,7 +473,7 @@ function Invoke-Verify {
 }
 
 function Invoke-Stop {
-    $procs = @(Get-Process severus-secondbrain -ErrorAction SilentlyContinue)
+    $procs = Get-SeverusProcesses
     if ($procs.Count -gt 0) {
         $count = $procs.Count
         $procs | Stop-Process -Force

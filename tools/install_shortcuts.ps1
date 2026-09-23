@@ -23,12 +23,27 @@ $ws = New-Object -ComObject WScript.Shell
 $icon = "C:\Users\User\Documents\Severus\desktop\src-tauri\icons\icon.ico"
 
 # Native Severus Tauri Desktop Companion shortcut
-$severusBin = "C:\Users\User\Documents\Severus\desktop\src-tauri\target\release\severus-secondbrain.exe"
-if (-not (Test-Path $severusBin)) {
-    $severusBin = "C:\Users\User\Documents\Severus\desktop\src-tauri\target\debug\severus-secondbrain.exe"
+# Resolve the real artifact: Cargo emits severus-secondbrain.exe, while Tauri
+# bundling has also produced severus_secondbrain.exe inside deps\.
+$severusCandidates = @(
+    "C:\Users\User\Documents\Severus\desktop\src-tauri\target\release\severus-secondbrain.exe",
+    "C:\Users\User\Documents\Severus\desktop\src-tauri\target\release\severus_secondbrain.exe",
+    "C:\Users\User\Documents\Severus\desktop\src-tauri\target\release\deps\severus_secondbrain.exe",
+    "C:\Users\User\Documents\Severus\desktop\src-tauri\target\debug\severus-secondbrain.exe",
+    "$env:LOCALAPPDATA\Severus.ai\severus-secondbrain.exe"
+)
+$severusBin = $null
+foreach ($candidate in $severusCandidates) {
+    if ($candidate -and (Test-Path $candidate)) { $severusBin = $candidate; break }
 }
 
-if (Test-Path $severusBin) {
+if ($severusBin) {
+    Write-Host "Resolved Severus binary: $severusBin"
+} else {
+    Write-Warning "No Severus binary found. Run 'severus build' first. Checked: $($severusCandidates -join '; ')"
+}
+
+if ($severusBin) {
     $desktopSeverus = $ws.CreateShortcut("$desktop\Severus.lnk")
     $desktopSeverus.TargetPath = $severusBin
     $desktopSeverus.WorkingDirectory = "C:\Users\User\Documents\Severus\desktop"

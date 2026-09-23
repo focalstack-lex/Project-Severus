@@ -217,6 +217,23 @@ export function formatReplyWithSir(text: string): string {
 }
 
 const elevenAudioCache = new Map<string, string>();
+const MAX_AUDIO_CACHE_SIZE = 50;
+
+function setCachedAudioUrl(key: string, url: string): void {
+  if (elevenAudioCache.size >= MAX_AUDIO_CACHE_SIZE) {
+    const oldestKey = elevenAudioCache.keys().next().value;
+    if (oldestKey) {
+      const oldUrl = elevenAudioCache.get(oldestKey);
+      if (oldUrl && oldUrl.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(oldUrl);
+        } catch {}
+      }
+      elevenAudioCache.delete(oldestKey);
+    }
+  }
+  elevenAudioCache.set(key, url);
+}
 
 export const VOICE_SCRIPTS: Record<string, string> = {
   // Navigation & Workspace Sections
@@ -388,7 +405,7 @@ async function playVoiceboxPhrase(
 
       const blob = await res.blob();
       audioUrl = URL.createObjectURL(blob);
-      elevenAudioCache.set(cacheKey, audioUrl);
+      setCachedAudioUrl(cacheKey, audioUrl);
     } catch (err) {
       console.warn(`[VoiceManager] Voicebox server network error for '${phrase}', using local voice fallback:`, err);
       return false;
@@ -521,6 +538,7 @@ export async function playTimeGreeting(): Promise<void> {
 }
 
 export interface VoiceboxConfig {
+  provider?: "local" | "elevenlabs";
   baseUrl?: string;
   profileId?: string;
   voiceId?: string;
@@ -554,6 +572,27 @@ export const FREE_PREMADE_VOICES: VoicePreset[] = [
     accent: "Deep British Male",
     description: "Cloned Severus voice profile running on local Voicebox server.",
   },
+  {
+    id: "Michael Caine Voice",
+    name: "Michael Caine (Butler / Alfred Style)",
+    category: "cloned",
+    accent: "Refined Cockney / RP",
+    description: "Zero-shot voice clone using Voices/Michael Caine Voice.wav via CosyVoice 2.",
+  },
+  {
+    id: "Jeremy Irons Voice",
+    name: "Jeremy Irons (Royal / Deep British)",
+    category: "cloned",
+    accent: "Deep Classical British",
+    description: "Zero-shot voice clone using Voices/Jeremy Irons Voice.wav via CosyVoice 2.",
+  },
+  {
+    id: "severus-cosyvoice",
+    name: "CosyVoice 2 (Hugging Face)",
+    category: "cloned",
+    accent: "Zero-Shot HF Neural",
+    description: "Unlimited zero-shot voice clone using FunAudioLLM/CosyVoice2-0.5B from Hugging Face.",
+  },
 ];
 
 export const VOICEBOX_STORAGE_KEY = "severus_voicebox_config";
@@ -565,19 +604,23 @@ export function loadVoiceboxConfig(): VoiceboxConfig {
     const parsed = raw ? JSON.parse(raw) : {};
     const metaEnv = (import.meta as any).env || {};
     return {
+      provider: parsed.provider || (parsed.apiKey && !parsed.baseUrl?.includes("127.0.0.1") ? "elevenlabs" : "local"),
       baseUrl: parsed.baseUrl || metaEnv.VITE_VOICEBOX_BASE_URL || "http://127.0.0.1:17493",
       profileId: parsed.profileId || parsed.voiceId || metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
       voiceId: parsed.profileId || parsed.voiceId || metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
-      apiKey: parsed.apiKey || metaEnv.VITE_VOICEBOX_API_KEY || "",
+      apiKey: parsed.apiKey || metaEnv.VITE_VOICEBOX_API_KEY || metaEnv.VITE_ELEVENLABS_API_KEY || "",
+      modelId: parsed.modelId || "eleven_multilingual_v2",
       enabled: parsed.enabled !== false,
     };
   } catch {
     const metaEnv = (import.meta as any).env || {};
     return {
+      provider: "local",
       baseUrl: metaEnv.VITE_VOICEBOX_BASE_URL || "http://127.0.0.1:17493",
       profileId: metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
       voiceId: metaEnv.VITE_VOICEBOX_PROFILE_ID || "default",
       apiKey: metaEnv.VITE_VOICEBOX_API_KEY || "",
+      modelId: "eleven_multilingual_v2",
       enabled: true,
     };
   }
@@ -601,6 +644,11 @@ export async function fetchVoiceboxProfiles(
 ): Promise<VoicePreset[]> {
   const cfg = loadVoiceboxConfig();
   const baseUrl = (baseUrlOverride || cfg.baseUrl || "http://127.0.0.1:17493").replace(/\/+$/, "");
+
+  // If configured for direct ElevenLabs Cloud API or API key provided without local URL
+  if (cfg.provider === "elevenlabs" || baseUrl.includes("elevenlabs.io") || (cfg.apiKey && cfg.apiKey.length > 20 && !baseUrl.includes("127.0.0.1"))) {
+    return fetchElevenLabsVoices(cfg.apiKey);
+  }
 
   try {
     let res = await fetch(`${baseUrl}/profiles`, {
@@ -631,7 +679,32 @@ export async function fetchVoiceboxProfiles(
   return FREE_PREMADE_VOICES;
 }
 
-export const fetchElevenLabsVoices = fetchVoiceboxProfiles;
+export async function fetchElevenLabsVoices(apiKey?: string): Promise<VoicePreset[]> {
+  const key = apiKey || loadVoiceboxConfig().apiKey;
+  if (!key) return FREE_PREMADE_VOICES;
+
+  try {
+    const res = await fetch("https://api.elevenlabs.io/v1/voices", {
+      headers: { "xi-api-key": key },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.voices)) {
+        return data.voices.map((v: any) => ({
+          id: v.voice_id,
+          name: v.name,
+          category: (v.category || "custom") as any,
+          accent: v.labels?.accent || "ElevenLabs Cloud",
+          description: v.description || v.labels?.description || "ElevenLabs Cloud Voice Profile",
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn("[ElevenLabs] Failed fetching voices:", err);
+  }
+
+  return FREE_PREMADE_VOICES;
+}
 
 export async function speakWithVoicebox(
   text: string,
@@ -663,39 +736,69 @@ export async function speakWithVoicebox(
   try {
     recordSpokenPhrase(clean);
 
-    let res = await fetch(`${baseUrl}/generate`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        text: clean,
-        profile_id: profileId,
-      }),
-    }).catch(() => null);
+    const isElevenLabs =
+      config.provider === "elevenlabs" ||
+      baseUrl.includes("elevenlabs.io") ||
+      (Boolean(config.apiKey) && config.apiKey!.length > 20 && !baseUrl.includes("127.0.0.1") && !baseUrl.includes("localhost"));
 
-    if (!res || !res.ok) {
-      res = await fetch(`${baseUrl}/v1/audio/speech`, {
+    let res: Response | null = null;
+    if (isElevenLabs) {
+      const voiceId = profileId && profileId !== "default" ? profileId : "21m00Tcm4TlvDq8ikWAM";
+      res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "xi-api-key": config.apiKey || "",
+        },
+        body: JSON.stringify({
+          text: clean,
+          model_id: config.modelId || "eleven_multilingual_v2",
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.75,
+          },
+        }),
+      }).catch(() => null);
+    } else {
+      res = await fetch(`${baseUrl}/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
         },
         body: JSON.stringify({
-          input: clean,
-          voice: profileId,
-          model: "tts-1",
+          text: clean,
+          profile_id: profileId,
+          rate: "+40%",
+          speed: 1.35,
         }),
       }).catch(() => null);
+
+      if (!res || !res.ok) {
+        res = await fetch(`${baseUrl}/v1/audio/speech`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+          },
+          body: JSON.stringify({
+            input: clean,
+            voice: profileId,
+            model: "tts-1",
+            speed: 1.35,
+          }),
+        }).catch(() => null);
+      }
     }
 
     if (!res || !res.ok) {
-      console.warn(`[Voicebox] Local TTS returned error for '${clean}'`);
+      console.warn(`[Voicebox] Speech synthesis returned error for '${clean}'`);
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("severus-toast", {
-            detail: `Voicebox server unavailable at ${baseUrl}. Ensure jamiepine/voicebox is running.`,
+            detail: isElevenLabs
+              ? "ElevenLabs API error. Please check your ElevenLabs API Key and Voice ID."
+              : `Voicebox server unavailable at ${baseUrl}. Ensure 'python tools/cosyvoice_severus_server.py' is running.`,
           }),
         );
       }
@@ -737,14 +840,19 @@ export async function speakWithVoicebox(
     audio.onerror = cleanup;
 
     onStart?.();
-    await audio.play();
+    await audio.play().catch((err) => {
+      cleanup();
+      console.warn("[Voicebox] Audio play error:", err);
+    });
     return true;
   } catch (err) {
+    isSpeakingVoice = false;
+    lastPlaybackEndTime = Date.now();
     console.warn("[Voicebox] Failed streaming audio:", err);
     if (typeof window !== "undefined") {
       window.dispatchEvent(
         new CustomEvent("severus-toast", {
-          detail: `Voicebox connection error (${String(err)}) — using local voice fallback.`,
+          detail: `Voice connection error (${String(err)})`,
         }),
       );
     }
@@ -757,6 +865,28 @@ export const speakWithElevenLabs = speakWithVoicebox;
 export async function testVoiceboxConnection(
   config: VoiceboxConfig,
 ): Promise<{ ok: boolean; message: string }> {
+  const isElevenLabs =
+    config.provider === "elevenlabs" ||
+    config.baseUrl?.includes("elevenlabs.io") ||
+    (Boolean(config.apiKey) && config.apiKey!.length > 20 && !config.baseUrl?.includes("127.0.0.1"));
+
+  if (isElevenLabs) {
+    if (!config.apiKey) {
+      return { ok: false, message: "Please provide your ElevenLabs API Key." };
+    }
+    try {
+      const res = await fetch("https://api.elevenlabs.io/v1/user", {
+        headers: { "xi-api-key": config.apiKey },
+      });
+      if (res.ok) {
+        return { ok: true, message: "Connected! ElevenLabs Cloud API key verified." };
+      }
+      return { ok: false, message: `ElevenLabs authentication failed (HTTP ${res.status}).` };
+    } catch (err) {
+      return { ok: false, message: `ElevenLabs network error: ${String(err)}` };
+    }
+  }
+
   const baseUrl = (config.baseUrl || "http://127.0.0.1:17493").replace(/\/+$/, "");
 
   try {
@@ -772,7 +902,7 @@ export async function testVoiceboxConnection(
         const blob = await genRes.blob();
         const objectUrl = URL.createObjectURL(blob);
         const audio = new Audio(objectUrl);
-        await audio.play();
+        await audio.play().catch(() => {});
         return { ok: true, message: "Connected! Voicebox local AI engine verified and audio played." };
       }
       return { ok: true, message: `Connected to Voicebox server at ${baseUrl}!` };
@@ -788,16 +918,16 @@ export async function testVoiceboxConnection(
       const blob = await speechRes.blob();
       const objectUrl = URL.createObjectURL(blob);
       const audio = new Audio(objectUrl);
-      await audio.play();
+      await audio.play().catch(() => {});
       return { ok: true, message: "Connected! Voicebox speech endpoint verified." };
     }
 
     return {
       ok: false,
-      message: `Unable to connect to Voicebox at ${baseUrl}. Launch Voicebox (jamiepine/voicebox) to enable local AI voice.`,
+      message: `Unable to connect to local voice engine at ${baseUrl}. Ensure 'python tools/cosyvoice_severus_server.py' is running to enable local CosyVoice 2 neural voice synthesis.`,
     };
   } catch (err) {
-    return { ok: false, message: `Voicebox connection error: ${String(err)}` };
+    return { ok: false, message: `Local voice engine connection error: ${String(err)}` };
   }
 }
 

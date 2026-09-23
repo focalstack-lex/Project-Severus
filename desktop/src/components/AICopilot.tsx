@@ -17,6 +17,7 @@ interface Props {
   onSaveAsNote?: (title: string, content: string) => Promise<void>;
   onShowToast?: (msg: string) => void;
   onOpenNote?: (id: string) => void;
+  onRunCommand?: (text: string) => Promise<{ ok: boolean; message: string }>;
 }
 
 const SESSIONS_STORAGE_KEY = "severus_copilot_sessions";
@@ -207,6 +208,7 @@ export default function AICopilot({
   onSaveAsNote,
   onShowToast,
   onOpenNote,
+  onRunCommand,
 }: Props) {
   const [sessionData] = useState(() => loadInitialSessions());
   const [sessions, setSessions] = useState<ChatSession[]>(sessionData.sessions);
@@ -387,6 +389,37 @@ export default function AICopilot({
     if (!customPrompt) setInput("");
     setLoading(true);
     setError(null);
+
+    const isExplicitCommand = text.startsWith(">") || text.startsWith("/");
+    const cleanCmd = isExplicitCommand ? text.slice(1).trim() : text;
+
+    if (isExplicitCommand && onRunCommand) {
+      try {
+        const outcome = await onRunCommand(cleanCmd);
+        const replyContent = outcome.ok
+          ? `### System Action Executed\n\n• **Command**: \`${cleanCmd}\`\n• **Status**: Success\n\n${outcome.message}`
+          : `### System Action Telemetry\n\n• **Command**: \`${cleanCmd}\`\n• **Status**: Rejected or Unmapped\n\n${outcome.message}`;
+        const assistantMessage: ChatMessage = { role: "assistant", content: formatReplyWithSir(replyContent) };
+        setSessions((prev) =>
+          prev.map((s) =>
+            s.id === activeSession.id
+              ? {
+                  ...s,
+                  updatedAt: Date.now(),
+                  messages: [...s.messages, assistantMessage],
+                }
+              : s
+          )
+        );
+        onShowToast?.(outcome.ok ? "Command executed" : "Command notice");
+        return;
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to execute command");
+        return;
+      } finally {
+        setLoading(false);
+      }
+    }
 
     try {
       const apiMsgs: ChatMessage[] = [

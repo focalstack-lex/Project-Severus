@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { openExternalUrl } from "./tauri";
 
 /**
@@ -164,17 +165,15 @@ export async function beginGmailConsent(clientId: string): Promise<string> {
     };
     window.addEventListener("severus-mock-gmail-code", mockHandler);
 
-    import("@tauri-apps/api/event").then(({ listen }) => {
-      void listen<string>("gmail-auth-code", (event) => {
-        cleanup();
-        resolve(event.payload);
-      }).then((fn) => unlistenFns.push(fn));
+    void listen<string>("gmail-auth-code", (event) => {
+      cleanup();
+      resolve(event.payload);
+    }).then((fn) => unlistenFns.push(fn));
 
-      listen<string>("gmail-auth-failed", (event) => {
-        cleanup();
-        reject(new Error(event.payload));
-      }).then((fn) => unlistenFns.push(fn));
-    });
+    void listen<string>("gmail-auth-failed", (event) => {
+      cleanup();
+      reject(new Error(event.payload));
+    }).then((fn) => unlistenFns.push(fn));
   });
 }
 
