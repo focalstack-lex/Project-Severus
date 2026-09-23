@@ -178,6 +178,12 @@ Every application, website, component, dashboard, admin panel, landing page, mod
 - **Zero Formulaic Eyebrow / Tag Pills**: Never place cookie-cutter rounded pill badges with mini-icons and uppercase tracked text (e.g. `[Icon] FOUNDER COMMITMENT • 22 BRANCHES` or `[Icon] In-Store Inspection`) directly hovering above main headlines in hero sections, feature blocks, or guarantee panels.
 - **Punchy Typography & Clean Visual Hierarchy**: Let headlines and subheadings command attention with confident typography, clean contrast, and direct messaging without decorative pill clutter.
 - **Functional Badge Discipline**: Reserve pill badges strictly for genuine functional micro-metadata (such as active discount tags `-15% OFF`, live status indicators `● In Stock`, or category filter chips).
+
+## Universal Automatic System Build & Installer Synchronization Directive
+
+- **Mandatory Automatic Build Execution**: Whenever system modifications, bug fixes, feature implementations, or UI/UX updates are completed in Severus or any companion application, the agent MUST automatically execute the production release build and installer compilation (`severus build` / `npx tauri build`) as part of task completion.
+- **Zero-Prompt Requirement**: Never wait for or ask the user to manually trigger installer or binary builds. Every completed update must result in a fresh, verified production release build and updated installer package (MSI/NSIS/Executable) ready for deployment.
+- **Pre-Release Checkpoints**: Ensure pre-build checkpoints are created and file-lock protection routines run prior to binary replacement.
 <!-- severus:learned:end -->
 
 
