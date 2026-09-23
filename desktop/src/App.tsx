@@ -59,7 +59,6 @@ import {
   saveNote,
   setFloatingMode,
   setFloatingDimensions,
-  dockToTopIsland,
   moveToMonitor,
   toggleMaximize,
   maximizeWindow,
@@ -86,6 +85,7 @@ import {
   getVoiceCmdEnabled,
   setVoiceCmdEnabled,
   stripWakePrefix,
+  matchesThinkingModeCommand,
 } from "./lib/voiceCommands";
 import {
   fetchStravaAthleteStats,
@@ -212,10 +212,9 @@ export default function App() {
   const [aiConfig, setAiConfig] = useState<AIConfig>(loadAIConfig);
   const [gitStatus, setGitStatus] = useState<GitStatusData | null>(null);
 
-  // Dynamic Island UI States
-  const [isEdgeDocked, setIsEdgeDocked] = useState<boolean>(true);
-  const [isIslandExpanded, setIsIslandExpanded] = useState<boolean>(false);
-  const [isRetracted, setIsRetracted] = useState<boolean>(false);
+  // Compact companion window state. The pill expands in place; it no longer
+  // docks to a screen edge.
+  const [isPillExpanded, setIsPillExpanded] = useState<boolean>(false);
 
   // Notifications & State (on-screen toast notes removed system-wide)
   const [refreshTick, setRefreshTick] = useState(0);
@@ -314,12 +313,29 @@ export default function App() {
     setIsFloatingMode(true);
     try {
       await setFloatingMode(true);
-      await dockToTopIsland();
-      setIsEdgeDocked(true);
-      setIsRetracted(false);
     } catch (e) {
       console.error("Failed to enter floating mode:", e);
     }
+  }, []);
+
+  /**
+   * The single authoritative orb intent. Idempotent on purpose: it opens the orb
+   * and never closes it, and it toggles nothing else, so every entry point that
+   * resolves the phrase lands on exactly this one action.
+   */
+  const handleOpenThinkingMode = useCallback(() => {
+    setIsThinkingMode(true);
+    // Bring the window forward and focus it so dictation can start immediately.
+    void (async () => {
+      try {
+        const win = getCurrentWindow();
+        await win.show();
+        await win.setFocus();
+      } catch (err) {
+        console.warn("Could not focus the window for Thinking Mode:", err);
+      }
+    })();
+    void playVoice("action_copilot_ready.mp3");
   }, []);
 
   const handleHideToTray = useCallback(async () => {
@@ -568,17 +584,11 @@ export default function App() {
           return { ok: true, message: "Athletic running cockpit opened, Sir." };
         }
 
-        if (
-          target === "thinking mode" ||
-          target === "start thinking" ||
-          target === "jarvis mode" ||
-          target === "open jarvis" ||
-          target === "hologram mode" ||
-          normalized === "thinking mode"
-        ) {
-          setIsThinkingMode(true);
-          void playVoice("action_copilot_ready.mp3");
-          return { ok: true, message: "Thinking mode activated, Sir." };
+        // Orb intent: routed through the single authoritative handler so the
+        // phrase can never reach the OS grammar or the model fallback below.
+        if (matchesThinkingModeCommand(target)) {
+          handleOpenThinkingMode();
+          return { ok: true, message: "Thinking Mode is open, Sir." };
         }
 
         if (
@@ -679,7 +689,7 @@ export default function App() {
         return { ok: false, message: String(err) };
       }
     },
-    [aiConfig, handleToggleListening],
+    [aiConfig, handleToggleListening, handleOpenThinkingMode],
   );
 
   const handleGateConfirm = useCallback(
@@ -709,59 +719,10 @@ export default function App() {
     [pendingGate],
   );
 
-  const islandHoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const retractTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const isAnyAppRunning =
-    isThinkingMode ||
-    runningModeOpen ||
-    quickSwitcherOpen ||
-    aiSettingsOpen ||
-    systemConsoleOpen ||
-    groundingOpen ||
-    journalOpen ||
-    newNoteModalOpen;
-
-  const resetRetractTimer = useCallback(() => {
-    if (retractTimerRef.current) {
-      clearTimeout(retractTimerRef.current);
-      retractTimerRef.current = null;
-    }
-  }, []);
-
-  const scheduleRetract = useCallback(() => {
-    resetRetractTimer();
-    if (isAnyAppRunning || !isEdgeDocked) return;
-    retractTimerRef.current = setTimeout(() => {
-      setIsRetracted(true);
-      setIsIslandExpanded(false);
-    }, 2600);
-  }, [isAnyAppRunning, isEdgeDocked, resetRetractTimer]);
-
+  // Window event bridge: expand to the workstation, or collapse to the pill
   useEffect(() => {
-    if (isAnyAppRunning || !isEdgeDocked) {
-      resetRetractTimer();
-      setIsRetracted(false);
-    }
-    return resetRetractTimer;
-  }, [isAnyAppRunning, isEdgeDocked, resetRetractTimer]);
-
-  // Wake island up whenever window receives focus or is summoned, or convert to pill on minimize
-  useEffect(() => {
-    const handleFocus = () => {
-      resetRetractTimer();
-      setIsRetracted(false);
-    };
-    window.addEventListener("focus", handleFocus);
-    let unlistenFocus: (() => void) | null = null;
     let unlistenOpenWorkstation: (() => void) | null = null;
     let unlistenMinimize: (() => void) | null = null;
-
-    void getCurrentWindow()
-      .listen("severus:focus", handleFocus)
-      .then((fn) => {
-        unlistenFocus = fn;
-      });
 
     void getCurrentWindow()
       .listen("severus:open-workstation", () => {
@@ -780,48 +741,10 @@ export default function App() {
       });
 
     return () => {
-      window.removeEventListener("focus", handleFocus);
-      if (unlistenFocus) unlistenFocus();
       if (unlistenOpenWorkstation) unlistenOpenWorkstation();
       if (unlistenMinimize) unlistenMinimize();
     };
-  }, [handleEnterFloatingMode, ensureWorkstation, resetRetractTimer]);
-
-  const handleIslandMouseEnter = useCallback(() => {
-    resetRetractTimer();
-    setIsRetracted(false);
-    if (islandHoverTimerRef.current) {
-      clearTimeout(islandHoverTimerRef.current);
-      islandHoverTimerRef.current = null;
-    }
-    islandHoverTimerRef.current = setTimeout(() => {
-      setIsIslandExpanded(true);
-    }, 120);
-  }, [resetRetractTimer]);
-
-  const handleIslandMouseLeave = useCallback(() => {
-    if (islandHoverTimerRef.current) {
-      clearTimeout(islandHoverTimerRef.current);
-      islandHoverTimerRef.current = null;
-    }
-    setIsIslandExpanded(false);
-    scheduleRetract();
-  }, [scheduleRetract]);
-
-  const isFloatingModeRef = useRef(isFloatingMode);
-  isFloatingModeRef.current = isFloatingMode;
-
-  const handleDockToTopIsland = useCallback(async () => {
-    try {
-      await dockToTopIsland();
-      localStorage.removeItem("severus:island-position");
-      setIsEdgeDocked(true);
-      setIsRetracted(false);
-      showToast("Dynamic Island docked flush to top bezel");
-    } catch (err) {
-      console.warn("Failed to dock dynamic island to top:", err);
-    }
-  }, [showToast]);
+  }, [handleEnterFloatingMode, ensureWorkstation]);
 
   const isDraggingWindowRef = useRef(false);
 
@@ -834,18 +757,15 @@ export default function App() {
     }
   }, []);
 
-  // Always put Dynamic Island in top center on initial boot or reload.
-  // The window is created hidden (visible: false) — show it only after the
-  // island is placed, so the WebView's broken first composition (dark rect
-  // with raw scrollbars) is never visible. At login the IPC bridge may not
-  // be ready when the page loads, so placement retries with backoff.
+  // Show the window only once the first composition is settled: at login the IPC
+  // bridge may not be ready when the page loads, so placement retries with backoff
+  // and the WebView's broken first paint is never visible.
   useEffect(() => {
     if (!isFloatingMode) {
       void getCurrentWindow().show();
       void getCurrentWindow().center();
       return;
     }
-    localStorage.removeItem("severus:island-position");
     let attempts = 0;
     let done = false;
     let timer: number | null = null;
@@ -854,8 +774,8 @@ export default function App() {
       attempts += 1;
       try {
         setFloatingMode(true)
-          .then(() => handleDockToTopIsland())
           .then(async () => {
+            await getCurrentWindow().center();
             await getCurrentWindow().show();
             await setFloatingDimensions(781, 111);
             await new Promise((r) => setTimeout(r, 60));
@@ -877,52 +797,17 @@ export default function App() {
     return () => {
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [isFloatingMode, handleDockToTopIsland]);
+  }, [isFloatingMode]);
 
-  // Global mouseup to cleanly finalize dragging: if dropped near top bezel, snap flush to top center; otherwise keep custom floating position
+  // Dragging simply parks the pill wherever it is dropped. Nothing snaps back.
   useEffect(() => {
-    const handleMouseUp = async () => {
-      if (!isDraggingWindowRef.current) return;
+    const handleMouseUp = () => {
       isDraggingWindowRef.current = false;
-      try {
-        const win = getCurrentWindow();
-        const pos = await win.outerPosition();
-        if (pos.y <= 30) {
-          await handleDockToTopIsland();
-        } else {
-          setIsEdgeDocked(false);
-        }
-      } catch {
-        // ignore
-      }
     };
 
     window.addEventListener("mouseup", handleMouseUp);
     return () => {
       window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [handleDockToTopIsland]);
-
-  // Listen to window movements for edge-docking status without disruptive setPosition calls
-  useEffect(() => {
-    let unlisten: (() => void) | null = null;
-
-    const setupMoveListener = async () => {
-      try {
-        const win = getCurrentWindow();
-        unlisten = await win.onMoved(({ payload: pos }) => {
-          if (!isFloatingModeRef.current) return;
-          setIsEdgeDocked(pos.y <= 24);
-        });
-      } catch (err) {
-        console.warn("Could not register window move listener:", err);
-      }
-    };
-
-    void setupMoveListener();
-
-    return () => {
-      if (unlisten) unlisten();
     };
   }, []);
 
@@ -1243,9 +1128,7 @@ export default function App() {
       void handleMoveMonitor(target);
     },
     onThinkingMode: () => {
-      void handleEnterFloatingMode();
-      setIsThinkingMode(true);
-      void playVoice("action_copilot_ready.mp3");
+      handleOpenThinkingMode();
     },
     onOpenRunningMode: () => {
       setRunningModeOpen(true);
@@ -1290,8 +1173,9 @@ export default function App() {
     },
     onGeneralQuery: (query: string) => {
       voiceDiagRecord("app", "general-query:thinking-mode", query);
+      // Same authoritative open, carrying the phrase as the orb's first question.
       setAmbientQuery(query);
-      setIsThinkingMode(true);
+      handleOpenThinkingMode();
     },
   };
 
@@ -1608,6 +1492,58 @@ export default function App() {
     </>
   );
 
+  // One orb instance, rendered in both window modes so the phrase always opens
+  // it, whether the app is docked as the pill or expanded to the workstation.
+  const thinkingOrb = (
+      <ThinkingModeReactor
+        open={isThinkingMode}
+        onClose={() => {
+          setIsThinkingMode(false);
+          setAmbientQuery(undefined);
+        }}
+        onExpandWorkstation={() => {
+          setIsThinkingMode(false);
+          setAmbientQuery(undefined);
+          void ensureWorkstation();
+        }}
+        onOpenRunningMode={() => setRunningModeOpen(true)}
+        onOpenSettings={() => setAiSettingsOpen(true)}
+        onOpenCopilot={() => {
+          setIsThinkingMode(false);
+          setAmbientQuery(undefined);
+          void ensureWorkstation();
+          setActiveSection("knowledge");
+          setInspectorOpen(true);
+          setInspectorTab("copilot");
+          void playVoice("nav_copilot_open.mp3");
+        }}
+        onOpenGraph={() => {
+          setActiveSection("knowledge");
+          setKnowledgeSubTab("graph");
+        }}
+        onOpenNotes={() => {
+          setActiveSection("knowledge");
+          setKnowledgeSubTab("notes");
+          setNotesDrawerOpen(true);
+        }}
+        onNewNote={() => handleNewNote()}
+        onJournal={() => setJournalOpen(true)}
+        onSystemCommand={async (cmdText) => {
+          const outcome = await handleRunSystemCommand(cmdText);
+          if (outcome.ok) {
+            return outcome.message;
+          }
+          return undefined;
+        }}
+        config={aiConfig}
+        vaultNotes={notesList}
+        onShowToast={showToast}
+        initialQuery={ambientQuery}
+        listeningActive={listeningActive}
+        onSetListening={(active) => handleToggleListening(active, false)}
+      />
+  );
+
   return (
     <AnimatePresence mode="wait" initial={false}>
       {isFloatingMode ? (
@@ -1635,13 +1571,6 @@ export default function App() {
             handleStartDragging();
           }}
         >
-          {isEdgeDocked && isRetracted && !isAnyAppRunning && (
-            <div
-              className="dynamic-island-wake-zone"
-              onMouseEnter={handleIslandMouseEnter}
-              title="Hover to reveal Dynamic Island"
-            />
-          )}
           <div className="floating-companion-cluster">
             <AnimatePresence mode="wait">
               {isStartupAnimating ? (
@@ -1667,29 +1596,13 @@ export default function App() {
                 </motion.div>
               ) : (
                 <motion.div
-                  key="floating-island-wrap"
+                  key="floating-pill-wrap"
                   layout
                   initial={{ opacity: 0, scale: 0.96, y: -4 }}
-                  animate={
-                    isEdgeDocked && isRetracted && !isAnyAppRunning
-                      ? {
-                          y: -46,
-                          opacity: 0,
-                          scale: 0.94,
-                          filter: "blur(2px)",
-                        }
-                      : {
-                          y: 0,
-                          opacity: 1,
-                          scale: 1,
-                          filter: "blur(0px)",
-                        }
-                  }
+                  animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
                   exit={{ opacity: 0, scale: 0.96, y: -4 }}
                   transition={{ type: "spring", stiffness: 420, damping: 28, mass: 0.8 }}
-                  className={`dynamic-island-capsule ${isEdgeDocked ? "edge-docked" : "floating"} ${isIslandExpanded ? "is-expanded" : "is-compact"} ${isRetracted && isEdgeDocked && !isAnyAppRunning ? "is-retracted" : ""}`}
-                  onMouseEnter={handleIslandMouseEnter}
-                  onMouseLeave={handleIslandMouseLeave}
+                  className={`dynamic-island-capsule floating ${isPillExpanded ? "is-expanded" : "is-compact"}`}
                   data-tauri-drag-region
                   onMouseDown={(e) => {
                     if (e.button !== 0) return;
@@ -1698,65 +1611,12 @@ export default function App() {
                     handleStartDragging();
                   }}
                 >
-                  {/* Smooth corner attachment flares (only when docked to top bezel) */}
-                  {isEdgeDocked && (
-                    <>
-                      <svg
-                        className="island-attachment-ear ear-left"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M 0 0 L 16 0 L 16 16 C 16 7.163 8.837 0 0 0 Z"
-                          fill="#000000"
-                        />
-                      </svg>
-                      <svg
-                        className="island-attachment-ear ear-right"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 16 16"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M 16 0 L 0 0 L 0 16 C 0 7.163 7.163 0 16 0 Z"
-                          fill="#000000"
-                        />
-                      </svg>
-                    </>
-                  )}
-
-                  {/* Left: Hardware Sensor Punch-Hole & Status Beacon */}
-                  <div
-                    className="dynamic-island-hardware"
-                    title="Click to toggle menu • Double-click to restore workstation"
-                    data-no-drag
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsIslandExpanded((prev) => !prev);
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      void ensureWorkstation();
-                    }}
-                  >
-                    <span className="island-lens" title="Severus Optical Sensor" />
-                    <span className="island-pulse-wrap" title="System Online • Click to toggle menu" data-no-drag>
-                      <span className="island-pulse-dot" />
-                      <span className="island-pulse-ring" />
-                    </span>
-                  </div>
-
                   {/* Center: Brand Glance (Compact) vs Navigation Items (Expanded) */}
                   <div className="dynamic-island-body">
                     <AnimatePresence mode="wait" initial={false}>
-                      {!isIslandExpanded ? (
+                      {!isPillExpanded ? (
                         <motion.div
-                          key="island-compact-brand"
+                          key="pill-compact-brand"
                           className="dynamic-island-brand-view"
                           initial={{ opacity: 0, y: 3, filter: "blur(2px)" }}
                           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
@@ -1764,13 +1624,13 @@ export default function App() {
                           transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setIsIslandExpanded((prev) => !prev);
+                            setIsPillExpanded((prev) => !prev);
                           }}
                           onDoubleClick={(e) => {
                             e.stopPropagation();
                             void ensureWorkstation();
                           }}
-                          title="Click to expand island menu • Double-click to restore workstation window"
+                          title="Click to expand quick navigation • Double-click to restore workstation window"
                           data-no-drag
                         >
                           <span className="dynamic-island-title" data-no-drag>Severus</span>
@@ -1790,7 +1650,7 @@ export default function App() {
                         </motion.div>
                       ) : (
                         <motion.nav
-                          key="island-expanded-nav"
+                          key="pill-expanded-nav"
                           className="dynamic-island-nav-strip"
                           initial={{ opacity: 0, scale: 0.98, filter: "blur(2px)" }}
                           animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
@@ -1817,18 +1677,17 @@ export default function App() {
                                   e.stopPropagation();
                                   if (item.id === "running") {
                                     setRunningModeOpen(true);
-                                    setIsIslandExpanded(false);
+                                    setIsPillExpanded(false);
                                     return;
                                   }
                                   if (item.id === "thinking") {
-                                    setIsThinkingMode(true);
-                                    void playVoice("action_copilot_ready.mp3");
-                                    showToast("Severus: Thinking Mode activated");
-                                    setIsIslandExpanded(false);
+                                    // Same authoritative handler the spoken phrase uses.
+                                    handleOpenThinkingMode();
+                                    setIsPillExpanded(false);
                                     return;
                                   }
                                   handleSectionSelect(item.id);
-                                  setIsIslandExpanded(false);
+                                  setIsPillExpanded(false);
                                 }}
                               >
                                 {item.label}
@@ -1874,40 +1733,25 @@ export default function App() {
                     >
                       <Icon name={listeningActive ? "mic" : "mic-off"} size={13} />
                     </button>
-                    {!isEdgeDocked && (
                       <button
                         type="button"
                         className="dynamic-island-btn"
                         data-no-drag
                         onClick={(e) => {
                           e.stopPropagation();
-                          void handleDockToTopIsland();
+                          void ensureWorkstation();
                         }}
-                        title="Snap flush to top center"
-                        aria-label="Snap flush to top center"
+                        title="Expand Workstation window"
+                        aria-label="Expand Workstation window"
                       >
-                        <Icon name="arrow-up" size={13} />
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="dynamic-island-btn"
-                      data-no-drag
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void ensureWorkstation();
-                      }}
-                      title="Expand Workstation window"
-                      aria-label="Expand Workstation window"
-                    >
                       <Icon name="maximize" size={13} />
                     </button>
                     <div
                       role="button"
                       tabIndex={0}
                       className="dynamic-island-drag-handle"
-                      title="Drag to reposition Dynamic Island anywhere"
-                      aria-label="Drag to reposition Dynamic Island"
+                      title="Drag to reposition the companion pill"
+                      aria-label="Drag to reposition the companion pill"
                       onMouseDown={(e) => {
                         if (e.button !== 0) return;
                         e.preventDefault();
@@ -1946,6 +1790,8 @@ export default function App() {
             onToggleThinkingMode={() => setIsThinkingMode((prev) => !prev)}
             onClose={() => setQuickSwitcherOpen(false)}
           />
+
+          {thinkingOrb}
 
           <NewNoteModal
             open={newNoteModalOpen}
@@ -2066,10 +1912,7 @@ export default function App() {
               copilotActive={inspectorOpen && inspectorTab === "copilot"}
               onToggleMaximize={handleToggleMaximize}
               isMaximized={isMaximized}
-              onEnterThinkingMode={() => {
-                setIsThinkingMode(true);
-                void playVoice("action_copilot_ready.mp3");
-              }}
+              onEnterThinkingMode={() => handleOpenThinkingMode()}
               onOpenRunningMode={() => setRunningModeOpen(true)}
               onHideToTray={handleHideToTray}
               onMoveMonitor={handleMoveMonitor}
@@ -2484,56 +2327,7 @@ export default function App() {
         onClose={() => setLearningHistoryOpen(false)}
       />
 
-      <ThinkingModeReactor
-        open={isThinkingMode}
-        onClose={() => {
-          setIsThinkingMode(false);
-          setAmbientQuery(undefined);
-          if (isFloatingMode) {
-            void handleHideToTray();
-          }
-        }}
-        onExpandWorkstation={() => {
-          setIsThinkingMode(false);
-          setAmbientQuery(undefined);
-          void ensureWorkstation();
-        }}
-        onOpenRunningMode={() => setRunningModeOpen(true)}
-        onOpenSettings={() => setAiSettingsOpen(true)}
-        onOpenCopilot={() => {
-          setIsThinkingMode(false);
-          setAmbientQuery(undefined);
-          void ensureWorkstation();
-          setActiveSection("knowledge");
-          setInspectorOpen(true);
-          setInspectorTab("copilot");
-          void playVoice("nav_copilot_open.mp3");
-        }}
-        onOpenGraph={() => {
-          setActiveSection("knowledge");
-          setKnowledgeSubTab("graph");
-        }}
-        onOpenNotes={() => {
-          setActiveSection("knowledge");
-          setKnowledgeSubTab("notes");
-          setNotesDrawerOpen(true);
-        }}
-        onNewNote={() => handleNewNote()}
-        onJournal={() => setJournalOpen(true)}
-        onSystemCommand={async (cmdText) => {
-          const outcome = await handleRunSystemCommand(cmdText);
-          if (outcome.ok) {
-            return outcome.message;
-          }
-          return undefined;
-        }}
-        config={aiConfig}
-        vaultNotes={notesList}
-        onShowToast={showToast}
-        initialQuery={ambientQuery}
-        listeningActive={listeningActive}
-        onSetListening={(active) => handleToggleListening(active, false)}
-      />
+      {thinkingOrb}
 
       <AnimatePresence>
         {runningModeOpen && (

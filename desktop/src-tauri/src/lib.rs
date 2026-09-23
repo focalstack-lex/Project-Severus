@@ -175,35 +175,6 @@ fn set_floating_mode(window: tauri::Window, floating: bool) -> Result<(), String
 }
 
 #[tauri::command]
-fn dock_to_top_island(window: tauri::Window) -> Result<PhysicalCoordinates, String> {
-    let monitor = window
-        .current_monitor()
-        .ok()
-        .flatten()
-        .or_else(|| window.primary_monitor().ok().flatten())
-        .ok_or_else(|| "No display monitor detected".to_string())?;
-
-    let m_pos = monitor.position();
-    let m_size = monitor.size();
-    let scale_factor = monitor.scale_factor();
-    let curr_outer = window.outer_size().unwrap_or(tauri::PhysicalSize::new((780.0 * scale_factor) as u32, (680.0 * scale_factor) as u32));
-    let w_to_use = if curr_outer.width == 0 || curr_outer.width > m_size.width {
-        (780.0 * scale_factor) as i32
-    } else {
-        curr_outer.width as i32
-    };
-
-    let top_x = m_pos.x + ((m_size.width as i32 - w_to_use) / 2);
-    let top_y = m_pos.y;
-
-    window
-        .set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(top_x, top_y)))
-        .map_err(|e| e.to_string())?;
-
-    Ok(PhysicalCoordinates { x: top_x, y: top_y })
-}
-
-#[tauri::command]
 fn set_floating_dimensions(window: tauri::Window, width: f64, height: f64) -> Result<(), String> {
     let _ = window.set_size(tauri::LogicalSize::new(width, height));
     Ok(())
@@ -425,7 +396,6 @@ pub fn run() {
             maximize_window,
             toggle_fullscreen,
             set_floating_dimensions,
-            dock_to_top_island,
             gmail_auth::gmail_begin_auth,
             gmail_auth::secure_store,
             gmail_auth::secure_load,

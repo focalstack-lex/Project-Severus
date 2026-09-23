@@ -492,6 +492,10 @@ export function ThinkingModeReactor({
         const cmd = stripped || cleanLower;
 
         // 1. Local Workstation & HUD Action Handling
+        // The orb phrase has no branch here on purpose. It falls through to
+        // onSystemCommand, which lands on the single authoritative handler in
+        // App, so speaking the phrase inside the orb re-affirms the same state
+        // rather than toggling it off or reaching the model fallback below.
         if (cmd.includes("open running") || cmd.includes("running mode") || cmd.includes("running cockpit") || cmd.includes("running dashboard")) {
           onOpenRunningMode?.();
           speakAndDeliver("Opening athletic running cockpit, Sir.", "running");

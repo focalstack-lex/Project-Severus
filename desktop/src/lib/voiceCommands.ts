@@ -234,6 +234,83 @@ export function stripWakePrefix(text: string): string {
   return text.replace(WAKE_PREFIX_REGEX, "").replace(/^please\s+/i, "").trim();
 }
 
+/** Verbs that may introduce the orb intent: "open thinking mode". */
+const ORB_OPEN_VERBS = [
+  "open",
+  "show",
+  "enter",
+  "start",
+  "launch",
+  "activate",
+  "begin",
+  "switch to",
+  "go to",
+  "bring up",
+];
+
+/** Complete phrasings that stand alone as the orb intent. */
+const ORB_STANDALONE_PHRASES = [
+  "thinking mode",
+  "think mode",
+  "reasoning mode",
+  "jarvis mode",
+  "hologram mode",
+  "holographic mode",
+  "reactor mode",
+  "orb mode",
+  "the orb",
+  "conversation mode",
+  "companion chat",
+  "live voice chat",
+  "live chat",
+  "voice chat",
+  "talk with severus",
+];
+
+/**
+ * Bare nouns that only mean the orb when a verb opens the phrase. Deliberately
+ * excludes "thinking" from the standalone list, so the word alone never fires.
+ */
+const ORB_VERB_LED_TARGETS = [
+  "thinking",
+  "orb",
+  "the orb",
+  "jarvis",
+  "hologram",
+  "conversation",
+  "a conversation",
+  "chat",
+  "a chat",
+  "voice chat",
+  "a voice chat",
+];
+
+const ORB_VERBS_PATTERN = `(?:${ORB_OPEN_VERBS.map(escapeRegExp).join("|")})`;
+const ORB_STANDALONE_PATTERN = `(?:${ORB_STANDALONE_PHRASES.map(escapeRegExp).join("|")})`;
+const ORB_LED_PATTERN = `(?:${ORB_VERB_LED_TARGETS.map(escapeRegExp).join("|")})`;
+
+/**
+ * Anchored so the phrase has to stand alone: the trailing `$` is the point.
+ * "I am thinking, mode it down" and a bare "thinking" both fail to match.
+ */
+const ORB_INTENT_REGEX = new RegExp(
+  `^(?:please\\s+)?(?:(?:${ORB_VERBS_PATTERN}\\s+)?${ORB_STANDALONE_PATTERN}|${ORB_VERBS_PATTERN}\\s+${ORB_LED_PATTERN})$`,
+  "i",
+);
+
+/**
+ * True only when the transcript is the orb intent and nothing else. This is the
+ * single matcher for every entry point, so the phrase resolves to one action.
+ */
+export function matchesThinkingModeCommand(text: string): boolean {
+  const clean = normalizeVoiceText(text);
+  if (!clean) return false;
+  if (ORB_INTENT_REGEX.test(clean)) return true;
+
+  const stripped = normalizeVoiceText(stripWakePrefix(clean));
+  return stripped.length > 0 && ORB_INTENT_REGEX.test(stripped);
+}
+
 /**
  * Microphone-directed mute phrasing. Anchored on purpose: a generic audio mute
  * ("mute the volume", "mute spotify", "unmute") must reach the OS system-command
@@ -885,29 +962,12 @@ export class VoiceCommandListener {
       return;
     }
 
-    if (
-      checkMatch([
-        "thinking mode",
-        "start thinking",
-        "enter thinking",
-        "live voice chat",
-        "live chat",
-        "voice chat",
-        "talk with severus",
-        "conversation mode",
-        "companion chat",
-        "start conversation",
-        "hologram mode",
-        "holographic mode",
-        "reactor mode",
-        "open dynamic island",
-        "dynamic island",
-        "open island",
-        "jarvis mode",
-        "open jarvis",
-      ])
-    ) {
+    // Priority 1b: Orb intent. Anchored so only the whole phrase fires, and it
+    // sits above the system-command grammar and the chat fallback so the phrase
+    // can never be re-routed to another surface or to an LLM answer.
+    if (matchesThinkingModeCommand(text)) {
       this.lastCommandTime = now;
+      voiceDiagRecord("listener", "matched:thinking-mode", text);
       this.handlers.onHeard?.(text, "thinking mode");
       this.handlers.onThinkingMode?.();
       return;

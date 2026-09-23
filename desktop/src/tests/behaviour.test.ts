@@ -18,7 +18,7 @@ import {
   DEFAULT_VAD_CONFIG,
   type VadState,
 } from "../lib/localSpeechRecognizer";
-import { stripWakePrefix } from "../lib/voiceCommands";
+import { stripWakePrefix, matchesThinkingModeCommand } from "../lib/voiceCommands";
 
 export function runFrontendVerificationSuite() {
   const results: { name: string; passed: boolean; error?: string }[] = [];
@@ -446,6 +446,57 @@ export function runFrontendVerificationSuite() {
     results.push({ name: "Wake prefix stripping tolerates recognizer spellings", passed: true });
   } catch (err: any) {
     results.push({ name: "Wake prefix stripping tolerates recognizer spellings", passed: false, error: err.message });
+  }
+
+  // Test 14: The orb phrase is anchored and resolves to one intent
+  try {
+    // The contract: every accepted phrasing opens the orb
+    const mustOpen = [
+      "thinking mode",
+      "Thinking Mode",
+      "severus thinking mode",
+      "hey severus, thinking mode",
+      "severe us, thinking mode", // the spelling offline Whisper produces
+      "please open thinking mode",
+      "open thinking mode",
+      "start thinking",
+      "enter thinking",
+      "jarvis mode",
+      "hologram mode",
+      "reactor mode",
+      "start a conversation",
+      "conversation mode",
+      "open the orb",
+    ];
+    for (const phrase of mustOpen) {
+      if (!matchesThinkingModeCommand(phrase)) {
+        throw new Error(`expected the orb intent for '${phrase}'`);
+      }
+    }
+
+    // The point of anchoring: neither the bare word nor an incidental mention fires
+    const mustNotOpen = [
+      "thinking",
+      "mode",
+      "think",
+      "i am thinking",
+      "i was thinking about the mode",
+      "thinking out loud",
+      "are you thinking mode already done",
+      "mute the volume",
+      "open copilot",
+      "what is my running status",
+      "stop listening",
+    ];
+    for (const phrase of mustNotOpen) {
+      if (matchesThinkingModeCommand(phrase)) {
+        throw new Error(`'${phrase}' must not open the orb`);
+      }
+    }
+
+    results.push({ name: "The orb phrase is anchored and never fires on an incidental word", passed: true });
+  } catch (err: any) {
+    results.push({ name: "The orb phrase is anchored and never fires on an incidental word", passed: false, error: err.message });
   }
 
   return results;

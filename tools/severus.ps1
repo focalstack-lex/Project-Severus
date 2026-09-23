@@ -91,7 +91,6 @@ function Show-Help {
     Write-Host ""
     Write-Host "COMMANDS:" -ForegroundColor Yellow
     Write-Host "  open | launch         Launch or bring Severus companion to focus"
-    Write-Host "  island | dock         Dock Severus to top-center display edge as Dynamic Island"
     Write-Host "  status                Print telemetry overview (Strava running, journal, process)"
     Write-Host "  log <message>         Instantly timestamp and append an entry to today's action log"
     Write-Host "  today                 Display today's action journal ($TodayStr.md)"
@@ -501,8 +500,6 @@ switch ($Command.ToLower()) {
     "open"            { Invoke-Open }
     "launch"          { Invoke-Open }
     "start"           { Invoke-Open }
-    "island"          { Invoke-Open }
-    "dock"            { Invoke-Open }
     "status"          { Invoke-Status }
     "log"             { Invoke-Log }
     "today"           { Invoke-Today }
