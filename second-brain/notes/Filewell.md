@@ -1,6 +1,6 @@
-# Tanaw
+# Filewell
 
-A calm, focused file manager for Windows, with notes and to-dos beside your files. Tanaw is Tagalog for "view". It is Lex's own product, free and open source under the MIT license, and it runs locally only: no accounts, no telemetry, and a single network call for a user-confirmed update check. Source lives at `E:\PROJECTS\Desktop File Manager` and publishes to `github.com/focalstack-lex/Tanaw.` (the trailing period is part of the repository name).
+A calm, focused file manager for Windows, with notes and to-dos beside your files. Renamed from Tanaw on 2026-10-10: "Tanaw" (Tagalog for "view") was already used by a tourism platform, and the repository name "Tanaw." cannot be checked out on Windows CI runners because Windows strips a trailing period from folder names. It is Lex's own product, free and open source under the MIT license, and it runs locally only: no accounts, no telemetry, and a single network call for a user-confirmed update check. Source lives at `E:\PROJECTS\Desktop File Manager` and publishes to `github.com/focalstack-lex/Filewell.` (renamed from `Tanaw.`; the trailing period still forces the Windows CI workaround).
 
 ## Architecture & Stack
 - **Shell**: Tauri 2 with a frameless window, a custom title bar holding the tabs, and minimal capabilities (core defaults plus four window controls).
@@ -10,13 +10,14 @@ A calm, focused file manager for Windows, with notes and to-dos beside your file
 - **Design**: monochrome chrome with color only for information, light and dark token tables, a Ctrl+K command palette as the single source of shortcuts.
 
 ## Delivery Plan
-Five pieces, each with its own plan and gate: foundation, file manager, search, productivity (notes and to-dos), portability and release. The binding design is `docs/superpowers/specs/2026-10-02-tanaw-v1-design.md`; the assistant gets its own spec after v1 ships.
+Five pieces, each with its own plan and gate: foundation, file manager, search, productivity (notes and to-dos), portability and release. The binding design is `docs/superpowers/specs/2026-10-02-filewell-v1-design.md`; the assistant gets its own spec after v1 ships.
 
 ## Verification
 The foundation shipped with the full Severus gate from the first commit: ESLint invariants (zero emoji, zero em or en dash, no silent catch, no committed secret), vitest, a token contrast script, a Playwright drive of the mocked renderer with captured evidence, `cargo test` and clippy with unwrap, expect and panic denied, a generated code map with a freshness check, and CI on Linux and Windows. The native app was also driven for real by attaching Playwright to the WebView2 debugging port through a dev-only config override, which proved the IPC round trip, the window-control permissions and settings persistence without moving the mouse.
 
 ## Lessons
 - Closing a Tauri app with `taskkill` without `/F` broadcasts WM_CLOSE to its hidden event-loop window and can leave a windowless process behind. Test closing with WM_CLOSE to the main window, which is what Alt+F4 does.
+- A repository name ending in a period breaks every Windows CI job: the runner workspace cannot exist. Avoid trailing periods in repository names.
 - WebView2 ignores `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` when the app passes its own browser arguments, so a debugging port needs `additionalBrowserArgs` in a config override.
 
 Related: [[Lex Matondo]], [[The Glorious Evolution]], [[Agentic Verification and Guardrails]], [[Second Brain]], [[LGU System]].
